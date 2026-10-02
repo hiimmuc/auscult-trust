@@ -1,0 +1,45 @@
+{
+ "time": "2026-10-02T03:43:06",
+ "config": {
+  "icbhi_root": "../data/raw/icbhi/ICBHI_final_database",
+  "cache_root": "../data/cache",
+  "split_file": "../data/splits/icbhi_patient_v1.json",
+  "encoder": "opera_ct",
+  "use_branch": true,
+  "use_phase": true,
+  "lr": 0.001,
+  "wd": 0.01,
+  "epochs": 20,
+  "bs": 64,
+  "alpha": 0.1,
+  "seeds": [
+   0,
+   1,
+   2,
+   3,
+   4
+  ],
+  "shuffle_phase": false
+ },
+ "seed": 0,
+ "data_hash": "cc381de1478e4409d66015b2db610b0bc0ebe5558c8275032ddc5834a1647a27",
+ "encoder": "opera_ct",
+ "metrics": {
+  "icbhi_score": 0.49501388215411746,
+  "ece": 0.26081512479587066,
+  "recall": [
+   0.6175972927241963,
+   0.5269461077844312,
+   0.08888888888888889,
+   0.1917808219178082
+  ],
+  "f1": [
+   0.5685358255451713,
+   0.4943820224719101,
+   0.12403100775193798,
+   0.24778761061946902
+  ],
+  "coverage": 0.8787023977433004,
+  "set_size": 2.596614950634697
+ }
+}
