@@ -1,0 +1,5 @@
+# Writes the versioned patient-disjoint split file: python -m src.make_split configs/split_icbhi_official.yaml
+icbhi_root: ../data/raw/icbhi/ICBHI_final_database
+# official ICBHI 60/40 recording split (copy shipped with Patch-Mix CL); val carved from official train
+official_split: ../repos/patch-mix_contrastive_learning/data/icbhi_dataset/official_split.txt
+split_file: ../data/splits/icbhi_official_v1.json

@@ -1,0 +1,11 @@
+# H2 mechanism control: phase pooling with true vs predicted phase on HF_Lung_V1. Paths relative to the repo root.
+hf_root: ../data/raw/hf_lung
+cache_root: ../data/cache
+encoder: hear
+split_file: ../data/splits/hf_lung_v1.json  # official test; val = 15% of official-train date groups
+lr: 0.001
+wd: 0.01
+epochs: 50
+bs: 64
+alpha: 0.1
+seeds: [0, 1, 2, 3, 4]

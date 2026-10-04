@@ -52,15 +52,3 @@ def cycle_table(root):
                          "official": official.get(txt.stem)})
     return pd.DataFrame(rows)
 
-
-def device_counts(df):
-    """Recount patients and cycles per device from the cycle table.
-
-    Args:
-        df: Output of `cycle_table`.
-
-    Returns:
-        DataFrame indexed by device with `patients` and `cycles` columns.
-    """
-    g = df.groupby("device")
-    return pd.DataFrame({"patients": g["patient"].nunique(), "cycles": g.size()})

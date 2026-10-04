@@ -3,7 +3,7 @@ from math import gcd
 
 import numpy as np
 from scipy.io import wavfile
-from scipy.signal import butter, resample_poly, sosfiltfilt
+from scipy.signal import resample_poly
 
 SR = 16000  # OPERA input rate
 CYCLE_SEC = 8.0  # fixed cycle length fed to the encoder
@@ -31,22 +31,6 @@ def load_wav(path, sr=SR):
     return x
 
 
-def bandpass(x, sr=SR, lo=50.0, hi=2000.0):
-    """Zero-phase Butterworth band-pass.
-
-    Args:
-        x: 1-D waveform.
-        sr: Sample rate in Hz.
-        lo: Low cut-off in Hz.
-        hi: High cut-off in Hz. Must be below sr / 2.
-
-    Returns:
-        Filtered float32 waveform.
-    """
-    sos = butter(4, [lo, hi], btype="band", fs=sr, output="sos")
-    return sosfiltfilt(sos, x).astype(np.float32)
-
-
 def crop_pad(x, n):
     """Crop or zero-pad a waveform to exactly `n` samples.
 
@@ -61,7 +45,10 @@ def crop_pad(x, n):
 
 
 def cycle_wave(x, start, end, sr=SR, sec=CYCLE_SEC):
-    """Cut one breath cycle out of a recording and fix its length.
+    """Cut one breath cycle out of a recording and fix its length by repeating it.
+
+    Repeat padding follows OPERA and Patch-Mix CL. Zero padding left about two thirds of
+    every 8 s input silent (median ICBHI cycle is 2.5 s).
 
     Args:
         x: Full recording at rate `sr`.
@@ -73,4 +60,4 @@ def cycle_wave(x, start, end, sr=SR, sec=CYCLE_SEC):
     Returns:
         1-D array of `sec * sr` samples.
     """
-    return crop_pad(x[int(start * sr):int(end * sr)], int(sec * sr))
+    return np.resize(x[int(start * sr):int(end * sr)], int(sec * sr))  # tiles, or crops if longer

@@ -1,4 +1,4 @@
-"""Patient-disjoint splits, device-held-out splits, and versioned split files.
+"""Patient-disjoint splits, the E1 device-held-out protocol, and versioned split files.
 
 Group key is always the patient id. For KAUH the loader must give all three filter
 renderings of one patient the same patient id, so they land in the same split.
@@ -28,25 +28,18 @@ def split_patients(patients, fracs=(0.7, 0.15, 0.15), seed=0, names=("train", "v
     return {n: sorted(part) for n, part in zip(names, np.split(np.array(ids, dtype=object), cuts))}
 
 
-def device_holdout(df, device, val_frac=0.15, seed=0):
-    """Hold out one whole device as test. Ignores any official split.
-
-    Any patient recorded on the held-out device is removed from train and val,
-    so patients stay disjoint.
+def split_frames(df, split):
+    """Cut a cycle table into split parts.
 
     Args:
-        df: Cycle table with `patient` and `device` columns.
-        device: Device name to hold out.
-        val_frac: Fraction of remaining patients used for validation.
-        seed: RNG seed.
+        df: Cycle table with `patient` and `stem` columns.
+        split: Dict name -> patient ids. Optional key `drop` lists recording stems to exclude.
 
     Returns:
-        Dict with `train`, `val`, `test` lists of patient ids.
+        Dict name -> DataFrame (index reset), without `drop`.
     """
-    test = set(df.loc[df.device == device, "patient"])
-    rest = set(df.patient) - test
-    s = split_patients(rest, (1 - val_frac, val_frac), seed, ("train", "val"))
-    return {**s, "test": sorted(test)}
+    df = df[~df.stem.isin(split.get("drop", []))]
+    return {k: df[df.patient.isin(v)].reset_index(drop=True) for k, v in split.items() if k != "drop"}
 
 
 def assert_disjoint(split):
@@ -57,6 +50,8 @@ def assert_disjoint(split):
     """
     seen = {}
     for name, ids in split.items():
+        if name == "drop":
+            continue
         for p in ids:
             assert p not in seen, f"patient {p} in both {seen[p]} and {name}"
             seen[p] = name
@@ -95,3 +90,51 @@ def load_split(path):
     h = hashlib.sha256(json.dumps(d["split"], sort_keys=True).encode()).hexdigest()
     assert h == d["hash"], f"{path} was modified"
     return d["split"], h
+
+
+def patient_device_crosstab(df):
+    """Patients x devices cycle counts. A patient with two non-zero columns breaks device-held-out disjointness (gate G0)."""
+    return df.pivot_table(index="patient", columns="device", values="stem", aggfunc="size", fill_value=0)
+
+
+def device_holdout_official(df, device):
+    """E1 protocol: hold out one device, keep the official patient-disjoint split, flag seen vs unseen content.
+
+    Head training uses the official train cycles of the other devices; calibration uses the official test
+    cycles of the other devices; the held-out device's official test cycles are `test_unseen` (not in OPERA
+    pretraining) and its official train cycles are `test_seen` (in OPERA pretraining). Patients that also
+    recorded on the held-out device are dropped from the other parts, so patients stay disjoint.
+
+    Args:
+        df: Cycle table with `patient`, `device`, `official` ("train"/"test") columns.
+        device: Device name to hold out.
+
+    Returns:
+        Dict of DataFrames `train`, `cal`, `test_unseen`, `test_seen` (index reset), plus `n_dropped` (int, cycles
+        of shared patients removed from `train`/`cal`).
+    """
+    held = df.device == device
+    shared = set(df.loc[held, "patient"])
+    other = df[~held]
+    dropped = other.patient.isin(shared)
+    other = other[~dropped]
+
+    def part(d, split):
+        return d[d.official == split].reset_index(drop=True)
+
+    out = {"train": part(other, "train"), "cal": part(other, "test"),
+           "test_unseen": part(df[held], "test"), "test_seen": part(df[held], "train")}
+    assert not set(out["train"].patient) & set(out["cal"].patient)
+    assert not set(out["train"].patient) & set(out["test_unseen"].patient) and not set(out["cal"].patient) & set(out["test_unseen"].patient)
+    return {**out, "n_dropped": int(dropped.sum())}
+
+
+def with_official(df, split):
+    """Add the `official` column ("train" = train+val patients, "test") from a split file; drops `split["drop"]` stems.
+
+    Use when the cycle table was built without the official split file (`cycle_table` leaves `official` empty).
+    """
+    df = df[~df.stem.isin(split.get("drop", []))].copy()
+    side = {p: ("test" if k == "test" else "train") for k, v in split.items() if k != "drop" for p in v}
+    df["official"] = df.patient.map(side)
+    return df[df.official.notna()].reset_index(drop=True)

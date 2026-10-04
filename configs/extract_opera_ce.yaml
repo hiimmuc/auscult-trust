@@ -1,0 +1,5 @@
+# Last-layer frames of frozen OPERA-CE (EfficientNet-B0, 1280-d) (resumable): python -m src.features configs/extract_opera_ce.yaml
+icbhi_root: ../data/raw/icbhi/ICBHI_final_database
+cache_root: ../data/cache
+name: opera_ce_feat
+encoder: opera_ce

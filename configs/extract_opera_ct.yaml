@@ -1,0 +1,5 @@
+# Last-layer frames of frozen OPERA-CT (HTS-AT, 768-d) (resumable): python -m src.features configs/extract_opera_ct.yaml
+icbhi_root: ../data/raw/icbhi/ICBHI_final_database
+cache_root: ../data/cache
+name: opera_ct_feat
+encoder: opera_ct

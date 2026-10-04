@@ -12,4 +12,11 @@ efficientnet-pytorch
 torchlibrosa
 timm
 librosa
+soundfile
 huggingface_hub
+transformers
+torchaudio  # same cu128 build as torch; needed by AST/CLAP feature extractors
+peft
+openpyxl
+matplotlib  # only baselines/opera_bench (OPERA benchmark code imports it)
+seaborn

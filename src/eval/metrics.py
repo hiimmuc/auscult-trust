@@ -67,35 +67,6 @@ def coverage(sets, y):
     return sets[np.arange(len(y)), y].mean()
 
 
-def set_size(sets):
-    """Mean prediction set size.
-
-    Args:
-        sets: (n, K) boolean membership matrix.
-
-    Returns:
-        Float.
-    """
-    return sets.sum(1).mean()
-
-
-def risk_coverage(probs, y, n_points=20):
-    """Selective-prediction curve: error rate vs fraction accepted, most confident first.
-
-    Args:
-        probs: (n, K) probabilities.
-        y: (n,) true labels.
-        n_points: Number of curve points.
-
-    Returns:
-        Tuple (coverage array, risk array).
-    """
-    order = np.argsort(-probs.max(1))
-    err = (probs.argmax(1)[order] != y[order]).astype(float)
-    ks = np.linspace(1, len(y), n_points).astype(int)
-    return ks / len(y), np.array([err[:k].mean() for k in ks])
-
-
 def patient_bootstrap(metric, patients, n_boot=1000, seed=0, **arrays):
     """Patient-level bootstrap 95% CI. Resamples whole patients with replacement.
 

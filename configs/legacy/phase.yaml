@@ -1,0 +1,7 @@
+hf_root: ../data/raw/hf_lung
+icbhi_root: ../data/raw/icbhi/ICBHI_final_database
+cache_root: ../data/cache
+encoder: opera_ct_v2   # must match the ICBHI cache the masks are written into
+n_train: null          # null = all HF_Lung train files (7809)
+n_test: null           # null = all HF_Lung test files (1956)
+apply_to_icbhi: true
