@@ -1,0 +1,8 @@
+# KAUH 8 s windows (resumable): python -m src.features configs/extract_hear_kauh.yaml
+dataset: kauh
+kauh_root: ../data/raw/kauh
+cache_root: ../data/cache
+name: hear_feat_kauh
+encoder: hear
+keep_layers: [4, 8, 12, 16, 20, 24]
+token_layer: 20       # tokens cached after block 20: blocks 21-24 can be fine-tuned (up to 4)

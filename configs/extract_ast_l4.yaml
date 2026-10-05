@@ -1,0 +1,7 @@
+# R3 retry: AST with the token cache after block 4 (resumable): python -m src.features configs/extract_ast_l4.yaml
+icbhi_root: ../data/raw/icbhi/ICBHI_final_database
+cache_root: ../data/cache
+name: ast_audioset_l4_feat
+encoder: ast_audioset
+keep_layers: [2, 4, 6, 8, 10, 12]
+token_layer: 4        # tokens cached after block 4: blocks 5-12 can be fine-tuned (up to 8)

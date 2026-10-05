@@ -61,16 +61,6 @@ Not claimed: a new correction method; diagnosis; guarantees on humans; vitals or
 - Tune hyperparameters on val or grouped CV over train patients. Never on test.
 - Negative results are kept and reported.
 
-## Repo layout
-```
-data/        raw/ (read-only), cache/ (embeddings), splits/ (versioned split files)
-src/         encoders/, features.py, auscult_trust/, data/, conformal/, eval/, shift/, legacy/
-configs/     one file per experiment (extract_<enc>, ladder_<enc>, split_*); legacy/ for the archived v4 runs
-outputs/     results: <exp>/<run_id>/<cell>/seed<N>.json, meta.json, summary.txt (gitignored)
-checkpoints/ trained heads: <exp>/<run_id>/<cell>/seed<N>.pt (gitignored)
-baselines/   patched copies of reference repos that need running; ../repos is read-only reference
-```
-
 ## Working conventions
 - `../repos/*` is read-only reference. Never edit, build, or write results there. Patched copies go in `baselines/`.
 - Results: `<exp>` = config stem, `<cell>` = variant, `run_id` = `YYYYMMDD-HHMMSS[_$RUN_TAG]`, or a fixed `RUN_ID` for resumable pipelines; do not hand-name run folders otherwise.
