@@ -146,7 +146,7 @@ Run `outputs/encoder_compare/20261003-222400_opera-ast-clap/`. Same protocol for
 
 ## 9. Patch-Mix CL reproduction (proposal ±1 point check)
 
-Status: **seed 1 of 5 done**; seeds 2–5 not run (script as published; ~6.5 h per seed on an RTX 4060 8 GB). A first attempt died at epoch 3 when the laptop rebooted (test Score 0.570 and 0.577 after epochs 1–2; log `logs/seed1_interrupted_reboot.log`); seed 1 restarted from scratch with full resume. A CUDA OOM at epoch 8 (best weights were kept on the GPU) was fixed by keeping them on the CPU; `run_until_done.sh` now re-runs the resume until the seed finishes. Manual resume: `setsid nohup ./run_repro.sh 1 >> logs/seed1.log 2>&1 &`. Summary: `.venv/bin/python summarize_repro.py`. Code: `../repos/patch-mix_contrastive_learning`, exact arguments of `scripts/icbhi_patchmix_cl.sh` (`baselines/patchmix_cl/run_repro.sh`), log `baselines/patchmix_cl/logs/seed1.log`.
+Status: **5 of 5 seeds done** (seed 1 on the RTX 4060 8 GB laptop, ~6.5 h; seeds 2–5 on an RTX 5000 Ada 32 GB, ~1 h each, same script and arguments). A first attempt died at epoch 3 when the laptop rebooted (test Score 0.570 and 0.577 after epochs 1–2; log `logs/seed1_interrupted_reboot.log`); seed 1 restarted from scratch with full resume. A CUDA OOM at epoch 8 (best weights were kept on the GPU) was fixed by keeping them on the CPU; `run_until_done.sh` now re-runs the resume until the seed finishes. Manual resume: `setsid nohup ./run_repro.sh 1 >> logs/seed1.log 2>&1 &`. Summary: `.venv/bin/python summarize_repro.py`. Code: `../repos/patch-mix_contrastive_learning`, exact arguments of `scripts/icbhi_patchmix_cl.sh` (`baselines/patchmix_cl/run_repro.sh`), log `baselines/patchmix_cl/logs/seed1.log`.
 
 Deviations needed to run on this machine (numerics unchanged):
 - torch 2.9.1 + cu128 instead of the original torch 1.x; `timm==0.4.5` as required.
@@ -159,9 +159,14 @@ Protocol note: the script picks the best epoch **on the official test set** (its
 
 | Seed | Best-on-test Score (epoch) | Last-epoch Score | Published |
 |---|---|---|---|
-| 1 | 61.18 (epoch 14; Sp 75.81, Se 46.56) | 59.51 | 62.37 ± 0.61 (5 seeds) |
+| 1 | 61.18 (epoch 14; Sp 75.81, Se 46.56) | 59.51 | |
+| 2 | 62.41 (epoch 18; Sp 81.06, Se 43.76) | 59.63 | |
+| 3 | 60.60 (epoch 12; Sp 74.48, Se 46.73) | 59.74 | |
+| 4 | 62.51 (epoch 21; Sp 81.70, Se 43.33) | 60.19 | |
+| 5 | 60.76 (epoch 18; Sp 75.05, Se 46.47) | 58.88 | |
+| **Mean ± SD** | **61.49 ± 0.91** | **59.59 ± 0.47** | 62.37 ± 0.61 (5 seeds) |
 
-Reading: seed 1 is 1.2 points below the published mean with the paper's own (test-selected) protocol, just outside the ±1 point target, and 2.9 below it when no test set is used for selection. One seed cannot settle it: the same seed gave 0.499 and 0.570 after epoch 1 in two launches (non-deterministic). Fine-tuned AST is ~0.19 above the frozen OPERA-CT probe (0.42) either way. The reproduction remains open until seeds 2–5 are run (~26 h on this GPU).
+Reading: with the paper's own (test-selected) protocol the reproduction is 0.88 points below the published mean, inside the ±1 point target, so the reproduction is accepted. The seed SD (0.91) is larger than the published SD (0.61), as expected for a non-deterministic script (seed 1 ran on another GPU, seeds 2–5 on another; no seed-to-GPU effect is claimed). Without test selection (last epoch) the score is 59.59 ± 0.47, 2.8 points below the published mean and about equal to the published plain fine-tuning (59.55 ± 0.88). Fine-tuned AST is ~0.19 above the frozen OPERA-CT probe (0.42) either way. Logs: `baselines/patchmix_cl/logs/seed<N>.log`, summary `.venv/bin/python summarize_repro.py`, scores in `baselines/patchmix_cl/save/results.json`.
 
 ## 10. Discussion
 
@@ -266,7 +271,8 @@ Official ICBHI split, Score = (Sp + Se) / 2. Published rows are as reported by t
 | This work, frozen CLAP / HeAR + MLP head | 51.9 ± 1.8 / 52.7 ± 1.0 | val-selected epoch |
 | **This work, frozen AST + MLP head** | **54.7 ± 1.3** | val-selected epoch, 5 seeds |
 | DAT (AST domain adaptation) | 59.81 ± 1.25 | published |
-| This work, Patch-Mix CL seed 1 (reproduction) | 61.18 (best-on-test) / 59.51 (last epoch) | one seed, paper protocol |
+| This work, Patch-Mix CL reproduction | 61.49 ± 0.91 (best-on-test) / 59.59 ± 0.47 (last epoch) | 5 seeds, paper protocol |
+| This work, AST fine-tuned (layer-4 cache, `ft-k8-attn+mix`) | 57.3 ± 1.9 | val-selected epoch, 5 seeds (section 17) |
 | SG-SCL | 61.71 | published |
 | Patch-Mix CL | 62.37 ± 0.61 | published (best epoch chosen on test) |
 | BTS (audio + text metadata) | 63.54 | published |
@@ -282,4 +288,77 @@ Frozen AST is 0.048-0.075 below Patch-Mix CL (depending on epoch-selection proto
 3. **Follow up the one positive phase signal.** Repeat AST + true/predicted phase on HF_Lung with more seeds, then test phase as a multi-task target on ICBHI. If it does not transfer, report H2 as dataset-specific.
 4. **Close H1 as negative.** Remove the short-window branch from the main model.
 5. **Test H3/H4 under real device shift** (ICBHI device hold-out including Litt3200, KAUH filter renderings) on AST and HeAR (best calibrated), with k-shot and Mondrian as the recalibration baselines; add the calibration-aware TTA variant and a larger adaptable part.
-6. **Optional:** Patch-Mix CL seeds 2-5 (~26 h) to settle the ±1 point check; fine-tune AST in our own protocol for a like-for-like frozen vs fine-tuned comparison.
+6. ~~Optional: Patch-Mix CL seeds 2-5~~ done, see section 9 (61.49 ± 0.91). The fine-tuning comparison in our own protocol is in section 17.
+
+## 17. R-plan update (2026-10-05): HeAR ladder, AST layer-4 retry, Part II shift study
+
+Run on an RTX 5000 Ada 32 GB (project moved from the 8 GB laptop). Official ICBHI split, Score = (Sp + Se) / 2, test evaluated once per cell after grouped-CV epoch selection (no test selection), 5 seeds unless stated.
+
+### 17.1 Fine-tuned ladder, HeAR and AST (Part I)
+
+| Encoder / cell | CV Score | Test Score |
+|---|---|---|
+| HeAR `last-mean` (frozen) | | 0.513 ± 0.010 |
+| HeAR `concat-attn` (best frozen head, CV 0.603) | 0.603 | 0.511 ± 0.005 |
+| HeAR `ft-k4-attn` (blocks 21-24 tuned) | 0.587 ± 0.025 | **0.570 ± 0.002** |
+| AST `ft-k4-attn+mix` (cache after block 8, section F3 of `anchors.md`) | 0.585 ± 0.037 | 0.557 ± 0.009 |
+| AST layer-4 cache `ft-k4-attn` (13 ep) | 0.603 ± 0.020 | 0.546 ± 0.009 |
+| AST layer-4 cache `ft-k4-attn+mix` (8 ep) | 0.612 ± 0.012 | 0.555 ± 0.006 |
+| AST layer-4 cache `ft-k8-attn` (8 ep) | 0.607 ± 0.012 | 0.569 ± 0.013 |
+| AST layer-4 cache `ft-k8-attn+mix` (21 ep) | 0.605 ± 0.020 | **0.573 ± 0.019** |
+
+AST layer-4 retry: token cache after block 4 (blocks 5-12 trainable), `lr_block` 5e-5 (was 2e-5), 30-epoch budget, 3-fold grouped CV picks the epoch (`outputs/ladder_ast_l4/ladder-ast_l4-v1/`, config `configs/ladder_ast_l4.yaml`).
+
+- [Fact] Best result of the R-plan is AST `ft-k8-attn+mix` at 0.573 ± 0.019, up from 0.557 (layer-8 cache). Tuning 8 blocks helps more than the `+mix` flag (k8 vs k4: +0.023 without mix, +0.018 with). No paired CIs were computed for the layer-4 cells, so the cell-to-cell differences within 0.01-0.02 are not claimed.
+- [Fact] HeAR fine-tuning raises the test Score by 0.057 over its frozen heads (0.513 → 0.570), the largest fine-tuning gain of any encoder, although CV does not rank `ft-k4-attn` above the frozen heads (0.587 vs 0.603). CV scores are above the test Scores for every cell (by 0.02-0.09; HeAR `ft-k4-attn` is the smallest gap, frozen HeAR heads the largest): the official test split is harder than the grouped-CV folds of the train+val patients.
+- [Fact] Part I criterion not met. Best rung 57.3 vs Patch-Mix CL 62.37 ± 0.61 (published) and 61.49 ± 0.91 (our reproduction, test-selected); vs plain AST fine-tuning 59.55 ± 0.88 (published). Gap to the reproduction under the stricter protocol: 4.2 points; to the last-epoch reproduction (59.59, no test selection): 2.3 points.
+- [Interpretation] The remaining gap is plausibly the cached-token design (the lower blocks stay frozen at the cached layer) and the short schedule, as in section F3 of `anchors.md`; not tested by a full fine-tune in our protocol.
+- Per the proposal (G8), Part II runs on the frozen rungs L0/L1, with L2 added for AST and HeAR.
+
+### 17.2 Part II: device shift, coverage and decodability per rung
+
+Runner `src/shift_study.py` (`RUN_ID` `shift-v1`; tables `outputs/shift_table_v1.txt`, `outputs/shift_summary_v1.txt`). Rungs: L0 logistic probe, L1 best frozen head, L2 best plain `ft-k*` cell (AST, HeAR); cell and epoch from the ICBHI ladder CV, nothing chosen on a shifted target. Each unit trains on source-train patients, calibrates the conformal layer on source-calibration patients (V1 split, V2 Mondrian, alpha = 0.1) and evaluates on the shifted set. Decodability = AUC of a domain classifier on the rung's embedding, within class, patient-grouped folds.
+
+**E1, ICBHI one device held out** (train and calibrate on the other devices, test on the held device's official-test patients; `device_holdout_official`). V1 coverage (nominal 0.90; seeds: 1 for L0, 5 for L1/L2):
+
+| Held-out device (test cycles) | L0 probe, AST / CLAP / HeAR / OPERA-CT / CE | L1 head, AST / CLAP / HeAR / OPERA-CT / CE | L2 fine-tuned, AST / HeAR |
+|---|---|---|---|
+| AKGC417L (1836) | 0.97 / 0.96 / 0.95 / 0.90 / 0.92 | 0.80 / 0.68 / 0.86 / 0.73 / 0.75 | 0.83 / 0.87 |
+| Litt3200 (461) | 0.47 / 0.47 / 0.61 / 0.72 / 0.68 | 0.97 / 0.78 / 0.79 / 0.98 / 0.91 | 0.95 / 0.91 |
+| Meditron (459) | 0.99 / 1.00 / 0.95 / 0.88 / 0.87 | 0.96 / 0.96 / 0.95 / 0.91 / 0.91 | 0.93 / 0.92 |
+
+LittC2SE is skipped (no official-test recordings). Binomial half-width of the nominal at these sizes: ±0.014 (1836), ±0.027 (459-461). Decodability AUC of the held-out device: 0.9-1.0 for AKGC417L and Litt3200, 0.72-0.88 for Meditron.
+
+**E2, KAUH filter pairs** (5 patient-disjoint 60/20/20 partitions x 6 ordered pairs of Bell/Diaphragm/Extended; train and calibrate on the source filter, test on the same test patients under the target filter; 8 s windows, ~35 test windows per partition). V1 coverage, source filter → target filter, mean over 30 units:
+
+| Rung | AST | HeAR | CLAP | OPERA-CT | OPERA-CE |
+|---|---|---|---|---|---|
+| L0 probe | 0.881 → 0.841 | 0.875 → 0.782 | 0.894 → 0.815 | 0.892 → 0.491 | 0.907 → 0.445 |
+| L1 head | 0.892 → 0.914 | 0.878 → 0.880 | 0.870 → 0.810 | 0.856 → 0.617 | 0.894 → 0.861 |
+| L2 fine-tuned | 0.904 → 0.927 | 0.896 → 0.870 | | | |
+
+The Score falls under the filter change for every rung (AST head 0.579 → 0.499). KAUH decodability AUC is 0.94-1.00 for every rung.
+
+**Hypothesis status**
+
+| Claim | Status | Evidence |
+|---|---|---|
+| H2: coverage falls below nominal under device shift | Supported in part | [Fact] On two of three real devices (AKGC417L, Litt3200) V1 coverage is below 0.90 by more than the binomial half-width for most rungs; none on Meditron. [Fact] On KAUH the deficit is large only for the OPERA probes and moderate for CLAP/HeAR probes; AST/HeAR heads and fine-tuned rungs show little or none. |
+| H2, correction part (A1/A2 close part of the deficit) | Not tested | A1/A2 are not wired into extraction. |
+| H4: fine-tuning raises decodability and the coverage deficit | Not supported | [Fact] AST E1 coverage 0.904 (L2) vs 0.910 (L1), AUC 0.91 vs 0.92; HeAR E1 coverage 0.900 vs 0.869, AUC 0.93 vs 0.93; KAUH AST 0.927 vs 0.914, AUC 0.99 vs 0.99. Fine-tuned coverage is never lower by more than 0.03 on average and decodability does not rise. |
+| H1, H3 (phantom, matched IR augmentation) | Not tested | No phantom or extra-hardware data. |
+
+**Caveats**
+- [Fact] ICBHI device is confounded with class prior and site (CLAUDE.md data rules). The E1 deficit may be label shift rather than a gain difference; the V4 label-shift variant exists in `src/conformal/conformal.py` and was not run here.
+- [Fact] KAUH test sets hold ~35 windows per partition and the 30 units of a rung share patients, so they are not independent. No CIs are reported for E2; differences below ~0.1 in coverage are inside the binomial noise.
+- [Fact] Decodability is saturated (AUC 0.9-1.0), so it cannot separate the rungs. The proposal's Spearman test of decodability against deficit needs more shift pairs than the 3 held-out devices; Meditron is the only low-AUC device and also the only one with no deficit, which is suggestive only.
+- [Assumption] KAUH training sets are ~40x smaller than ICBHI, so epochs are step-matched to the ICBHI CV epoch (`n_dev / n_train` scaling) rather than selected on the target. This choice is untested against alternatives.
+- [Fact] E1 L0 probes are deterministic (1 run per device); L1/L2 use 5 seeds, and the table gives the seed mean without SD (SDs are in the per-unit JSONs under `outputs/shift_<enc>/shift-v1/`).
+- The first AST E2 run lacked decodability because of a size guard that skipped sets under 100 rows; the results were discarded (`outputs/shift_ast_noauc_discarded/`) and E2 was re-run for AST. Other encoders ran with the fixed code.
+
+### 17.3 Next steps (ranked)
+
+1. Wire A1 (spectrum correction) and A2 (ISA moment matching) into extraction and re-run E1 on AKGC417L and Litt3200: the only way to test the second half of H2.
+2. Run the V4 label-shift recalibration on the same two devices to separate label shift from the gain-like part of the deficit.
+3. Add paired patient-level bootstrap CIs to the E1 rung comparisons; add a decodability measure that does not saturate (e.g. a low-capacity probe or a per-class variant on matched labels) before testing H4 further.
+4. Phantom recordings and a second hardware (H1, H3) remain blocked on data.
