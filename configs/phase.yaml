@@ -1,6 +1,0 @@
-hf_root: ../data/raw/hf_lung_v1
-icbhi_root: ../data/raw/icbhi/ICBHI_final_database
-cache_root: ../data/cache
-n_train: 1500   # subset of HF_Lung train files, CPU budget. TODO: use all once extraction speed is known
-n_test: 500
-apply_to_icbhi: true

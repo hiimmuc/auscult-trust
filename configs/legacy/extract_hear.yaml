@@ -1,0 +1,16 @@
+# FM + short branch, no phase pooling. Paths relative to the repo root.
+icbhi_root: ../data/raw/icbhi/ICBHI_final_database
+cache_root: ../data/cache
+# official ICBHI 60/40 split (copy shipped with Patch-Mix CL); val carved from official train
+official_split: ../repos/patch-mix_contrastive_learning/data/icbhi_dataset/official_split.txt
+split_file: ../data/splits/icbhi_official_v1.json
+encoder: hear
+use_branch: true
+use_phase: false
+lr: 0.001
+wd: 0.01
+epochs: 50          # best epoch picked on val ICBHI Score
+bs: 64
+class_weight: false # inverse-frequency CE weights lowered grouped-CV ICBHI Score on train patients by 0.05-0.10
+alpha: 0.1
+seeds: [0, 1, 2, 3, 4]

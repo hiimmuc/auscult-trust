@@ -1,0 +1,7 @@
+# Multi-layer frames + last-block inputs of frozen AST (resumable): python -m src.features configs/extract_ast.yaml
+icbhi_root: ../data/raw/icbhi/ICBHI_final_database
+cache_root: ../data/cache
+name: ast_audioset_feat
+encoder: ast_audioset
+keep_layers: [2, 4, 6, 8, 10, 12]
+token_layer: 8        # tokens cached after block 8: blocks 9-12 can be fine-tuned (up to 4)

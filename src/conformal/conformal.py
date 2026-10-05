@@ -166,14 +166,3 @@ def predict_sets(probs, threshold):
     """
     return (1.0 - probs) <= threshold
 
-
-def abstain(sets):
-    """Abstain when the set is empty or has more than one label.
-
-    Args:
-        sets: (n, K) boolean membership matrix.
-
-    Returns:
-        (n,) boolean, True = abstain.
-    """
-    return sets.sum(1) != 1

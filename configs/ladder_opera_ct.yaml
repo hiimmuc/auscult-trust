@@ -1,0 +1,12 @@
+# Frozen ladder rungs L0 (probe) and L1 (head, last layer) on opera_ct features; no token cache, so no fine-tuned rungs.
+icbhi_root: ../data/raw/icbhi/ICBHI_final_database
+split_file: ../data/splits/icbhi_official_v1.json
+cache_dir: ../data/cache/opera_ct_feat   # from: python -m src.features configs/extract_opera_ct.yaml
+exp: ladder_opera_ct
+cv_folds: 5
+head_grid:
+  layer_mode: [last]                 # one cached layer
+  pool: [mean, max, meanmax, attn]
+head: {hidden: 128, lr_head: 1.0e-3, wd: 0.01, bs: 64, epochs: 30}
+class_weight: none                   # `balanced`: loss weighted by inverse class frequency (use a new exp name)
+seeds: [0, 1, 2, 3, 4]
