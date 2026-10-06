@@ -66,7 +66,19 @@ def _logmel(wave):
     return torch.tensor(mel.T[None], dtype=torch.float, device=DEVICE)
 
 
-class OperaCT(Encoder):
+class _OperaA2:
+    """Shared A2 hook of the OPERA encoders: the log-mel is min-max scaled per clip, so matching is approximate."""
+    def logmel(self, wave):
+        return _logmel(wave)[0].cpu().numpy()
+
+    def _input(self, wave):
+        m = _logmel(wave)
+        if self.a2 is not None:
+            m = torch.tensor(self.a2(m[0].cpu().numpy())[None], dtype=torch.float, device=DEVICE)
+        return m
+
+
+class OperaCT(_OperaA2, Encoder):
     """OPERA-CT (HTS-AT). Frames = the latent token grid averaged over frequency, resampled to 32 frames.
 
     A forward hook on the HTS-AT pooling layer grabs the (freq, time) token grid that OPERA averages into its vector.
@@ -87,12 +99,12 @@ class OperaCT(Encoder):
     @torch.no_grad()
     def run(self, wave, keep, token_layer):
         self._grid = None
-        self.model.extract_feature(_logmel(wave), self.dim)
+        self.model.extract_feature(self._input(wave), self.dim)
         g = self._grid.reshape(1, self.dim, self.c_freq_bin, -1).mean(2)  # (1, C, T')
         return {1: to_frames(g[0].T)}, None
 
 
-class OperaCE(Encoder):
+class OperaCE(_OperaA2, Encoder):
     """OPERA-CE (EfficientNet-B0). Frames = the feature map over time (mel axis collapsed), resampled to 32 frames.
 
     The model's own 1280-d vector is the global mean of the same map; `run(...)[0][1].mean(0)` matches it.
@@ -105,5 +117,5 @@ class OperaCE(Encoder):
     @torch.no_grad()
     def run(self, wave, keep, token_layer):
         enc = self.model.encoder
-        fmap = enc.efficientnet.extract_features(enc.cnn1(_logmel(wave).unsqueeze(1)))  # (1, 1280, T' = 7, 1)
+        fmap = enc.efficientnet.extract_features(enc.cnn1(self._input(wave).unsqueeze(1)))  # (1, 1280, T' = 7, 1)
         return {1: to_frames(fmap.mean(3)[0].T)}, None  # OPERA feeds (time, mel) as (height, width): dim 2 is time

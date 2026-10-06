@@ -31,6 +31,11 @@ class Encoder:
         units: Independent input units per cycle (HeAR: four 2 s clips); blocks see one unit at a time.
     """
     dim, n_layers, token_shape, units = 0, 1, None, 1
+    a2 = None  # optional callable on the encoder's log-mel input (A2 moment matching), set per cycle by `src.features`
+
+    def logmel(self, wave):
+        """(frames, mels) float32 log-mel-like input of the encoder for one cycle; needed by A2. Optional."""
+        raise NotImplementedError(f"{type(self).__name__} does not expose its log-mel input (A2 unsupported)")
 
     @staticmethod
     def patch_index():

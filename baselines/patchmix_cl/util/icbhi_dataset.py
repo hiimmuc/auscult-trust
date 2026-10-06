@@ -1,4 +1,3 @@
-from curses import meta
 import os
 import cv2
 import pickle
@@ -16,6 +15,7 @@ from PIL import Image
 from .icbhi_util import get_annotations, save_image, generate_fbank, get_individual_cycles_librosa, split_pad_sample, generate_mel_spectrogram, concat_augmentation
 from .icbhi_util import get_individual_cycles_torchaudio, cut_pad_sample_torchaudio
 from .augmentation import augment_raw_audio
+from . import stage1
 
 
 class ICBHIDataset(Dataset):
@@ -145,6 +145,7 @@ class ICBHIDataset(Dataset):
             print("Extracting individual breathing cycles..")
 
         self.cycle_list = []
+        self.cycle_patient = []
         self.filename_to_label = {}
         self.classwise_cycle_list = [[] for _ in range(args.n_cls)]
 
@@ -164,6 +165,7 @@ class ICBHIDataset(Dataset):
             cycles_with_labels = [(data[0], data[1], self.file_to_metadata[filename]) for data in sample_data]
 
             self.cycle_list.extend(cycles_with_labels)
+            self.cycle_patient.extend([filename.split('_')[0]] * len(cycles_with_labels))
             for d in cycles_with_labels:
                 # {filename: [label for cycle 1, ...]}
                 self.filename_to_label[filename].append(d[1])
@@ -173,6 +175,32 @@ class ICBHIDataset(Dataset):
         # TODO: how to decide the meta information of generated cycles
         # if train_flag and args.concat_aug_scale and args.class_split == 'lungsound' and args.n_cls == 4:
         #     self.classwise_cycle_list, self.cycle_list = concat_augmentation(self.classwise_cycle_list, self.cycle_list, scale=args.concat_aug_scale)
+
+        self.patients = np.array(self.cycle_patient)
+
+        # P1: spectrum correction (A1) on the waveform, before the STFT. Train clips use source (train) device spectra,
+        # test clips use their own (target) spectra, both against the train reference.
+        if getattr(args, 'a1_input', False):
+            from collections import defaultdict
+            by_dev = defaultdict(list)
+            for audio, _, meta in self.cycle_list:
+                by_dev[int(meta[-1].item())].append(audio.numpy()[0])
+            spectra = stage1.device_mean_spectra(by_dev)
+            if train_flag:
+                args._a1_ref = spectra
+            coef = stage1.a1_coefficients(spectra, args._a1_ref, getattr(args, 'a1_reference', 'arithmetic'))
+            corr = stage1.import_src('src.shift.correction').apply_spectrum_correction
+            self.cycle_list = [(torch.from_numpy(corr(a.numpy()[0], coef[int(m[-1].item())]).astype(np.float32))[None], l, m)
+                               for a, l, m in self.cycle_list]
+
+        # P7: gain-invariant handcrafted descriptors, fused with the deep feature in main.py
+        self.hc = None
+        if getattr(args, 'hc_fuse', False):
+            hc = stage1.import_src('src.features_handcrafted').handcrafted
+            raw_hc = np.stack([hc(a.numpy()[0], self.sample_rate)[stage1.HC_INVARIANT] for a, _, _ in self.cycle_list])
+            if train_flag:
+                args._hc_stats = (raw_hc.mean(0), raw_hc.std(0) + 1e-6)
+            self.hc = ((raw_hc - args._hc_stats[0]) / args._hc_stats[1]).astype(np.float64)
 
         for sample in self.cycle_list:
             self.metadata.append(sample[2])
@@ -247,6 +275,15 @@ class ICBHIDataset(Dataset):
                 save_image(audio_image, './')
                 self.dump_images = False
 
+        # P2: per-device, per-mel-bin standardisation (train reference for both splits)
+        if getattr(args, 'bin_norm', False):
+            dev = [int(m[-1].item()) for m in self.metadata]
+            new, stats = stage1.device_bin_norm([ai[0][0] for ai in self.audio_images], dev, None if train_flag else args._bin_ref)
+            if train_flag:
+                args._bin_ref = stats
+            for i, img in enumerate(new):
+                self.audio_images[i][0][0] = img
+
         self.h, self.w, _ = self.audio_images[0][0][0].shape
         # ==========================================================================
 
@@ -259,9 +296,15 @@ class ICBHIDataset(Dataset):
         else:
             audio_image = audio_images[0]
         
+        if self.train_flag and getattr(self.args, 'rand_bin_gain', 0) > 0:  # P3
+            audio_image = stage1.random_bin_gain_image(audio_image, self.args.rand_bin_gain, np.random.default_rng(random.getrandbits(32)))
+
         if self.transform is not None:
             audio_image = self.transform(audio_image)
-        
+
+        if self.hc is not None:
+            metadata = torch.cat([metadata.double(), torch.from_numpy(self.hc[index])])
+
         return audio_image, label, metadata
 
     def __len__(self):

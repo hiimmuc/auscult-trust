@@ -5,6 +5,7 @@ import json
 import warnings
 warnings.filterwarnings("ignore")
 
+import copy
 import math
 import time
 import random
@@ -20,6 +21,7 @@ from torchvision import transforms
 
 from util.icbhi_dataset import ICBHIDataset
 from util.icbhi_util import get_score
+from util import stage1
 from util.augmentation import SpecAugment
 from util.misc import adjust_learning_rate, warmup_learning_rate, set_optimizer, update_moving_average
 from util.misc import AverageMeter, accuracy, save_model, update_json
@@ -27,8 +29,10 @@ from models import get_backbone_class, Projector
 from method import PatchMixLoss, PatchMixConLoss
 
 
-def parse_args():
+def build_parser():
     parser = argparse.ArgumentParser('argument for supervised training')
+    parser.add_argument('--config', type=str, default=None,
+                        help='json file(s) of argument defaults, comma-separated (configs/stage1_variants/*.json); command line wins')
 
     parser.add_argument('--seed', type=int, default=0)
     parser.add_argument('--print_freq', type=int, default=10)
@@ -41,7 +45,22 @@ def parse_args():
     parser.add_argument('--eval', action='store_true',
                         help='only evaluation with pretrained encoder and classifier')
     parser.add_argument('--two_cls_eval', action='store_true',
-                        help='evaluate with two classes')
+                        help='headline Se/Score from the 4-class predictions collapsed to normal/abnormal (not a separately trained model)')
+
+    # Stage 1 of proposal v8: epoch selection and device-motivated variants (P1-P8; P5 dropped, no licensed stethoscope IRs)
+    parser.add_argument('--selection', type=str, default='cv', choices=['cv', 'test'],
+                        help="cv: epoch chosen on a patient-level validation set carved from the training patients; "
+                             "test: epoch chosen on the test set (optimistic, original Patch-Mix protocol)")
+    parser.add_argument('--val_frac', type=float, default=0.2, help='fraction of training patients held out for validation')
+    parser.add_argument('--select_metric', type=str, default='score', choices=['score', 'worst_device'],
+                        help='P8: worst_device selects by the minimum per-device validation Score')
+    parser.add_argument('--a1_input', action='store_true', help='P1: A1 spectrum correction on the waveform, device from file name')
+    parser.add_argument('--a1_reference', type=str, default='arithmetic', choices=['arithmetic', 'geometric'])
+    parser.add_argument('--bin_norm', action='store_true', help='P2: per-device, per-mel-bin standardisation')
+    parser.add_argument('--rand_bin_gain', type=float, default=0.0, help='P3: SD (dB) of the random per-bin gain augmentation')
+    parser.add_argument('--freq_mixstyle', type=float, default=0.0, help='P4: Freq-MixStyle probability per batch')
+    parser.add_argument('--bin_affine', action='store_true', help='P6: learnable per-mel-bin affine layer before the encoder')
+    parser.add_argument('--hc_fuse', action='store_true', help='P7: fuse gain-invariant handcrafted descriptors with the deep feature')
     
     # optimization
     parser.add_argument('--optimizer', type=str, default='adam')
@@ -139,7 +158,17 @@ def parse_args():
     parser.add_argument('--target_type', type=str, default='grad_block',
                         help='how to make target representation', choices=['grad_block', 'grad_flow', 'project_block', 'project_flow'])
 
+    return parser
+
+
+def parse_args():
+    parser = build_parser()
+    pre, _ = parser.parse_known_args()
+    if pre.config:
+        for c in pre.config.split(','):  # several files = a combination (P9): later files override earlier ones
+            parser.set_defaults(**json.load(open(c)))
     args = parser.parse_args()
+    args.val_available = args.selection == 'cv'
 
     iterations = args.lr_decay_epochs.split(',')
     args.lr_decay_epochs = list([])
@@ -212,28 +241,38 @@ def set_loader(args):
         val_transform = transforms.Compose(val_transform)
 
         train_dataset = ICBHIDataset(train_flag=True, transform=train_transform, args=args, print_flag=True)
-        val_dataset = ICBHIDataset(train_flag=False, transform=val_transform, args=args, print_flag=True)
+        test_dataset = ICBHIDataset(train_flag=False, transform=val_transform, args=args, print_flag=True)
 
-        # for weighted_loss
-        args.class_nums = train_dataset.class_nums
+        # Patient-level validation split of the training set (same split for every variant of one seed).
+        # Shallow copy with the eval transform: shares the cached spectrograms, no SpecAugment, no raw augmentation.
+        tr_idx, va_idx = stage1.patient_val_split(train_dataset.patients, args.val_frac, args.seed)
+        val_dataset = copy.copy(train_dataset)
+        val_dataset.transform, val_dataset.train_flag = val_transform, False
+        val_set = torch.utils.data.Subset(val_dataset, va_idx)
+        if args.selection == 'cv':
+            train_set = torch.utils.data.Subset(train_dataset, tr_idx)
+            labels_tr = np.asarray(train_dataset.labels)[tr_idx]
+        else:
+            train_set, labels_tr = train_dataset, np.asarray(train_dataset.labels)
+        args.class_nums = np.bincount(labels_tr, minlength=args.n_cls).astype(float)
+        class_ratio = args.class_nums / args.class_nums.sum() * 100
+        print('train/val patients: {}/{}  cycles {}/{}'.format(len(set(train_dataset.patients[tr_idx])),
+              len(set(train_dataset.patients[va_idx])), len(tr_idx), len(va_idx)))
     else:
         raise NotImplemented    
     
     if args.weighted_sampler:
-        reciprocal_weights = []
-        for idx in range(len(train_dataset)):
-            reciprocal_weights.append(train_dataset.class_ratio[train_dataset.labels[idx]])
-        weights = (1 / torch.Tensor(reciprocal_weights))
-        sampler = torch.utils.data.sampler.WeightedRandomSampler(weights, len(train_dataset))
+        weights = torch.Tensor(1 / class_ratio[labels_tr])
+        sampler = torch.utils.data.sampler.WeightedRandomSampler(weights, len(train_set))
     else:
         sampler = None
 
-    train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=args.batch_size, shuffle=sampler is None,
-                                               num_workers=args.num_workers, pin_memory=True, sampler=sampler, drop_last=True)
-    val_loader = torch.utils.data.DataLoader(val_dataset, batch_size=args.batch_size, shuffle=False,
-                                             num_workers=args.num_workers, pin_memory=True, sampler=None)
+    mk = lambda ds, **kw: torch.utils.data.DataLoader(ds, batch_size=args.batch_size, num_workers=args.num_workers, pin_memory=True, **kw)
+    train_loader = mk(train_set, shuffle=sampler is None, sampler=sampler, drop_last=True)
+    val_loader = mk(val_set, shuffle=False)
+    test_loader = mk(test_dataset, shuffle=False)
 
-    return train_loader, val_loader, args
+    return train_loader, val_loader, test_loader, args
 
 
 def set_model(args):    
@@ -245,6 +284,7 @@ def set_model(args):
         kwargs['imagenet_pretrain'] = args.from_sl_official
         kwargs['audioset_pretrain'] = args.audioset_pretrained
         kwargs['mix_beta'] = args.mix_beta  # for Patch-MixCL
+        kwargs['bin_affine_dim'] = args.n_mels if args.bin_affine else None
     elif args.model == 'ssast':
         kwargs['label_dim'] = args.n_cls
         kwargs['fshape'], kwargs['tshape'] = args.fshape, args.tshape
@@ -257,6 +297,9 @@ def set_model(args):
 
     model = get_backbone_class(args.model)(**kwargs)    
     classifier = nn.Linear(model.final_feat_dim, args.n_cls) if args.model not in ['ast', 'ssast'] else deepcopy(model.mlp_head)
+    if args.hc_fuse:  # P7: deep feature (768) + invariant handcrafted descriptors
+        d = model.final_feat_dim + len(stage1.HC_INVARIANT)
+        classifier = nn.Sequential(nn.LayerNorm(d), nn.Linear(d, args.n_cls))
 
     if not args.weighted_loss:
         weights = None
@@ -316,6 +359,13 @@ def set_model(args):
     return model, classifier, projector, criterion, optimizer
 
 
+def fuse(features, metadata, args):
+    """P7: append the standardised invariant handcrafted descriptors (metadata[:, 7:]) to the deep feature."""
+    if not args.hc_fuse:
+        return features
+    return torch.cat([features, metadata[:, stage1.META_DEVICE_IDX + 1:].to(features.device, features.dtype)], 1)
+
+
 def train(train_loader, model, classifier, projector, criterion, optimizer, epoch, args, scaler=None):
     model.train()
     classifier.train()
@@ -338,23 +388,25 @@ def train(train_loader, model, classifier, projector, criterion, optimizer, epoc
         images = images.cuda(non_blocking=True)
         labels = labels.cuda(non_blocking=True)
         bsz = labels.shape[0]
+        if args.freq_mixstyle > 0:  # P4
+            images = stage1.freq_mixstyle(images, p=args.freq_mixstyle)
 
         warmup_learning_rate(args, epoch, idx, len(train_loader), optimizer)
 
         with torch.cuda.amp.autocast():
             if args.method == 'ce':
                 features = model(images)
-                output = classifier(features)
+                output = classifier(fuse(features, metadata, args))
                 loss = criterion[0](output, labels)
 
             elif args.method == 'patchmix':
                 mix_images, labels_a, labels_b, lam, index = model(images, y=labels, patch_mix=True, time_domain=args.time_domain)
-                output = classifier(mix_images)
+                output = classifier(fuse(mix_images, metadata, args))
                 loss = criterion[1](output, labels_a, labels_b, lam)
 
             elif args.method == 'patchmix_cl':
                 features = model(images)
-                output = classifier(features)
+                output = classifier(fuse(features, metadata, args))
                 loss = criterion[0](output, labels)
 
                 if args.target_type == 'grad_block':
@@ -405,66 +457,31 @@ def train(train_loader, model, classifier, projector, criterion, optimizer, epoc
     return losses.avg, top1.avg
 
 
-def validate(val_loader, model, classifier, criterion, args, best_acc, best_model=None):
-    save_bool = False
+def evaluate(loader, model, classifier, criterion, args):
+    """Run the model on a loader. Returns (per-device report dict, preds, labels, device ids, mean loss)."""
     model.eval()
     classifier.eval()
-
-    batch_time = AverageMeter()
     losses = AverageMeter()
-    top1 = AverageMeter()
-    hits, counts = [0.0] * args.n_cls, [0.0] * args.n_cls
-
+    preds, ys, devs = [], [], []
     with torch.no_grad():
-        end = time.time()
-        for idx, (images, labels, metadata) in enumerate(val_loader):
+        for images, labels, metadata in loader:
             images = images.cuda(non_blocking=True)
             labels = labels.cuda(non_blocking=True)
-            bsz = labels.shape[0]
-
             with torch.cuda.amp.autocast():
-                features = model(images)
-                output = classifier(features)
+                output = classifier(fuse(model(images), metadata, args))
                 loss = criterion[0](output, labels)
+            losses.update(loss.item(), labels.shape[0])
+            preds.append(output.argmax(1).cpu().numpy())
+            ys.append(labels.cpu().numpy())
+            devs.append(metadata[:, stage1.META_DEVICE_IDX].long().numpy())
+    preds, ys, devs = np.concatenate(preds), np.concatenate(ys), np.concatenate(devs)
+    return stage1.per_device_report(ys, preds, devs, args.n_cls), (preds, ys, devs), losses.avg
 
-            losses.update(loss.item(), bsz)
-            [acc1], _ = accuracy(output, labels, topk=(1,))
-            top1.update(acc1[0], bsz)
 
-            _, preds = torch.max(output, 1)
-            for idx in range(preds.shape[0]):
-                counts[labels[idx].item()] += 1.0
-                if not args.two_cls_eval:
-                    if preds[idx].item() == labels[idx].item():
-                        hits[labels[idx].item()] += 1.0
-                else:  # only when args.n_cls == 4
-                    if labels[idx].item() == 0 and preds[idx].item() == labels[idx].item():
-                        hits[labels[idx].item()] += 1.0
-                    elif labels[idx].item() != 0 and preds[idx].item() > 0:  # abnormal
-                        hits[labels[idx].item()] += 1.0
-
-            sp, se, sc = get_score(hits, counts)
-
-            batch_time.update(time.time() - end)
-            end = time.time()
-
-            if (idx + 1) % args.print_freq == 0:
-                print('Test: [{0}/{1}]\t'
-                      'Time {batch_time.val:.3f} ({batch_time.avg:.3f})\t'
-                      'Loss {loss.val:.4f} ({loss.avg:.4f})\t'
-                      'Acc@1 {top1.val:.3f} ({top1.avg:.3f})'.format(
-                       idx + 1, len(val_loader), batch_time=batch_time,
-                       loss=losses, top1=top1))
-    
-    if sc > best_acc[-1] and se > 5:
-        save_bool = True
-        best_acc = [sp, se, sc]
-        best_model = [{k: v.detach().cpu().clone() for k, v in m.state_dict().items()} for m in (model, classifier)]  # repro: keep on CPU, saves ~0.7 GB GPU
-
-    print(' * S_p: {:.2f}, S_e: {:.2f}, Score: {:.2f} (Best S_p: {:.2f}, S_e: {:.2f}, Score: {:.2f})'.format(sp, se, sc, best_acc[0], best_acc[1], best_acc[-1]))
-    print(' * Acc@1 {top1.avg:.2f}'.format(top1=top1))
-
-    return best_acc, best_model, save_bool
+def headline(report, args):
+    """(Sp, Se, Score) of the pooled row; with --two_cls_eval Se is the collapsed normal/abnormal sensitivity."""
+    r = report['all']
+    return [r['sp'], r['two_cls_se'] if args.two_cls_eval else r['se'], r['two_cls_score'] if args.two_cls_eval else r['score']]
 
 
 def main():
@@ -481,10 +498,11 @@ def main():
     cudnn.benchmark = True
     
     best_model = None
-    if args.dataset == 'icbhi':
-        best_acc = [0, 0, 0]  # Specificity, Sensitivity, Score
+    best_acc = [0, 0, 0]  # Specificity, Sensitivity, Score of the selected epoch on the test set
+    best_key = -1.0
+    history = []
 
-    train_loader, val_loader, args = set_loader(args)
+    train_loader, val_loader, test_loader, args = set_loader(args)
     model, classifier, projector, criterion, optimizer = set_model(args)
 
     args.start_epoch = 1
@@ -499,11 +517,16 @@ def main():
         projector.load_state_dict(ck['projector']); optimizer.load_state_dict(ck['optimizer'])
         scaler.load_state_dict(ck['scaler'])
         best_acc, best_model, args.start_epoch = ck['best_acc'], ck['best_model'], ck['epoch'] + 1
+        history, best_key = ck.get('history', []), ck.get('best_key', best_acc[-1])
         print("=> resumed '{}' after epoch {}, best Score {:.2f}".format(args.resume, ck['epoch'], best_acc[-1]))
-    
+
+    def select_key(h):
+        src = h['val'] if args.selection == 'cv' else h['test']
+        return src['all']['score'] if args.select_metric == 'score' else stage1.worst_device_score(src)
+
     print('*' * 20)
     if not args.eval:
-        print('Training for {} epochs on {} dataset'.format(args.epochs, args.dataset))
+        print('Training for {} epochs on {} dataset (selection={}, metric={})'.format(args.epochs, args.dataset, args.selection, args.select_metric))
         for epoch in range(args.start_epoch, args.epochs+1):
             adjust_learning_rate(args, optimizer, epoch)
 
@@ -513,16 +536,24 @@ def main():
             time2 = time.time()
             print('Train epoch {}, total time {:.2f}, accuracy:{:.2f}'.format(
                 epoch, time2-time1, acc))
-            
-            # eval for one epoch
-            best_acc, best_model, save_bool = validate(val_loader, model, classifier, criterion, args, best_acc, best_model)
-            
-            # save a checkpoint of model and classifier when the best score is updated
-            if save_bool:            
+
+            # validation (held-out train patients) and test, every epoch; preds only kept for the three reported epochs
+            val_rep, _, val_loss = evaluate(val_loader, model, classifier, criterion, args)
+            test_rep, test_raw, _ = evaluate(test_loader, model, classifier, criterion, args)
+            h = {'epoch': epoch, 'val': val_rep, 'test': test_rep}
+            sp, se, sc = headline(test_rep, args)
+            print(' * test S_p: {:.2f}, S_e: {:.2f}, Score: {:.2f} | val Score {:.2f}'.format(sp, se, sc, val_rep['all']['score']))
+            history.append(h)
+
+            key = select_key(h)
+            save_bool = key > best_key and (args.selection == 'cv' or se > 5)
+            if save_bool:
+                best_key, best_acc = key, [sp, se, sc]
+                best_model = [{k: v.detach().cpu().clone() for k, v in m.state_dict().items()} for m in (model, classifier)]  # repro: keep on CPU, saves ~0.7 GB GPU
                 save_file = os.path.join(args.save_folder, 'best_epoch_{}.pth'.format(epoch))
-                print('Best ckpt is modified with Score = {:.2f} when Epoch = {}'.format(best_acc[2], epoch))
+                print('Best ckpt is modified with key = {:.2f} when Epoch = {}'.format(key, epoch))
                 save_model(model, optimizer, args, epoch, save_file, classifier)
-                
+
             if epoch % args.save_freq == 0:
                 save_file = os.path.join(args.save_folder, 'epoch_{}.pth'.format(epoch))
                 save_model(model, optimizer, args, epoch, save_file, classifier)
@@ -531,17 +562,34 @@ def main():
             torch.save({'model': model.state_dict(), 'classifier': classifier.state_dict(),
                         'projector': projector.state_dict(), 'optimizer': optimizer.state_dict(),
                         'scaler': scaler.state_dict(), 'best_acc': best_acc, 'best_model': best_model,
-                        'epoch': epoch}, last + '.tmp')
+                        'best_key': best_key, 'history': history, 'epoch': epoch}, last + '.tmp')
             os.replace(last + '.tmp', last)  # atomic: a crash mid-save keeps the previous epoch
 
-        # save a checkpoint of classifier with the best accuracy or score
+        # three numbers: last epoch, validation-selected epoch, best on test (optimistic: chosen with test labels)
+        three = stage1.pick_epochs(history, args.select_metric)
+        report = {'args': {k: v for k, v in vars(args).items() if not k.startswith('_') and isinstance(v, (int, float, str, bool, type(None)))},
+                  'selection': args.selection, 'select_metric': args.select_metric,
+                  'last': three['last'], 'cv_selected': three['cv_selected'],
+                  'test_best_optimistic': three['test_best_optimistic'], 'history': [
+                      {'epoch': x['epoch'], 'val_score': x['val']['all']['score'], 'test_score': x['test']['all']['score']} for x in history]}
+        with open(os.path.join(args.save_folder, 'stage1_report.json'), 'w') as f:
+            json.dump(report, f, indent=1)
+        for name in ('last', 'cv_selected', 'test_best_optimistic'):
+            r = three[name]['test']['all']
+            print('{:>22} (epoch {:>3}): Sp {:.2f} Se {:.2f} Score {:.2f} HS {:.2f} macroF1 {:.3f}{}'.format(
+                name, three[name]['epoch'], r['sp'], r['se'], r['score'], r['hs'], r['macro_f1'],
+                '  [OPTIMISTIC: epoch chosen on test]' if name == 'test_best_optimistic' else ''))
+
+        # save a checkpoint of classifier with the selected epoch
         save_file = os.path.join(args.save_folder, 'best.pth')
         model.load_state_dict(best_model[0])
         classifier.load_state_dict(best_model[1])
         save_model(model, optimizer, args, epoch, save_file, classifier)
     else:
         print('Testing the pretrained checkpoint on {} dataset'.format(args.dataset))
-        best_acc, _, _  = validate(val_loader, model, classifier, criterion, args, best_acc)
+        rep, _, _ = evaluate(test_loader, model, classifier, criterion, args)
+        best_acc = headline(rep, args)
+        print(json.dumps(rep, indent=1))
 
     update_json('%s' % args.model_name, best_acc, path=os.path.join(args.save_dir, 'results.json'))
 

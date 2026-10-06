@@ -12,6 +12,10 @@ so old features are never reused silently.
 
 Config key `dataset: kauh` (with `kauh_root`) caches the 8 s windows of `data.kauh.windows` instead of ICBHI cycles.
 
+Config key `a2: {source_devices: [...]}` applies A2 (per-mel-bin moment matching of the encoder's log-mel input) after A1: statistics are
+estimated per device (the domain boundary) on all unlabelled clips, source devices pool to the source statistics, and every row is
+mapped from its own device's statistics onto them. Needs `Encoder.logmel` (AST, OPERA-CT/CE); other encoders raise. Bump `name`.
+
 Config key `correction: {source_devices: [...], reference: arithmetic|geometric, n_fft, hop}` applies A1 spectrum correction (src.shift.correction) to
 every ICBHI waveform before encoding: a coefficient table is built once from all devices present in the cycle table,
 referenced against `source_devices`, and each row is corrected with its own device's coefficient. Calibration rows
@@ -36,7 +40,7 @@ from src.data.icbhi import cycle_table
 from src.data.kauh import file_table as kauh_files
 from src.data.kauh import windows as kauh_windows
 from src.encoders.base import N_FRAMES
-from src.shift.correction import apply_spectrum_correction, mean_spectrum, spectrum_coefficients
+from src.shift.correction import apply_spectrum_correction, isa_match, mean_spectrum, spectrum_coefficients
 
 
 def cache_key(row):
@@ -54,6 +58,21 @@ def open_arrays(out, n, shape_l, shape_t):
     tokens = memmap("tokens.npy", shape_t) if shape_t else None
     done = np.load(out / "done.npy") if (out / "done.npy").exists() else np.zeros(n, bool)
     return layers, tokens, done
+
+
+def _a2_stats(df, enc, source_devices, wave_of, max_frames=798):
+    """Per-bin (mean, sd) of the encoder's log-mel input per device, and pooled over the source devices.
+
+    Streaming sums (no clip kept in memory). `wave_of(row)` returns the waveform the encoder will see (A1 applied).
+    """
+    acc = {}
+    for r in df.itertuples():
+        x = enc.logmel(wave_of(r))[:max_frames].astype(np.float64)
+        a = acc.setdefault(r.device, [0.0, 0.0, 0])
+        a[0], a[1], a[2] = a[0] + x.sum(0), a[1] + (x ** 2).sum(0), a[2] + len(x)
+    fin = lambda a: (a[0] / a[2], np.sqrt(np.maximum(a[1] / a[2] - (a[0] / a[2]) ** 2, 0)) + 1e-6)
+    src = [acc[d] for d in source_devices]
+    return {d: fin(a) for d, a in acc.items()}, fin([sum(a[i] for a in src) for i in range(3)])
 
 
 def _flush(arrays, done, path):
@@ -101,14 +120,23 @@ def extract(cfg, limit=None):
     if cfg.get("correction") and cfg.get("dataset") != "kauh":
         coef, n_fft, hop = _device_coefficients(df, cfg)
     raw, n = {}, limit or len(df)
+
+    def wave_of(r):
+        nonlocal raw
+        if r.wav not in raw:
+            raw = {r.wav: load_wav(r.wav)}  # keep one recording in memory
+        w = cycle_wave(raw[r.wav], r.start, r.end)
+        return apply_spectrum_correction(w, coef[r.device], n_fft, hop) if coef is not None else w
+
+    dev_stats = src_stats = None
+    if cfg.get("a2") and cfg.get("dataset") != "kauh":
+        dev_stats, src_stats = _a2_stats(df, enc, cfg["a2"]["source_devices"], wave_of)
     for i, r in enumerate(df.itertuples()):
         if i >= n or done[i]:
             continue
-        if r.wav not in raw:
-            raw = {r.wav: load_wav(r.wav)}  # keep one recording in memory
-        wave = cycle_wave(raw[r.wav], r.start, r.end)
-        if coef is not None:
-            wave = apply_spectrum_correction(wave, coef[r.device], n_fft, hop)
+        wave = wave_of(r)
+        if dev_stats is not None:  # A2 after A1: each device's log-mel statistics matched onto the pooled source statistics
+            enc.a2 = lambda x, d=r.device: isa_match(x, dev_stats[d], src_stats)
         fr, tok = enc.run(wave, set(keep), tl)
         layers[i] = torch.stack([fr[k] for k in keep]).cpu().numpy().astype(np.float16)
         if tokens is not None:

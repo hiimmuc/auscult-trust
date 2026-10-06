@@ -82,3 +82,35 @@ def test_extract_with_correction_applies_spectrum_correction(tmp_path, monkeypat
     akg_wave = seen_waves[3]
     uncorrected_akg = cycle_wave(load_wav(str(tmp_path / "102_1b1_Al_sc_AKGC417L.wav")), 0.0, 2.0)
     assert not np.allclose(akg_wave, uncorrected_akg, atol=1e-4)
+
+
+def test_extract_with_a2_matches_device_statistics_onto_source(tmp_path, monkeypatch):
+    from scipy.io import wavfile
+
+    class _LogmelStub(Encoder):
+        n_layers, dim = 1, 4
+
+        def logmel(self, wave):
+            return np.asarray(wave, dtype=np.float32)[:128000].reshape(-1, 4)
+
+        def run(self, wave, keep, token_layer):
+            x = self.logmel(wave)
+            if self.a2 is not None:
+                x = self.a2(x)
+            return {1: torch.full((32, 4), float(x.mean()))}, None
+
+    rng = np.random.default_rng(0)
+    base = rng.normal(size=16000 * 6) * 1000
+    for name, off in (("101_1b1_Al_sc_Meditron", 0), ("102_1b1_Al_sc_AKGC417L", 4000)):
+        wavfile.write(tmp_path / f"{name}.wav", 16000, (base + off).astype(np.int16))
+        (tmp_path / f"{name}.txt").write_text("0.0 2.0 0 0\n2.0 4.0 1 0\n")
+    monkeypatch.setattr(encoders, "load", lambda name: _LogmelStub())
+
+    def means(cfg_extra, name):
+        cfg = {"icbhi_root": str(tmp_path), "cache_root": str(tmp_path / "cache"), "name": name, "encoder": "stub", **cfg_extra}
+        features.extract(cfg)
+        return np.load(tmp_path / "cache" / name / "layers.npy")[:, 0, 0, 0].astype(float)
+
+    plain, a2 = means({}, "plain"), means({"a2": {"source_devices": ["Meditron"]}}, "a2")
+    assert abs(plain[:2].mean() - plain[2:].mean()) > 0.05  # devices differ by an offset
+    assert abs(a2[:2].mean() - a2[2:].mean()) < 0.01        # A2 removes it

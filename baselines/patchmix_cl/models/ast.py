@@ -48,7 +48,7 @@ class ASTModel(nn.Module):
     :param audioset_pretrain: if use full AudioSet and ImageNet pretrained model
     :param model_size: the model size of AST, should be in [tiny224, small224, base224, base384], base224 and base 384 are same model, but are trained differently during ImageNet pretraining.
     """
-    def __init__(self, label_dim=527, fstride=10, tstride=10, input_fdim=128, input_tdim=1024, imagenet_pretrain=True, audioset_pretrain=False, model_size='base384', verbose=True, mix_beta=None):
+    def __init__(self, label_dim=527, fstride=10, tstride=10, input_fdim=128, input_tdim=1024, imagenet_pretrain=True, audioset_pretrain=False, model_size='base384', verbose=True, mix_beta=None, bin_affine_dim=None):
         super(ASTModel, self).__init__()
         assert timm.__version__ == '0.4.5', 'Please use timm == 0.4.5, the code might not be compatible with newer versions.'
 
@@ -61,6 +61,9 @@ class ASTModel(nn.Module):
         timm.models.vision_transformer.Attention.forward = _sdpa_attention_forward
         self.final_feat_dim = 768
         self.mix_beta = mix_beta
+        # P6: learnable per-mel-bin affine layer on the input, identity at init
+        self.bin_gamma = nn.Parameter(torch.ones(1, 1, 1, bin_affine_dim)) if bin_affine_dim else None
+        self.bin_beta = nn.Parameter(torch.zeros(1, 1, 1, bin_affine_dim)) if bin_affine_dim else None
 
         # if AudioSet pretraining is not used (but ImageNet pretraining may still apply)
         if audioset_pretrain == False:
@@ -224,6 +227,8 @@ class ASTModel(nn.Module):
         :return: prediction
         """
         # x = x.unsqueeze(1)
+        if self.bin_gamma is not None:
+            x = x * self.bin_gamma + self.bin_beta
         x = x.transpose(2, 3)
         h_patch, w_patch = int((x.size()[2] - 16) / 10) + 1, int((x.size()[3] - 16) / 10) + 1
 

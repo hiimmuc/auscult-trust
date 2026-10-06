@@ -38,9 +38,16 @@ class AstViT(Encoder):
         B, _, D = tok.shape
         return to_frames_batch(tok[:, 2:].reshape(B, 12, 79, D).mean(1))
 
+    def logmel(self, wave):
+        """(1024, 128) normalised fbank (affine in the log-mel; the 8 s of audio fill the first ~798 frames)."""
+        return self.fe(wave, sampling_rate=16000, return_tensors="pt")["input_values"][0].numpy()
+
     @torch.no_grad()
     def run(self, wave, keep, token_layer):
-        h = self.model.embeddings(self.fe(wave, sampling_rate=16000, return_tensors="pt")["input_values"].to(DEVICE))
+        x = self.fe(wave, sampling_rate=16000, return_tensors="pt")["input_values"]
+        if self.a2 is not None:
+            x = torch.as_tensor(self.a2(x[0].numpy()), dtype=x.dtype)[None]
+        h = self.model.embeddings(x.to(DEVICE))
         frames, tok = {}, None
         for i, layer in enumerate(self.model.layers, 1):
             h = layer(h)

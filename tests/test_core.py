@@ -142,3 +142,26 @@ def test_v4_oracle_and_v5_patient_k():
     pats, y = np.repeat(np.arange(30), 10), rng.integers(0, 3, 300)
     thr, mask = kshot_patients_threshold(probs, y, pats, k=5, alpha=0.1)
     assert len(np.unique(pats[mask])) == 5 and mask.sum() == 50 and np.isfinite(thr)
+
+
+def test_e1_coverage_from_export_detects_target_device_shift():
+    from src.conformal.export import e1_coverage
+    rng = np.random.default_rng(0)
+    n_pat, per = 40, 12
+    dev = np.repeat(np.array(["Meditron"] * 20 + ["AKGC417L"] * 20), per)
+    pat = np.repeat([f"p{i}" for i in range(n_pat)], per)
+    y = rng.integers(0, 4, n_pat * per)
+
+    def probs(noise):
+        logits = rng.normal(size=(len(y), 4)) * noise
+        logits[np.arange(len(y)), y] += 3
+        e = np.exp(logits)
+        return e / e.sum(1, keepdims=True)
+
+    p = probs(1.0)
+    shifted = dev == "AKGC417L"
+    p[shifted] = probs(3.0)[shifted]  # target device: much noisier model outputs
+    exp = {"probs": p, "emb": np.zeros((len(y), 2)), "labels": y, "device": dev, "patient": pat}
+    r = e1_coverage(exp, "AKGC417L", alpha=0.1, n_splits=20)
+    assert r["cov_in"].shape == (20,) and r["n_target"] == 20 * per and r["n_dropped"] == 0
+    assert r["cov_in"].mean() > 0.85 and r["cov_target"].mean() < r["cov_in"].mean() - 0.05
