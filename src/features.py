@@ -12,6 +12,13 @@ so old features are never reused silently.
 
 Config key `dataset: kauh` (with `kauh_root`) caches the 8 s windows of `data.kauh.windows` instead of ICBHI cycles.
 
+Config key `correction: {source_devices: [...], n_fft, hop}` applies A1 spectrum correction (src.shift.correction) to
+every ICBHI waveform before encoding: a coefficient table is built once from all devices present in the cycle table,
+referenced against `source_devices`, and each row is corrected with its own device's coefficient. Calibration rows
+(source devices) and test rows (other devices) each get their own coefficient, so they are corrected toward the same
+reference separately. ICBHI only (KAUH windows have no `device` column). Always bump `name` when adding or changing
+`correction`.
+
 Usage: python -m src.features configs/extract_ast.yaml [--limit N]   (N: smoke test on the first N rows)
 """
 import hashlib
@@ -29,6 +36,7 @@ from src.data.icbhi import cycle_table
 from src.data.kauh import file_table as kauh_files
 from src.data.kauh import windows as kauh_windows
 from src.encoders.base import N_FRAMES
+from src.shift.correction import apply_spectrum_correction, mean_spectrum, spectrum_coefficients
 
 
 def cache_key(row):
@@ -54,6 +62,28 @@ def _flush(arrays, done, path):
     np.save(path, done)
 
 
+def _device_coefficients(df, cfg):
+    """Compute A1 coefficients per device in `df` from one mean spectrum per device (full cycle waveforms).
+
+    Args:
+        df: Cycle table with `wav`, `start`, `end`, `device` columns.
+        cfg: Extraction config; reads `cfg["correction"]["source_devices"]`, `n_fft`, `hop`.
+
+    Returns:
+        Tuple (dict device -> coefficients array, n_fft, hop).
+    """
+    cc = cfg["correction"]
+    n_fft, hop = cc.get("n_fft", 1024), cc.get("hop", 512)
+    raw = {}
+    waves_by_device = {}
+    for r in df.itertuples():
+        if r.wav not in raw:
+            raw = {r.wav: load_wav(r.wav)}
+        waves_by_device.setdefault(r.device, []).append(cycle_wave(raw[r.wav], r.start, r.end))
+    spectra = {d: mean_spectrum(ws, n_fft, hop) for d, ws in waves_by_device.items()}
+    return spectrum_coefficients(spectra, source_devices=cc.get("source_devices")), n_fft, hop
+
+
 def extract(cfg, limit=None):
     """Embed every row of the cycle table once and write the cache of `cfg`. Rows already marked done are skipped."""
     df = kauh_windows(kauh_files(cfg["kauh_root"])) if cfg.get("dataset") == "kauh" else cycle_table(cfg["icbhi_root"])
@@ -67,13 +97,19 @@ def extract(cfg, limit=None):
     arrays = [a for a in (layers, tokens) if a is not None]
     (out / "keys.json").write_text(json.dumps(keys))
     (out / "meta.json").write_text(json.dumps({"encoder": cfg["encoder"], "keep_layers": keep, "token_layer": tl}))
+    coef, n_fft, hop = (None, None, None)
+    if cfg.get("correction") and cfg.get("dataset") != "kauh":
+        coef, n_fft, hop = _device_coefficients(df, cfg)
     raw, n = {}, limit or len(df)
     for i, r in enumerate(df.itertuples()):
         if i >= n or done[i]:
             continue
         if r.wav not in raw:
             raw = {r.wav: load_wav(r.wav)}  # keep one recording in memory
-        fr, tok = enc.run(cycle_wave(raw[r.wav], r.start, r.end), set(keep), tl)
+        wave = cycle_wave(raw[r.wav], r.start, r.end)
+        if coef is not None:
+            wave = apply_spectrum_correction(wave, coef[r.device], n_fft, hop)
+        fr, tok = enc.run(wave, set(keep), tl)
         layers[i] = torch.stack([fr[k] for k in keep]).cpu().numpy().astype(np.float16)
         if tokens is not None:
             tokens[i] = tok.cpu().numpy().astype(np.float16)
