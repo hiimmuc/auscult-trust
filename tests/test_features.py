@@ -7,7 +7,6 @@ torch = pytest.importorskip("torch")
 
 from src import encoders, features  # noqa: E402
 from src.encoders.base import Encoder, to_frames, to_frames_batch  # noqa: E402
-from src.encoders.htsat import HtsatAudioset  # noqa: E402
 from src.encoders.vit import AstViT, HeARViT  # noqa: E402
 
 
@@ -20,12 +19,10 @@ def test_batched_pooling_matches_single():
 def test_token_frames_layout():
     assert AstViT.token_frames(torch.randn(2, 2 + 12 * 79, 6)).shape == (2, 32, 6)
     assert HeARViT.token_frames(torch.randn(2, 4 * 97, 6)).shape == (2, 32, 6) and HeARViT.units == 4
-    assert HtsatAudioset.token_frames(torch.randn(2, 64, 6)).shape == (2, 32, 6)
-    assert HtsatAudioset.patch_index().shape == (64,)
 
 
 def test_registry_lists_all_encoders_and_resolves_classes_without_loading():
-    assert set(encoders.ENCODERS) == {"opera_ct", "opera_ce", "ast_audioset", "hear", "clap_htsat", "htsat_audioset"}
+    assert set(encoders.ENCODERS) == {"opera_ct", "opera_ce", "ast_audioset", "hear", "clap_htsat"}
     assert all(issubclass(encoders.get(n), Encoder) for n in encoders.ENCODERS)
 
 
