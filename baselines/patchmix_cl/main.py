@@ -48,10 +48,19 @@ def build_parser():
                         help='headline Se/Score from the 4-class predictions collapsed to normal/abnormal (not a separately trained model)')
 
     # Stage 1 of proposal v8: epoch selection and device-motivated variants (P1-P8; P5 dropped, no licensed stethoscope IRs)
-    parser.add_argument('--selection', type=str, default='cv', choices=['cv', 'test'],
+    parser.add_argument('--selection', type=str, default='cv', choices=['cv', 'test', 'fixed'],
                         help="cv: epoch chosen on a patient-level validation set carved from the training patients; "
-                             "test: epoch chosen on the test set (optimistic, original Patch-Mix protocol)")
+                             "test: epoch chosen on the test set (optimistic, original Patch-Mix protocol); "
+                             "fixed: train on all training patients and keep the epoch(s) given by --report_epochs "
+                             "(the registered refit of a screened variant)")
     parser.add_argument('--val_frac', type=float, default=0.2, help='fraction of training patients held out for validation')
+    parser.add_argument('--cv_folds', type=int, default=0,
+                        help='screening: >0 uses patient-grouped CV with this many folds (device-stratified, same folds for '
+                             'every variant and seed) instead of the --val_frac split; the test set is not evaluated')
+    parser.add_argument('--cv_fold', type=int, default=0, help='screening: index of the validation fold')
+    parser.add_argument('--report_epochs', type=str, default='',
+                        help='selection=fixed: comma list of epochs chosen by CV screening; the first is saved as best.pth, '
+                             'every one as report_epoch_<E>.pth')
     parser.add_argument('--select_metric', type=str, default='score', choices=['score', 'worst_device'],
                         help='P8: worst_device selects by the minimum per-device validation Score')
     parser.add_argument('--a1_input', action='store_true', help='P1: A1 spectrum correction on the waveform, device from file name')
@@ -169,6 +178,13 @@ def parse_args():
             parser.set_defaults(**json.load(open(c)))
     args = parser.parse_args()
     args.val_available = args.selection == 'cv'
+    args.report_epoch_list = [int(e) for e in str(args.report_epochs).split(',') if str(e).strip()]
+    if args.selection == 'fixed':
+        assert args.report_epoch_list, '--selection fixed needs --report_epochs'
+        assert max(args.report_epoch_list) <= args.epochs, 'report epoch beyond --epochs'
+        assert args.cv_folds == 0, 'fixed refit trains on all training patients; do not combine with --cv_folds'
+    if args.cv_folds:
+        assert args.selection == 'cv' and 0 <= args.cv_fold < args.cv_folds
 
     iterations = args.lr_decay_epochs.split(',')
     args.lr_decay_epochs = list([])
@@ -245,7 +261,11 @@ def set_loader(args):
 
         # Patient-level validation split of the training set (same split for every variant of one seed).
         # Shallow copy with the eval transform: shares the cached spectrograms, no SpecAugment, no raw augmentation.
-        tr_idx, va_idx = stage1.patient_val_split(train_dataset.patients, args.val_frac, args.seed)
+        if args.cv_folds:  # screening fold: same device-stratified patient folds for every variant and seed
+            devs = np.array([int(m[stage1.META_DEVICE_IDX].item()) for m in train_dataset.metadata])
+            tr_idx, va_idx = stage1.cv_split(train_dataset.patients, devs, args.cv_folds, args.cv_fold)
+        else:
+            tr_idx, va_idx = stage1.patient_val_split(train_dataset.patients, args.val_frac, args.seed)
         val_dataset = copy.copy(train_dataset)
         val_dataset.transform, val_dataset.train_flag = val_transform, False
         val_set = torch.utils.data.Subset(val_dataset, va_idx)
@@ -269,7 +289,8 @@ def set_loader(args):
 
     mk = lambda ds, **kw: torch.utils.data.DataLoader(ds, batch_size=args.batch_size, num_workers=args.num_workers, pin_memory=True, **kw)
     train_loader = mk(train_set, shuffle=sampler is None, sampler=sampler, drop_last=True)
-    val_loader = mk(val_set, shuffle=False)
+    # fixed refit: the val patients are inside the training set, so there is no validation loader
+    val_loader = mk(val_set, shuffle=False) if args.selection == 'cv' else None
     test_loader = mk(test_dataset, shuffle=False)
 
     return train_loader, val_loader, test_loader, args
@@ -462,7 +483,7 @@ def evaluate(loader, model, classifier, criterion, args):
     model.eval()
     classifier.eval()
     losses = AverageMeter()
-    preds, ys, devs = [], [], []
+    preds, probs, ys, devs = [], [], [], []
     with torch.no_grad():
         for images, labels, metadata in loader:
             images = images.cuda(non_blocking=True)
@@ -472,9 +493,11 @@ def evaluate(loader, model, classifier, criterion, args):
                 loss = criterion[0](output, labels)
             losses.update(loss.item(), labels.shape[0])
             preds.append(output.argmax(1).cpu().numpy())
+            probs.append(torch.softmax(output.float(), 1).cpu().numpy())
             ys.append(labels.cpu().numpy())
             devs.append(metadata[:, stage1.META_DEVICE_IDX].long().numpy())
     preds, ys, devs = np.concatenate(preds), np.concatenate(ys), np.concatenate(devs)
+    evaluate.last_probs = np.concatenate(probs)  # softmax of the last call (seed ensembles offline)
     return stage1.per_device_report(ys, preds, devs, args.n_cls), (preds, ys, devs), losses.avg
 
 
@@ -520,7 +543,12 @@ def main():
         history, best_key = ck.get('history', []), ck.get('best_key', best_acc[-1])
         print("=> resumed '{}' after epoch {}, best Score {:.2f}".format(args.resume, ck['epoch'], best_acc[-1]))
 
+    test_preds = ck.get('test_preds', {}) if args.resume and os.path.isfile(args.resume) else {}  # epoch -> softmax
+    screening = args.cv_folds > 0  # no test evaluation while screening: selection never sees test data
+
     def select_key(h):
+        if args.selection == 'fixed':  # registered epoch from screening; any later report epoch does not replace it
+            return 1.0 if h['epoch'] == args.report_epoch_list[0] else -1.0
         src = h['val'] if args.selection == 'cv' else h['test']
         return src['all']['score'] if args.select_metric == 'score' else stage1.worst_device_score(src)
 
@@ -538,21 +566,27 @@ def main():
                 epoch, time2-time1, acc))
 
             # validation (held-out train patients) and test, every epoch; preds only kept for the three reported epochs
-            val_rep, _, val_loss = evaluate(val_loader, model, classifier, criterion, args)
-            test_rep, test_raw, _ = evaluate(test_loader, model, classifier, criterion, args)
+            val_rep = evaluate(val_loader, model, classifier, criterion, args)[0] if val_loader is not None else None
+            test_rep, test_raw = (None, None) if screening else evaluate(test_loader, model, classifier, criterion, args)[:2]
             h = {'epoch': epoch, 'val': val_rep, 'test': test_rep}
-            sp, se, sc = headline(test_rep, args)
-            print(' * test S_p: {:.2f}, S_e: {:.2f}, Score: {:.2f} | val Score {:.2f}'.format(sp, se, sc, val_rep['all']['score']))
+            sp, se, sc = headline(test_rep, args) if test_rep is not None else (float('nan'),) * 3
+            if test_raw is not None:
+                test_preds[epoch] = (test_raw[0].astype(np.int8), evaluate.last_probs.astype(np.float16))  # preds, softmax
+            print(' * test S_p: {:.2f}, S_e: {:.2f}, Score: {:.2f} | val Score {}'.format(
+                sp, se, sc, '{:.2f}'.format(val_rep['all']['score']) if val_rep is not None else '-'))
             history.append(h)
 
             key = select_key(h)
-            save_bool = key > best_key and (args.selection == 'cv' or se > 5)
+            save_bool = key > best_key and (args.selection in ('cv', 'fixed') or se > 5)
             if save_bool:
                 best_key, best_acc = key, [sp, se, sc]
                 best_model = [{k: v.detach().cpu().clone() for k, v in m.state_dict().items()} for m in (model, classifier)]  # repro: keep on CPU, saves ~0.7 GB GPU
                 save_file = os.path.join(args.save_folder, 'best_epoch_{}.pth'.format(epoch))
                 print('Best ckpt is modified with key = {:.2f} when Epoch = {}'.format(key, epoch))
                 save_model(model, optimizer, args, epoch, save_file, classifier)
+
+            if args.selection == 'fixed' and epoch in args.report_epoch_list:
+                save_model(model, optimizer, args, epoch, os.path.join(args.save_folder, 'report_epoch_{}.pth'.format(epoch)), classifier)
 
             if epoch % args.save_freq == 0:
                 save_file = os.path.join(args.save_folder, 'epoch_{}.pth'.format(epoch))
@@ -562,22 +596,39 @@ def main():
             torch.save({'model': model.state_dict(), 'classifier': classifier.state_dict(),
                         'projector': projector.state_dict(), 'optimizer': optimizer.state_dict(),
                         'scaler': scaler.state_dict(), 'best_acc': best_acc, 'best_model': best_model,
-                        'best_key': best_key, 'history': history, 'epoch': epoch}, last + '.tmp')
+                        'best_key': best_key, 'history': history, 'test_preds': test_preds, 'epoch': epoch}, last + '.tmp')
             os.replace(last + '.tmp', last)  # atomic: a crash mid-save keeps the previous epoch
 
         # three numbers: last epoch, validation-selected epoch, best on test (optimistic: chosen with test labels)
         three = stage1.pick_epochs(history, args.select_metric)
+        if args.selection == 'fixed':
+            byep = {x['epoch']: x for x in history}
+            three['fixed'] = {str(e): byep[e] for e in args.report_epoch_list}
+        sc_of = lambda r: None if r is None else r['all']['score']
         report = {'args': {k: v for k, v in vars(args).items() if not k.startswith('_') and isinstance(v, (int, float, str, bool, type(None)))},
-                  'selection': args.selection, 'select_metric': args.select_metric,
-                  'last': three['last'], 'cv_selected': three['cv_selected'],
-                  'test_best_optimistic': three['test_best_optimistic'], 'history': [
-                      {'epoch': x['epoch'], 'val_score': x['val']['all']['score'], 'test_score': x['test']['all']['score']} for x in history]}
+                  'selection': args.selection, 'select_metric': args.select_metric, **three, 'history': [
+                      {'epoch': x['epoch'], 'val_score': sc_of(x['val']), 'test_score': sc_of(x['test']),
+                       'val_worst': None if x['val'] is None else stage1.worst_device_score(x['val']),
+                       'val_devices': None if x['val'] is None else {k: v['score'] for k, v in x['val'].items() if k != 'all'}}
+                      for x in history]}
         with open(os.path.join(args.save_folder, 'stage1_report.json'), 'w') as f:
             json.dump(report, f, indent=1)
-        for name in ('last', 'cv_selected', 'test_best_optimistic'):
-            r = three[name]['test']['all']
+        if test_preds:  # per-epoch test predictions for paired, patient-level bootstrap CIs offline
+            ep = sorted(test_preds)
+            np.savez_compressed(os.path.join(args.save_folder, 'test_preds.npz'), epochs=np.array(ep),
+                                preds=np.stack([test_preds[e][0] for e in ep]), probs=np.stack([test_preds[e][1] for e in ep]),
+                                labels=np.asarray(test_loader.dataset.labels),
+                                device=np.array([int(m[stage1.META_DEVICE_IDX].item()) for m in test_loader.dataset.metadata]),
+                                patient=np.asarray(test_loader.dataset.patients))
+        named = [(n, three[n]) for n in ('last', 'cv_selected', 'test_best_optimistic') if n in three]
+        named += [('fixed@' + e, x) for e, x in three.get('fixed', {}).items()]
+        for name, entry in named:
+            if entry['test'] is None:
+                print('{:>22} (epoch {:>3}): val Score {:.2f} (screening, test not evaluated)'.format(name, entry['epoch'], entry['val']['all']['score']))
+                continue
+            r = entry['test']['all']
             print('{:>22} (epoch {:>3}): Sp {:.2f} Se {:.2f} Score {:.2f} HS {:.2f} macroF1 {:.3f}{}'.format(
-                name, three[name]['epoch'], r['sp'], r['se'], r['score'], r['hs'], r['macro_f1'],
+                name, entry['epoch'], r['sp'], r['se'], r['score'], r['hs'], r['macro_f1'],
                 '  [OPTIMISTIC: epoch chosen on test]' if name == 'test_best_optimistic' else ''))
 
         # save a checkpoint of classifier with the selected epoch

@@ -50,6 +50,45 @@ def patient_val_split(patients, frac=0.2, seed=0):
     return np.flatnonzero(~is_val), np.flatnonzero(is_val)
 
 
+def patient_folds(patients, devices, n_folds=3, seed=12345):
+    """Assign every training patient to one of `n_folds` grouped-CV folds, stratified by the patient's main device.
+
+    The assignment depends only on the patient list and `seed`, not on the run seed, so every variant and every seed
+    sees the same folds (paired screening). Devices with few patients (Litt3200 in the official train split) are spread
+    over the folds instead of landing in one.
+
+    Args:
+        patients: (n,) patient id per training cycle.
+        devices: (n,) device id per training cycle.
+        n_folds: Number of folds.
+        seed: RNG seed of the assignment (fixed by default; do not tie it to the run seed).
+
+    Returns:
+        Dict patient id -> fold index in [0, n_folds).
+    """
+    patients, devices = np.asarray(patients), np.asarray(devices)
+    main_dev = {}
+    for p in sorted(set(patients.tolist())):
+        vals, counts = np.unique(devices[patients == p], return_counts=True)
+        main_dev[p] = int(vals[np.argmax(counts)])
+    rng = np.random.default_rng(seed)
+    fold, k = {}, 0
+    for d in sorted(set(main_dev.values())):
+        ids = [p for p in sorted(main_dev) if main_dev[p] == d]
+        rng.shuffle(ids)
+        for p in ids:  # round-robin across devices, so fold sizes stay balanced overall
+            fold[p] = k % n_folds
+            k += 1
+    return fold
+
+
+def cv_split(patients, devices, n_folds, fold):
+    """(train_idx, val_idx) of grouped-CV fold `fold`; disjoint by patient. See `patient_folds`."""
+    assign = patient_folds(patients, devices, n_folds)
+    is_val = np.array([assign[p] == fold for p in np.asarray(patients).tolist()])
+    return np.flatnonzero(~is_val), np.flatnonzero(is_val)
+
+
 def _f1(y, pred, k):
     tp = ((pred == k) & (y == k)).sum()
     p, r = tp / max((pred == k).sum(), 1), tp / max((y == k).sum(), 1)
@@ -100,9 +139,31 @@ def pick_epochs(history, select_metric='score'):
     Returns:
         Dict `last`, `cv_selected`, `test_best_optimistic`, each the history entry of that epoch.
     """
-    key = (lambda h: h['val']['all']['score']) if select_metric == 'score' else (lambda h: worst_device_score(h['val']))
-    return {'last': history[-1], 'cv_selected': max(history, key=key),
-            'test_best_optimistic': max(history, key=lambda h: h['test']['all']['score'])}
+    out = {'last': history[-1]}
+    if history[-1].get('val') is not None:
+        key = (lambda h: h['val']['all']['score']) if select_metric == 'score' else (lambda h: worst_device_score(h['val']))
+        out['cv_selected'] = max(history, key=key)
+    if history[-1].get('test') is not None:
+        out['test_best_optimistic'] = max(history, key=lambda h: h['test']['all']['score'])
+    return out
+
+
+def mean_cv_curve(fold_curves):
+    """Mean over folds of per-epoch validation curves; truncated to the shortest curve.
+
+    Args:
+        fold_curves: List (one per fold) of per-epoch values (epoch 1 first).
+
+    Returns:
+        (n_epochs,) array.
+    """
+    n = min(len(c) for c in fold_curves)
+    return np.mean([np.asarray(c[:n], float) for c in fold_curves], 0)
+
+
+def cv_epoch(fold_curves):
+    """Registered epoch rule: the epoch (1-based) that maximises the mean CV curve; earliest on ties."""
+    return int(np.argmax(mean_cv_curve(fold_curves))) + 1
 
 
 def random_bin_gain_image(image, max_db, rng):
