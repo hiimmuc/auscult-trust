@@ -1,7 +1,8 @@
 """Gain-based device corrections of proposal A+B (4.2, 4.3) and the train-time gain augmentation.
 
 A1  spectrum correction on STFT magnitude, per device, needs the device id [Kosmider 2020; Nguyen & Pernkopf 2022]
-A2  ISA: per-mel-bin moment matching of log-mel on unlabelled target clips, no device id needed at test time
+A2  ISA: per-mel-bin moment matching of log-mel on unlabelled target clips. Needs a domain boundary (which clips
+    are source vs target) to compute separate statistics, but no device *label* beyond that boundary.
     (AST and CLAP have no input BatchNorm; for OPERA-CT the equivalent is re-estimating `bn0`)
 G   random smooth per-mel-bin gain in dB, a stand-in for IR augmentation (T1) on rungs that see the waveform or
     log-mel. Not wired into the cached-token rungs: they start after layer 8 and never see the input.
