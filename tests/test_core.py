@@ -107,3 +107,12 @@ def test_calibration_eval_splits_disjoint_and_stratified_by_device():
         assert len(cal) >= 1 and len(ev) >= 1  # device B's single patient must land somewhere every time
     # Different seeds across the 20 splits actually move patients around (not 20 copies of the same split).
     assert len({frozenset(s["calibration"]) for s in splits}) > 1
+
+
+def test_calibration_eval_splits_odd_device_size_is_not_systematically_biased():
+    import pandas as pd
+    from src.data.splits import calibration_eval_splits
+    df = pd.DataFrame({"patient": [f"p{i}" for i in range(3)], "device": ["A"] * 3})
+    splits = calibration_eval_splits(df, n_splits=20, fracs=(0.5, 0.5), seed=0)
+    cal_sizes = {len(s["calibration"]) for s in splits}
+    assert cal_sizes == {1, 2}, f"3-patient device should split both 1/2 and 2/1 across resplits, got sizes {cal_sizes}"

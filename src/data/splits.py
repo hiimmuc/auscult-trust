@@ -132,9 +132,10 @@ def device_holdout_official(df, device):
 def calibration_eval_splits(df, n_splits=20, fracs=(0.5, 0.5), seed=0):
     """Repeatedly split the official test patients of the non-held-out devices into calibration and evaluation groups.
 
-    Stratified by device so every device's patients are divided in roughly `fracs` proportion in every split. A
-    device with only one patient alternates which group that patient goes to across splits (seed-determined),
-    rather than always being dropped into the same group or excluded.
+    Stratified by device so every device's patients are divided in roughly `fracs` proportion in every split. The
+    cut point uses stochastic rounding (seed-determined) rather than a fixed round(), so a device whose patient
+    count does not divide evenly by `fracs` is not biased toward the same group size in every one of the
+    `n_splits` re-splits; a device with only one patient alternates which group it lands in across splits.
 
     Args:
         df: DataFrame with `patient`, `device` columns (e.g. `device_holdout_official(...)["cal"]`).
@@ -153,10 +154,11 @@ def calibration_eval_splits(df, n_splits=20, fracs=(0.5, 0.5), seed=0):
         for ids in by_device.values():
             ids = list(ids)
             rng.shuffle(ids)
-            if len(ids) == 1:
-                (cal if rng.random() < fracs[0] else ev).append(ids[0])
-                continue
-            cut = min(max(1, round(len(ids) * fracs[0])), len(ids) - 1)
+            n = len(ids)
+            target = n * fracs[0]
+            cut = int(target) + (1 if rng.random() < target - int(target) else 0)  # stochastic rounding
+            if n > 1:
+                cut = min(max(cut, 1), n - 1)
             cal.extend(ids[:cut])
             ev.extend(ids[cut:])
         out.append({"calibration": sorted(cal), "evaluation": sorted(ev)})
