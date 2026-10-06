@@ -29,18 +29,21 @@ def mean_spectrum(waves, n_fft=1024, hop=512):
     return np.mean([np.abs(_stft(w, n_fft, hop)).mean(1) for w in waves], axis=0)
 
 
-def spectrum_coefficients(device_spectra, source_devices=None):
+def spectrum_coefficients(device_spectra, source_devices=None, reference="arithmetic"):
     """A1 coefficients c_k = s_ref / s_k per bin, with s_ref the mean of the source devices' spectra.
 
     Args:
         device_spectra: Dict device -> mean spectrum from `mean_spectrum`.
         source_devices: Devices that define the reference. Default: all.
+        reference: "arithmetic" mean of device spectra (Nguyen & Pernkopf [3]) or "geometric" mean (Kosmider [1]).
 
     Returns:
         Dict device -> (bins,) coefficients. Calibration clips use their own (source) coefficients and test clips
         the target's, so the domains are corrected separately.
     """
-    ref = np.mean([device_spectra[d] for d in (source_devices or device_spectra)], axis=0)
+    assert reference in ("arithmetic", "geometric"), reference
+    stack = np.array([device_spectra[d] for d in (source_devices or device_spectra)])
+    ref = stack.mean(0) if reference == "arithmetic" else np.exp(np.log(np.maximum(stack, 1e-8)).mean(0))
     return {d: ref / np.maximum(s, 1e-8) for d, s in device_spectra.items()}
 
 

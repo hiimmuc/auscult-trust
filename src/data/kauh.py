@@ -66,6 +66,28 @@ def partitions(df, n=5, fracs=(0.6, 0.2, 0.2)):
     return [split_patients(df.patient, fracs, seed=i, names=("train", "cal", "test")) for i in range(n)]
 
 
+def rotation_partitions(df, n_folds=5, seed=0):
+    """Patient-level rotation: every patient is in the test part exactly once (halves the CI width of 60/20/20 x 5).
+
+    Fold i tests on patient group i, calibrates on group (i + 1) % n, trains on the rest. All filter renderings of a
+    patient share a group because the key is the patient id.
+
+    Args:
+        df: `file_table` output.
+        n_folds: Number of groups and partitions.
+        seed: RNG seed for the patient shuffle.
+
+    Returns:
+        List of `n_folds` split dicts (train/cal/test -> patient ids).
+    """
+    import numpy as np
+    ids = sorted(set(df.patient))
+    np.random.default_rng(seed).shuffle(ids)
+    groups = [sorted(g) for g in np.array_split(np.array(ids, dtype=object), n_folds)]
+    return [{"train": sorted(p for j, g in enumerate(groups) if j not in (i, (i + 1) % n_folds) for p in g),
+             "cal": groups[(i + 1) % n_folds], "test": groups[i]} for i in range(n_folds)]
+
+
 def windows(df, sec=8.0):
     """Cut every labelled recording into `max(1, floor(duration / sec))` windows of `sec` seconds, evenly spread.
 

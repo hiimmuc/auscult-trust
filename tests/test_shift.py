@@ -48,3 +48,32 @@ def test_conformal_layer_coverage_exchangeable():
         r = ConformalLayer(0.1, v).calibrate(pc, yc).evaluate(pt, yt)
         assert abs(r["coverage"] - 0.9) < 0.03, (v, r["coverage"])
         assert all(c["coverage"] > 0.8 for c in r["per_class"]) if v == "mondrian" else True
+
+
+def test_closed_fraction_checked_nan_inside_binomial_halfwidth():
+    from src.eval.shift import closed_fraction_checked
+    assert np.isnan(closed_fraction_checked(0.89, 0.9, 0.1, 100))  # deficit 0.01 < half-width 0.059
+    assert np.isclose(closed_fraction_checked(0.70, 0.85, 0.1, 1000), 1 - 0.05 / 0.20)
+
+
+def test_prior_matched_coverage_reweights_classes():
+    from src.eval.shift import prior_matched_coverage
+    y = np.array([0, 0, 0, 0, 1, 1])
+    sets = np.zeros((6, 2), bool)
+    sets[:4, 0] = True  # class 0 fully covered, class 1 never
+    assert np.isclose(prior_matched_coverage(sets, y, [0.5, 0.5]), 0.5)
+    assert np.isclose(prior_matched_coverage(sets, y, [0.9, 0.1]), 0.9)
+
+
+def test_decodability_curve_and_mmd_detect_shift_and_null():
+    from src.eval.shift import decodability_curve, mmd_permutation
+    rng = np.random.default_rng(0)
+    gs, gt = np.repeat(np.arange(20), 10), np.repeat(np.arange(20, 40), 10)
+    a, b = rng.normal(size=(200, 16)), rng.normal(size=(200, 16))
+    shifted = b + 2.0
+    cur = decodability_curve(a, shifted, gs, gt, ns=(20, 100))
+    assert cur[100] > 0.9
+    assert decodability_curve(a, b, gs, gt, ns=(20, 100))[100] < 0.7
+    _, p_shift = mmd_permutation(a, shifted, gs, gt, n_perm=50)
+    _, p_null = mmd_permutation(a, b, gs, gt, n_perm=50)
+    assert p_shift < 0.1 < p_null

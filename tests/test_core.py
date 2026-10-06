@@ -116,3 +116,29 @@ def test_calibration_eval_splits_odd_device_size_is_not_systematically_biased():
     splits = calibration_eval_splits(df, n_splits=20, fracs=(0.5, 0.5), seed=0)
     cal_sizes = {len(s["calibration"]) for s in splits}
     assert cal_sizes == {1, 2}, f"3-patient device should split both 1/2 and 2/1 across resplits, got sizes {cal_sizes}"
+
+
+def test_sp_se_hs_macro_f1_by_device():
+    from src.eval.metrics import by_device, hs, icbhi_score, macro_f1, sp_se
+    y = np.array([0, 0, 1, 2, 3, 0, 1, 1])
+    p = np.array([0, 1, 1, 0, 3, 0, 1, 2])
+    sp, se = sp_se(y, p)
+    assert np.isclose(sp, 2 / 3) and np.isclose(se, 3 / 5)
+    assert np.isclose(hs(y, p), 2 * sp * se / (sp + se)) and np.isclose((sp + se) / 2, icbhi_score(y, p))
+    assert 0 < macro_f1(y, p) < 1
+    r = by_device(y, p, np.array(["A"] * 4 + ["B"] * 4))
+    assert set(r) == {"A", "B", "all"} and r["all"]["n"] == 8 and np.isclose(r["all"]["sp"], sp)
+
+
+def test_v4_oracle_and_v5_patient_k():
+    from src.conformal.conformal import (kshot_patients_threshold, label_shift_threshold,
+                                         oracle_label_shift_threshold)
+    rng = np.random.default_rng(0)
+    scores, labels = rng.uniform(size=400), rng.integers(0, 2, 400)
+    f = np.bincount(labels) / 400
+    same = oracle_label_shift_threshold(scores, labels, f, f, 0.1)
+    assert np.allclose(same, label_shift_threshold(scores, labels, np.ones(2), 0.1))
+    probs = rng.dirichlet(np.ones(3), 300)
+    pats, y = np.repeat(np.arange(30), 10), rng.integers(0, 3, 300)
+    thr, mask = kshot_patients_threshold(probs, y, pats, k=5, alpha=0.1)
+    assert len(np.unique(pats[mask])) == 5 and mask.sum() == 50 and np.isfinite(thr)

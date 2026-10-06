@@ -102,3 +102,48 @@ def mean_sd(values):
     """
     v = np.asarray(values, dtype=float)
     return v.mean(), v.std(ddof=1) if len(v) > 1 else 0.0
+
+
+def sp_se(y, pred):
+    """Specificity (normal recall) and sensitivity (correct abnormal / all abnormal), class 0 = normal.
+
+    Returns:
+        Tuple (sp, se); 0.0 for a missing group.
+    """
+    y, pred = np.asarray(y), np.asarray(pred)
+    n, a = y == 0, y != 0
+    return (float((pred[n] == 0).mean()) if n.any() else 0.0,
+            float((pred[a] == y[a]).mean()) if a.any() else 0.0)
+
+
+def hs(y, pred):
+    """Harmonic mean of Sp and Se (HS Score)."""
+    sp, se = sp_se(y, pred)
+    return 2 * sp * se / (sp + se) if sp + se else 0.0
+
+
+def macro_f1(y, pred, n_classes=4):
+    """Macro-averaged F1 over `n_classes` (absent classes count as 0)."""
+    return float(class_report(np.asarray(y), np.asarray(pred), n_classes)["f1"].mean())
+
+
+def by_device(y, pred, devices, n_classes=4):
+    """Sp, Se, ICBHI Score, HS and macro-F1 per device, plus the pooled row under key `all`.
+
+    Args:
+        y: (n,) true labels.
+        pred: (n,) predicted labels.
+        devices: (n,) device name per row.
+        n_classes: K.
+
+    Returns:
+        Dict device -> dict `n`, `sp`, `se`, `score`, `hs`, `macro_f1`.
+    """
+    y, pred, devices = np.asarray(y), np.asarray(pred), np.asarray(devices)
+    out = {}
+    for d in [*np.unique(devices), "all"]:
+        m = np.ones(len(y), bool) if d == "all" else devices == d
+        sp, se = sp_se(y[m], pred[m])
+        out[str(d)] = {"n": int(m.sum()), "sp": sp, "se": se, "score": (sp + se) / 2, "hs": hs(y[m], pred[m]),
+                       "macro_f1": macro_f1(y[m], pred[m], n_classes)}
+    return out

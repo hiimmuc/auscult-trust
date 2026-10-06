@@ -12,7 +12,7 @@ so old features are never reused silently.
 
 Config key `dataset: kauh` (with `kauh_root`) caches the 8 s windows of `data.kauh.windows` instead of ICBHI cycles.
 
-Config key `correction: {source_devices: [...], n_fft, hop}` applies A1 spectrum correction (src.shift.correction) to
+Config key `correction: {source_devices: [...], reference: arithmetic|geometric, n_fft, hop}` applies A1 spectrum correction (src.shift.correction) to
 every ICBHI waveform before encoding: a coefficient table is built once from all devices present in the cycle table,
 referenced against `source_devices`, and each row is corrected with its own device's coefficient. Calibration rows
 (source devices) and test rows (other devices) each get their own coefficient, so they are corrected toward the same
@@ -81,7 +81,7 @@ def _device_coefficients(df, cfg):
             raw = {r.wav: load_wav(r.wav)}
         waves_by_device.setdefault(r.device, []).append(cycle_wave(raw[r.wav], r.start, r.end))
     spectra = {d: mean_spectrum(ws, n_fft, hop) for d, ws in waves_by_device.items()}
-    return spectrum_coefficients(spectra, source_devices=cc.get("source_devices")), n_fft, hop
+    return spectrum_coefficients(spectra, source_devices=cc.get("source_devices"), reference=cc.get("reference", "arithmetic")), n_fft, hop
 
 
 def extract(cfg, limit=None):

@@ -152,3 +152,103 @@ def spearman_block_bootstrap(x, y, blocks, n_boot=1000, seed=0):
         if len(np.unique(x[idx])) > 1 and len(np.unique(y[idx])) > 1:
             vals.append(spearmanr(x[idx], y[idx]).statistic)
     return float(spearmanr(x, y).statistic), *np.percentile(vals, [2.5, 97.5])
+
+
+def closed_fraction_checked(cov_none, cov_corrected, alpha, n):
+    """`closed_fraction` that returns NaN unless the uncorrected deficit exceeds the binomial half-width at nominal.
+
+    Args:
+        cov_none: Empirical coverage without correction.
+        cov_corrected: Empirical coverage with correction.
+        alpha: Miscoverage level.
+        n: Test size (rows) behind the coverage estimates.
+
+    Returns:
+        phi, or NaN when Delta <= half-width (no detectable deficit to close).
+    """
+    return closed_fraction(coverage_deficit(cov_none, alpha), coverage_deficit(cov_corrected, alpha),
+                           min_delta=binom_ci(1 - alpha, n))
+
+
+def prior_matched_coverage(sets, y, target_prior):
+    """Coverage re-weighted so the class mix equals `target_prior`. Evaluation only, never used to calibrate.
+
+    Separates the device effect from the class-proportion effect: compare with plain coverage on the same rows.
+
+    Args:
+        sets: (n, K) boolean membership matrix.
+        y: (n,) true labels.
+        target_prior: (K,) class proportions to match, e.g. those of the calibration data.
+
+    Returns:
+        Float; classes absent from `y` are dropped and the rest renormalised.
+    """
+    K = sets.shape[1]
+    per = np.array([sets[y == k, k].mean() if (y == k).any() else np.nan for k in range(K)])
+    w = np.where(np.isnan(per), 0.0, np.asarray(target_prior, float))
+    return float((np.nan_to_num(per) * w).sum() / w.sum())
+
+
+def _pca(X, k):
+    X = X - X.mean(0)
+    _, _, vt = np.linalg.svd(X, full_matrices=False)
+    return X @ vt[:k].T
+
+
+def decodability_curve(src_emb, tgt_emb, src_groups, tgt_groups, ns=(20, 50, 100, 200), k=8, seed=0, **kw):
+    """Unsaturated decodability: AUC of a PCA-`k` probe on `n` rows per domain, for each `n` in `ns`.
+
+    A full-dimensional AUC saturates near 1 on any pair of devices, so the learning curve (does AUC rise with n?)
+    is the quantity to read. Rows are drawn per domain without replacement; PCA is fit on the pooled subsample.
+
+    Args:
+        src_emb, tgt_emb: (n, d) embeddings.
+        src_groups, tgt_groups: Patient ids per row.
+        ns: Rows per domain.
+        k: PCA components.
+        seed: RNG seed.
+        **kw: Passed to `decodability`.
+
+    Returns:
+        Dict n -> AUC (NaN when a domain has fewer than `n` rows or fewer than 2 patients are drawn).
+    """
+    rng = np.random.default_rng(seed)
+    out = {}
+    for n in ns:
+        if min(len(src_emb), len(tgt_emb)) < n:
+            out[n] = float("nan")
+            continue
+        a, b = rng.choice(len(src_emb), n, replace=False), rng.choice(len(tgt_emb), n, replace=False)
+        Z = _pca(np.vstack([src_emb[a], tgt_emb[b]]), k)
+        ga, gb = np.asarray(src_groups)[a], np.asarray(tgt_groups)[b]
+        out[n] = decodability(Z[:n], Z[n:], ga, gb, **kw) if len(np.unique(np.r_[ga, gb])) > 1 else float("nan")
+    return out
+
+
+def mmd2(X, Y, bandwidth=None):
+    """Biased RBF MMD^2 with the median-heuristic bandwidth (pooled pairwise distance)."""
+    Z = np.vstack([X, Y])
+    D = ((Z[:, None, :] - Z[None, :, :]) ** 2).sum(-1)
+    h = bandwidth or np.median(D[D > 0]) or 1.0
+    K = np.exp(-D / h)
+    n = len(X)
+    return float(K[:n, :n].mean() + K[n:, n:].mean() - 2 * K[:n, n:].mean())
+
+
+def mmd_permutation(src_emb, tgt_emb, groups_src, groups_tgt, n_perm=200, seed=0):
+    """MMD^2 between domains with a patient-level permutation p-value (domain labels permuted across patients).
+
+    Returns:
+        Tuple (observed MMD^2, p-value).
+    """
+    X = np.vstack([src_emb, tgt_emb])
+    g = np.r_[np.asarray(groups_src), np.asarray(groups_tgt)]
+    obs = mmd2(src_emb, tgt_emb)
+    pats, rng, null = np.unique(g), np.random.default_rng(seed), []
+    for _ in range(n_perm):
+        flip = dict(zip(pats, rng.permutation(len(pats)) < len(pats) / 2))
+        dom = np.array([flip[p] for p in g])
+        if dom.all() or not dom.any():
+            continue
+        null.append(mmd2(X[~dom], X[dom]))
+    return obs, float((1 + sum(v >= obs for v in null)) / (1 + len(null)))

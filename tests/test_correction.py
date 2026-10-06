@@ -43,3 +43,10 @@ def test_random_stft_gain_changes_spectrum_keeps_rms():
     y = random_stft_gain(w, 6.0, rng=np.random.default_rng(1))
     assert y.shape == w.shape and np.isclose(np.sqrt(np.mean(y ** 2)), np.sqrt(np.mean(w ** 2)), rtol=1e-3)
     assert np.abs(np.log(mean_spectrum([y]) / mean_spectrum([w]))).mean() > 0.2
+
+
+def test_spectrum_reference_arithmetic_vs_geometric():
+    spec = {"A": np.array([1.0, 4.0]), "B": np.array([4.0, 4.0])}
+    ar = spectrum_coefficients(spec, reference="arithmetic")["A"]
+    ge = spectrum_coefficients(spec, reference="geometric")["A"]
+    assert np.allclose(ar, [2.5, 1.0]) and np.allclose(ge, [2.0, 1.0])

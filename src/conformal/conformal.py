@@ -140,6 +140,25 @@ def label_shift_threshold(cal_scores, cal_labels, class_w, alpha):
     return weighted_threshold(cal_scores, class_w[cal_labels], class_w, alpha)
 
 
+def oracle_label_shift_threshold(cal_scores, cal_labels, cal_freq, tgt_freq, alpha):
+    """V4-oracle: label-shift conformal with the true class frequencies instead of BBSE estimates.
+
+    Upper bound for V4: the gap to `label_shift_threshold` is the cost of estimating the weights.
+
+    Args:
+        cal_scores: (m,) calibration scores.
+        cal_labels: (m,) calibration labels.
+        cal_freq: (K,) true class frequencies of the calibration data.
+        tgt_freq: (K,) true class frequencies of the target test data.
+        alpha: Miscoverage level.
+
+    Returns:
+        (K,) thresholds, one per candidate label.
+    """
+    w = np.asarray(tgt_freq, float) / np.maximum(np.asarray(cal_freq, float), 1e-12)
+    return label_shift_threshold(cal_scores, cal_labels, w, alpha)
+
+
 def kshot_threshold(probs_k, labels_k, alpha):
     """V5 recalibration on k labelled target samples.
 
@@ -152,6 +171,28 @@ def kshot_threshold(probs_k, labels_k, alpha):
         Scalar threshold. Exchangeable within target, so coverage is exact.
     """
     return split_threshold(lac_scores(probs_k, labels_k), alpha)
+
+
+def kshot_patients_threshold(probs, labels, patients, k, alpha, seed=0):
+    """V5 with k counted in target patients: all rows of k randomly chosen target patients calibrate.
+
+    Rows of one patient are not exchangeable with other patients' rows, so k is a patient count (use 5 or 10).
+
+    Args:
+        probs: (n, K) target probabilities.
+        labels: (n,) target labels.
+        patients: (n,) patient id per row.
+        k: Number of labelled target patients.
+        alpha: Miscoverage level.
+        seed: RNG seed.
+
+    Returns:
+        Tuple (threshold, mask) with `mask` (n,) True for calibration rows; evaluate on `~mask`.
+    """
+    ids = np.unique(patients)
+    chosen = np.random.default_rng(seed).choice(ids, min(k, len(ids)), replace=False)
+    mask = np.isin(patients, chosen)
+    return kshot_threshold(probs[mask], labels[mask], alpha), mask
 
 
 def predict_sets(probs, threshold):
