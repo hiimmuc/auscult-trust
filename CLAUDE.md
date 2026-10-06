@@ -3,7 +3,7 @@
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
 ## Status
-Main line: proposal A+B v7 (`../docs/research-proposal-AB-gain-decomposition-v7-en.md`). Fallback: proposal H v6 (`../docs/research-proposal-H-fm-device-benchmark-v6-en.md`), public data only. v4 (`research-proposal-lung-sound-v4-en.md`) is superseded; its phase and short-window experiments are archived as reported negative or dataset-specific results.
+Main line: proposal v8 (`../docs/research-proposal-v8-en.md`), unified, replaces A+B v6/v7 and H v6. v4 (`research-proposal-lung-sound-v4-en.md`) is superseded; its phase and short-window experiments are archived as reported negative or dataset-specific results.
 Two parts, no calendar limits (order by dependency): Part I base model (encoder ladder L0-L4, ICBHI official split, fair val-selected protocol), Part II device shift (KAUH, ICBHI device-held-out, phantom, conformal coverage). Model name: **AuscultTrust**.
 Data in `../data/raw/`: ICBHI (920 wav, 6898 cycles, 126 patients), HF_Lung_V1 (9765 wav), KAUH (336 wav = 112 patients x 3 filters). Reference repos in `../repos` (read-only): OPERA, patch-mix_contrastive_learning, SG-SCL.
 Primary split: `../data/splits/icbhi_official_v1.json` (val carved from official train; 2 patients on both sides kept in test, their train recordings dropped). Results so far: `report.md`.
@@ -12,9 +12,9 @@ TODO (R-plan: R0 clean rerun, R1 encoder ladders L0-L1 on 5 encoders vs `../docs
 ## Commands
 Env uses `uv`: `uv venv .venv && uv pip install -r requirements.txt`.
 - Tests: `uv run --no-project --python .venv/bin/python python -m pytest -q tests` (single: append `tests/test_core.py::test_icbhi_score`)
-- AuscultTrust, resumable full pipeline per encoder (features -> L0 probe -> L1 head CV -> L2/L3 fine-tune CV (ast, hear) -> test): `setsid nohup bash scripts/run_ladder.sh ast > logs/ladder_ast.log 2>&1 < /dev/null &` (`opera_ct`, `opera_ce`, `clap`, `ast`, `hear`). Re-run the same command to resume. Keep `RUN_ID` fixed.
+- AuscultTrust, resumable full pipeline per encoder (features -> L0 probe -> L1 head CV -> L2/L3 fine-tune CV (ast, hear, htsat) -> test): `setsid nohup bash scripts/run_ladder.sh ast > logs/ladder_ast.log 2>&1 < /dev/null &` (`opera_ct`, `opera_ce`, `clap`, `ast`, `hear`, `htsat`). Re-run the same command to resume. Keep `RUN_ID` fixed.
 - Single steps: `.venv/bin/python -m src.auscult_trust cv-head|cv-ft|select|final|final-conformal|probe configs/ladder_ast.yaml [--cells a,b|report] [--alpha 0.1]`. Cells: `<last|concat|scalar>-<mean|max|meanmax|attn>`, `ft-k<k>-<pool>`, `lora-r<r>-<pool>`. `probe` is the L0 rung (logistic regression). `scripts/run_conformal_lora.sh` = conformal for finished cells + LoRA rung (AST).
-- Feature cache for any encoder: `.venv/bin/python -m src.features configs/extract_<ast|hear|opera_ct|opera_ce|clap>.yaml [--limit N]` (KAUH windows: `extract_ast_kauh.yaml`). Split file: `python -m src.make_split configs/split_icbhi_official.yaml`.
+- Feature cache for any encoder: `.venv/bin/python -m src.features configs/extract_<ast|hear|opera_ct|opera_ce|clap|htsat>.yaml [--limit N]` (KAUH windows: `extract_ast_kauh.yaml`). Split file: `python -m src.make_split configs/split_icbhi_official.yaml`. HTS-AT needs the AudioSet checkpoint at `../data/models/htsat/HTSAT_AudioSet_Saved_1.ckpt` (Google Drive link in `../repos/HTS-Audio-Transformer/README.md`; not auto-downloadable).
 - Legacy v4 stack (branch/phase, MLP head, Tent, conformal V1-V5 on it): `python -m src.legacy.<train|rq3|compare_encoders|ablate|hf_ablate|phase> configs/legacy/<config>.yaml`. Kept for the reported results in `report.md`, not extended; reads the old npz caches, no extractor.
 - CPU-heavy extraction (`src.features`): prefix `OMP_NUM_THREADS=4 OPENBLAS_NUM_THREADS=4`, otherwise BLAS threads oversubscribe all cores and extraction runs ~20x slower.
 
@@ -26,9 +26,10 @@ Part II: `data/kauh.py` (loader, 6 ordered filter pairs, `partitions`), `data/sp
 Lung-sound device-shift and reliability study. Full spec: proposal A+B v7.
 Question: what fraction of stethoscope-induced shift in log-mel is a per-frequency gain, and does correcting it restore conformal coverage?
 - H1: on the phantom, a gain predicted from measured H(f) explains >= 0.8 of the paired log-mel shift (relative to the placement-noise ceiling).
-- H2: under device shift, split-conformal coverage falls below nominal; gain-based correction (A1, A2) closes part of the deficit, in proportion to the H1 explained fraction.
+- H-diag: under device shift, split-conformal coverage falls below nominal, and part of the deficit comes from the device rather than the change in class proportions.
 - H3: stethoscope-matched IR augmentation closes more deficit than generic microphone IRs (needs >= 3 distinct hardware).
-- H4: fine-tuning raises ICBHI Score but also device decodability and coverage deficit, versus the frozen encoder.
+- H-inv: gain-invariant fusion of handcrafted and deep features reduces device decodability versus deep-only features, without lowering ICBHI Score outside noise.
+- F4 (finding, not hypothesis): fine-tuning raised ICBHI Score but also raised device decodability and coverage deficit, versus the frozen encoder (v4 result, kept as reported negative finding under v8, not re-tested as H4).
 - Part I criterion: best rung within 1 SD of or above Patch-Mix CL (62.37 +- 0.61) under the val-selected protocol; also report best-epoch-on-test for comparability, labelled.
 Not claimed: a new correction method; diagnosis; guarantees on humans; vitals or clinician-agreement results (dropped from v4).
 
@@ -46,8 +47,8 @@ Not claimed: a new correction method; diagnosis; guarantees on humans; vitals or
 - Never join datasets across different people (e.g., ICBHI audio + MIMIC vitals).
 
 ## Model (AuscultTrust)
-- Encoder: AST (AudioSet) is primary (frozen head-only Score 54.7 on ICBHI official test; report sections 8, 16). Comparators: HeAR, CLAP, OPERA-CT (last, 41.7). Non-OPERA results are primary for device claims (OPERA saw ICBHI-train and HF_Lung-train). Encoder input must match its pretraining preprocessing; bump the cache name when preprocessing changes.
-- Ladder: L0 logistic regression (`probe`), L1 best frozen head by grouped CV, L2 last-k blocks tuned (`ft-k*`), L3 LoRA (`lora-r*`, on the blocks after cached layer 8 only), L4 Patch-Mix CL (`baselines/`). Same split, same grouped-CV epoch selection, no test-set selection.
+- Encoder: AST (AudioSet) is primary (frozen head-only Score 54.7 on ICBHI official test; report sections 8, 16). Comparators: HeAR, CLAP, HTS-AT (AudioSet checkpoint, `htsat_audioset`), OPERA-CT (last, 41.7). HTS-AT and OPERA-CT share a backbone but not weights: OPERA-CT is OPERA's own contrastive checkpoint (saw ICBHI-train and HF_Lung-train); `htsat_audioset` is the original paper's AudioSet-classification checkpoint, non-leaking like AST/HeAR/CLAP. Encoder input must match its pretraining preprocessing; bump the cache name when preprocessing changes.
+- Ladder: L0 logistic regression (`probe`), L1 best frozen head by grouped CV, L2 last-k blocks tuned (`ft-k*`), L3 LoRA (`lora-r*`, on the blocks after cached layer 8 only), L4 Patch-Mix CL (`baselines/`). Same split, same grouped-CV epoch selection, no test-set selection. HTS-AT's Swin backbone only exposes stage 4 (2 blocks) to L2/L3 — stages 1-3 change spatial resolution per stage and stay frozen.
 - Head pools over real frames only (mask from cycle length; ~66% of an 8 s input is repeat padding). Class-weighted loss: config `class_weight: balanced` (new exp name).
 - Conformal layer (`ConformalLayer`): LAC score, V1 split and V2 Mondrian calibrated on held-out dev patients (`final-conformal`); V3 weighted, V4 label shift, V5 k-shot in `src/conformal/conformal.py`.
 - Corrections: A1 spectrum correction (device id needed), A2 ISA (log-mel moment matching), A3 Tent on encoder norms (deferred). After any adaptation, recompute calibration scores with the adapted model; calibration clips use source statistics, test clips target statistics.
