@@ -129,6 +129,40 @@ def device_holdout_official(df, device):
     return {**out, "n_dropped": int(dropped.sum())}
 
 
+def calibration_eval_splits(df, n_splits=20, fracs=(0.5, 0.5), seed=0):
+    """Repeatedly split the official test patients of the non-held-out devices into calibration and evaluation groups.
+
+    Stratified by device so every device's patients are divided in roughly `fracs` proportion in every split. A
+    device with only one patient alternates which group that patient goes to across splits (seed-determined),
+    rather than always being dropped into the same group or excluded.
+
+    Args:
+        df: DataFrame with `patient`, `device` columns (e.g. `device_holdout_official(...)["cal"]`).
+        n_splits: Number of independent re-splits.
+        fracs: (calibration, evaluation) patient fractions, applied per device.
+        seed: Base seed; split i uses seed `seed + i`.
+
+    Returns:
+        List of `n_splits` dicts `{"calibration": [...], "evaluation": [...]}`, sorted patient id lists.
+    """
+    by_device = {d: sorted(set(g.patient)) for d, g in df.groupby("device")}
+    out = []
+    for i in range(n_splits):
+        rng = np.random.default_rng(seed + i)
+        cal, ev = [], []
+        for ids in by_device.values():
+            ids = list(ids)
+            rng.shuffle(ids)
+            if len(ids) == 1:
+                (cal if rng.random() < fracs[0] else ev).append(ids[0])
+                continue
+            cut = min(max(1, round(len(ids) * fracs[0])), len(ids) - 1)
+            cal.extend(ids[:cut])
+            ev.extend(ids[cut:])
+        out.append({"calibration": sorted(cal), "evaluation": sorted(ev)})
+    return out
+
+
 def with_official(df, split):
     """Add the `official` column ("train" = train+val patients, "test") from a split file; drops `split["drop"]` stems.
 

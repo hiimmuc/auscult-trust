@@ -88,3 +88,22 @@ def test_device_holdout_official_disjoint_and_seen_flag():
     r = device_holdout_official(df, "A")
     assert r["n_dropped"] == 1 and set(r["test_unseen"].patient) == {"a2"} and set(r["test_seen"].patient) == {"a1", "c1"}
     assert set(r["train"].patient) == {"b1"} and set(r["cal"].patient) == {"b2"}
+
+
+def test_calibration_eval_splits_disjoint_and_stratified_by_device():
+    import pandas as pd
+    from src.data.splits import calibration_eval_splits
+    # 4 patients on device A, 1 on device B (rare-device edge case: must not crash or drop B).
+    df = pd.DataFrame({
+        "patient": ["a1", "a2", "a3", "a4", "b1"],
+        "device": ["A", "A", "A", "A", "B"],
+    })
+    splits = calibration_eval_splits(df, n_splits=20, fracs=(0.5, 0.5), seed=0)
+    assert len(splits) == 20
+    for s in splits:
+        cal, ev = set(s["calibration"]), set(s["evaluation"])
+        assert not cal & ev
+        assert cal | ev == {"a1", "a2", "a3", "a4", "b1"}
+        assert len(cal) >= 1 and len(ev) >= 1  # device B's single patient must land somewhere every time
+    # Different seeds across the 20 splits actually move patients around (not 20 copies of the same split).
+    assert len({frozenset(s["calibration"]) for s in splits}) > 1
