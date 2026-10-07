@@ -49,7 +49,8 @@ def main():
     model, classifier, _, _, _ = build_model(args)
     ckpt = ckpt_unit / a.ckpt
     ck = torch.load(ckpt, map_location='cpu', weights_only=False)
-    model.load_state_dict(ck['model'])
+    if ck['model'] is not None:  # absent for a frozen encoder: the pretrained weights built by build_model are the encoder
+        model.load_state_dict(ck['model'])
     classifier.load_state_dict(ck['classifier'])
 
     out = out_unit / 'export'

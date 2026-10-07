@@ -30,8 +30,9 @@ warnings.filterwarnings('ignore')
 _VOLATILE = {'num_workers', 'print_freq'}
 
 
-def save_model(model, optimizer, args, epoch, path, classifier):
-    torch.save({'args': vars(args), 'model': model.state_dict(), 'optimizer': optimizer.state_dict(), 'epoch': epoch,
+def save_model(model, args, epoch, path, classifier):
+    """Weights for inference: classifier always, encoder only when it was trained (a frozen one is the pretrained file)."""
+    torch.save({'args': vars(args), 'model': None if args.freeze_encoder else model.state_dict(), 'epoch': epoch,
                 'classifier': classifier.state_dict()}, path)
 
 
@@ -126,7 +127,7 @@ def main():
             best_model = [{k: v.detach().cpu().clone() for k, v in m.state_dict().items()} for m in (model, classifier)]
             print('Best ckpt is modified with key = {:.2f} when Epoch = {}'.format(key, epoch))
         if args.selection == 'fixed' and epoch in args.report_epoch_list:
-            save_model(model, optimizer, args, epoch, ckpt_dir / 'report_epoch_{}.pth'.format(epoch), classifier)
+            save_model(model, args, epoch, ckpt_dir / 'report_epoch_{}.pth'.format(epoch), classifier)
 
         torch.save({'model': model.state_dict(), 'classifier': classifier.state_dict(), 'projector': projector.state_dict(),
                     'optimizer': optimizer.state_dict(), 'scaler': scaler.state_dict(), 'best_model': best_model,
@@ -152,7 +153,7 @@ def main():
                 '  [OPTIMISTIC: epoch chosen on test]' if name == 'test_best_optimistic' else ''))
     if best_model is not None and args.selection != 'fixed' and not screening:  # frozen weights of the selected epoch
         model.load_state_dict(best_model[0]), classifier.load_state_dict(best_model[1])
-        save_model(model, optimizer, args, args.epochs, ckpt_dir / 'best.pth', classifier)
+        save_model(model, args, args.epochs, ckpt_dir / 'best.pth', classifier)
     last.unlink()  # resume state; the final weights are the report_epoch/best files
     (out_dir / 'report.json').write_text(json.dumps(report, indent=1))  # written last: marks the unit as done
 
