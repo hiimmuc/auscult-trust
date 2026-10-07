@@ -1,10 +1,9 @@
-# Amendment 1 to `prereg-v8.md` (proposal v9) — DRAFT
+# Amendment 1 to `prereg-v8.md` (proposal v9)
 
-**Status: draft.**
-- **To register:** date it, record it in the research journal, append this text to the end of `prereg-v8.md`, and commit. Do this before any new Stage-1 run.
-- **Earlier runs:** list any v8 screening run started before this amendment, with its date and whether its CV results were seen. Those runs are reported in an appendix in any case.
+**Status: registered 07/10/2026.** Appended to the end of `prereg-v8.md`; committed before any Stage-1 run.
+- **Earlier runs:** none. No Stage-1 run (v8 or v9) had started before this date (`save/` and `baselines/patchmix_cl` carry no run output).
 
-Date of registration: ____/10/2026. Source: `docs/research-proposal-v9-en.md`.
+Date of registration: 07/10/2026. Source: `docs/research-proposal-v9-en.md`.
 
 This amendment replaces prereg-v8 sections 1–5 for every primary claim. v8 text stays as history.
 
@@ -46,7 +45,7 @@ The registered title (fixed) commits the study to spectrum correction (SC) and c
 **SC.**
 - Reference: arithmetic mean of the training-device mean spectra.
 - STFT: n_fft 1024, hop 512, 16 kHz.
-- Coefficients clipped to ±20 dB; or the common 50–2,000 Hz band. Pick one here before screening: ______.
+- Coefficient bound, `sc_mode` arg (`src/shift/correction.py:limit_coefficients`, mirrored in `util/stage1.py:a1_coefficients`): `dynamic` clips every bin to ±`limit_freq_diff` dB (default 20); `static` leaves `[limit_freq_low, limit_freq_high]` Hz (default 50–2,000) unclipped and sets the correction to 1 (no-op) outside it. Not a reported ablation: at CV screening (3-fold, same as P1 vs P1P3), run both `sc_mode` values for every SC arm and keep whichever gives the higher mean CV Score as a fixed implementation choice; tie goes to `dynamic` (default; simpler, no band edge).
 - Device taken from the file name.
 - s_ref and the coefficients are saved with each checkpoint.
 
@@ -70,7 +69,7 @@ The registered title (fixed) commits the study to spectrum correction (SC) and c
 
 **TTA-EQ (cold-start comparator, F5; inference only).**
 - Mean softmax over K = 8 views. Each view applies a random smooth per-bin gain drawn from the P3 distribution (6 dB SD).
-- Fixed seed list for the views: ______.
+- Fixed seed list for the views: 1000, 1001, 1002, 1003, 1004, 1005, 1006, 1007 (offset from the training/gate seeds 0–9 so a global-RNG seed call cannot correlate a view with a training run).
 - Conformal calibration scores use the same K-view ensemble.
 - K ∈ {1, 4, 8, 16} is reported only as a cost curve. The verdict-free F5 comparison uses K = 8.
 - Rejected before any run: consensus over several resampling rates (low-pass only; in-band shift untouched).
