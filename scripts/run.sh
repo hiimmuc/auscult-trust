@@ -11,6 +11,10 @@
 #   bash scripts/run.sh final              retrain every arm on all training patients at its chosen epoch and score on
 #                                          the test set: seeds 0-9 for baseline and AuscultTrust, 0-4 for the others
 #   bash scripts/run.sh report             final table and non-inferiority check -> outputs/train/RUN_ID/final.md
+#   bash scripts/run.sh reproduce [cell ...]   published protocol for comparison with the papers: official split, 5 seeds
+#                                          (0-4), the epoch with the best test Score is kept (optimistic, as in the papers);
+#                                          a cell is arm files joined by '+', e.g. baseline, baseline+patchmix,
+#                                          baseline+freeze_encoder, sc_gain (default: baseline)
 #
 # Environment variables: PY (python of the training env, default .venv-train/bin/python), RUN_ID (default: timestamp),
 # FOLDS (default 3), EXTRA_ARGS (appended to every training call).
@@ -59,6 +63,12 @@ PYEOF
         train "$cell" --selection fixed --report_epochs "$epoch" --seed "$s"
       done
     done < $plan ;;
+  reproduce)
+    for cell in ${@:-baseline}; do
+      for s in 0 1 2 3 4; do
+        train "$cell" --selection test --seed "$s"
+      done
+    done ;;
   report) $PY -m src.training.patchmix_cl.summary final --run "$RUN_ID" ;;
-  *) echo "usage: bash scripts/run.sh screen [arm ...] | summary | final | report  (details in the file header)"; exit 1 ;;
+  *) echo "usage: bash scripts/run.sh screen [arm ...] | summary | final | report | reproduce [cell ...]  (details in the file header)"; exit 1 ;;
 esac

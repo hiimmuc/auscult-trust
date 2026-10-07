@@ -76,9 +76,11 @@ def build_parser():
     # model (AST) and loss
     p.add_argument('--from_sl_official', action='store_true', help='start from the ImageNet-pretrained DeiT weights')
     p.add_argument('--audioset_pretrained', action='store_true', help='start from the AudioSet-pretrained AST weights')
+    p.add_argument('--freeze_encoder', action='store_true', help='train only the classifier and projector, not the pretrained encoder')
     p.add_argument('--ma_update', action='store_true', help='moving-average update of the weights')
     p.add_argument('--ma_beta', type=float, default=0.0)
-    p.add_argument('--method', type=str, default='patchmix_cl', choices=['ce', 'patchmix_cl'])
+    p.add_argument('--method', type=str, default='patchmix_cl', choices=['ce', 'patchmix', 'patchmix_cl'],
+                   help='ce: plain cross-entropy; patchmix: Patch-Mix augmentation; patchmix_cl: Patch-Mix + contrastive loss')
     p.add_argument('--proj_dim', type=int, default=768)
     p.add_argument('--temperature', type=float, default=0.06)
     p.add_argument('--alpha', type=float, default=1.0, help='weight of the contrastive loss')

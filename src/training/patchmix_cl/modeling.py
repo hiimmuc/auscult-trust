@@ -6,7 +6,7 @@ import torch.nn as nn
 
 from .dataset import IMG_MEL, IMG_TIME
 from .optim import set_optimizer
-from .upstream import PatchMixConLoss, Projector, build_ast
+from .upstream import PatchMixConLoss, PatchMixLoss, Projector, build_ast
 
 
 def build_model(args):
@@ -16,10 +16,15 @@ def build_model(args):
     classifier = deepcopy(model.mlp_head)
     projector = Projector(model.final_feat_dim, args.proj_dim) if args.method == 'patchmix_cl' else nn.Identity()
     criterion = [nn.CrossEntropyLoss().cuda()]
+    if args.method == 'patchmix':
+        criterion.append(PatchMixLoss(criterion=criterion[0]).cuda())
     if args.method == 'patchmix_cl':
         criterion.append(PatchMixConLoss(temperature=args.temperature).cuda())
     if torch.cuda.device_count() > 1:
         model = nn.DataParallel(model)
     model.cuda(), classifier.cuda(), projector.cuda()
-    params = list(model.parameters()) + list(classifier.parameters()) + list(projector.parameters())
+    if args.freeze_encoder:
+        for p in model.parameters():
+            p.requires_grad = False
+    params = [p for p in model.parameters() if p.requires_grad] + list(classifier.parameters()) + list(projector.parameters())
     return model, classifier, projector, criterion, set_optimizer(args, params)

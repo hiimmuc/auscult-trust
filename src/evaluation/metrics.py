@@ -137,7 +137,7 @@ def by_device(y, pred, devices, n_classes=4):
         n_classes: K.
 
     Returns:
-        Dict device -> dict `n`, `sp`, `se`, `score`, `hs`, `macro_f1` and the 2-class view `two_cls_{se,score,hs}`
+        Dict device -> dict `n`, `sp`, `se`, `score`, `hs`, `macro_f1`, per-class `recall` and the 2-class view `two_cls_{se,score,hs}`
         (the K-class predictions collapsed to normal/abnormal; not a separately trained model).
     """
     y, pred, devices = np.asarray(y), np.asarray(pred), np.asarray(devices)
@@ -147,6 +147,7 @@ def by_device(y, pred, devices, n_classes=4):
         sp, se = sp_se(y[m], pred[m])
         se2 = float((pred[m][y[m] != 0] > 0).mean()) if (y[m] != 0).any() else 0.0  # abnormal predicted as any abnormal class
         out[str(d)] = {"n": int(m.sum()), "sp": sp, "se": se, "score": (sp + se) / 2, "hs": hs(y[m], pred[m]),
-                       "macro_f1": macro_f1(y[m], pred[m], n_classes), "two_cls_se": se2,
+                       "macro_f1": macro_f1(y[m], pred[m], n_classes), "recall": class_report(y[m], pred[m], n_classes)["recall"].tolist(),
+                       "two_cls_se": se2,
                        "two_cls_score": (sp + se2) / 2, "two_cls_hs": 2 * sp * se2 / (sp + se2) if sp + se2 else 0.0}
     return out

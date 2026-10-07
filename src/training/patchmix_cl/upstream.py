@@ -45,6 +45,7 @@ def _fused_attention(self, x):
 
 _ast = _load('patchmix_reference_ast', 'models/ast.py')
 Projector = _load('patchmix_reference_projector', 'models/projector.py').Projector
+PatchMixLoss = _load('patchmix_reference_mix_loss', 'method/patchmix.py').PatchMixLoss
 PatchMixConLoss = _load('patchmix_reference_loss', 'method/patchmix_cl.py').PatchMixConLoss
 
 

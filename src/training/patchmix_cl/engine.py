@@ -22,14 +22,19 @@ def train_epoch(loader, model, classifier, projector, criterion, optimizer, epoc
                 ma_state = [deepcopy(m.state_dict()) for m in (model, classifier, projector)]
         images, labels = images.cuda(non_blocking=True), labels.cuda(non_blocking=True)
         bsz = labels.shape[0]
-        if args.freq_mixstyle > 0:  # P4
+        if args.freq_mixstyle > 0:
             images = freq_mixstyle(images, p=args.freq_mixstyle)
         warmup_learning_rate(args, epoch, idx, len(loader), optimizer)
 
         with torch.cuda.amp.autocast():
-            features = model(images)
-            output = classifier(features)
-            loss = criterion[0](output, labels)
+            if args.method == 'patchmix':
+                mix_images, labels_a, labels_b, lam, _ = model(images, y=labels, patch_mix=True, time_domain=args.time_domain)
+                output = classifier(mix_images)
+                loss = criterion[1](output, labels_a, labels_b, lam)
+            else:
+                features = model(images)
+                output = classifier(features)
+                loss = criterion[0](output, labels)
             if args.method == 'patchmix_cl':
                 if args.target_type == 'grad_block':
                     proj1 = features.detach().clone()

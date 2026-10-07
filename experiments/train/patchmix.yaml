@@ -1,0 +1,2 @@
+# Patch-Mix augmentation with plain cross-entropy (no contrastive loss). Combine: baseline.yaml,patchmix.yaml.
+method: patchmix
