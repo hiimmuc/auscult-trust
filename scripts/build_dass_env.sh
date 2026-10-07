@@ -13,7 +13,7 @@ PY=$PWD/.venv-dass/bin/python
 [ -d .venv-dass ] || uv venv .venv-dass --python 3.10
 
 # 1. torch trio from the PyTorch index of the chosen CUDA build, then the rest of the pinned training environment
-uv pip install --python $PY torch==2.9.1 torchvision==0.24.1 torchaudio==2.9.1 --index-url https://download.pytorch.org/whl/$CUDA_TAG --extra-index-url https://pypi.org/simple --index-strategy unsafe-best-match
+uv pip install --python $PY "torch==2.9.1+$CUDA_TAG" "torchvision==0.24.1+$CUDA_TAG" "torchaudio==2.9.1+$CUDA_TAG" --index-url https://download.pytorch.org/whl/$CUDA_TAG --extra-index-url https://pypi.org/simple --index-strategy unsafe-best-match
 grep -v -E '^(torch|torchvision|torchaudio|triton|nvidia-)' requirements-train.lock > ${TMPDIR:-/tmp}/lock-rest-$USER.txt
 uv pip install --python $PY -r ${TMPDIR:-/tmp}/lock-rest-$USER.txt ninja packaging einops fvcore setuptools wheel
 
@@ -37,5 +37,6 @@ SM=$($PY -c "import torch;m,n=torch.cuda.get_device_capability(0);print(f'{m}{n}
 export TORCH_CUDA_ARCH_LIST="${SM:0:-1}.${SM: -1}"
 BUILD=${TMPDIR:-/tmp}/selective_scan-$USER; rm -rf $BUILD; cp -r ../repos/DASS/kernels/selective_scan $BUILD
 sed -i "65a\\    cc_flag.extend(['-gencode', 'arch=compute_$SM,code=sm_$SM'])" $BUILD/setup.py
+[ "$CUDA_TAG" = cu130 ] && sed -i '/compute_70/d' $BUILD/setup.py  # CUDA 13 dropped Volta (sm_70)
 uv pip install --python $PY --no-build-isolation --reinstall-package selective-scan $BUILD
 $PY -c "import torch,torchvision,selective_scan_cuda_oflex;print('torch',torch.__version__,'torchvision',torchvision.__version__,'kernel ok')"
