@@ -5,7 +5,7 @@
 `jobs.txt` has one shell command per line (written by `PARALLEL=3 bash scripts/run.sh ...`). A job starts when fewer than
 `--workers` jobs run and the GPU has at least `--mem-gb` GB free (other users of the GPU are respected, nothing is
 killed). A job that dies with "out of memory" is queued again (up to 3 tries). Finished runs are skipped by the training
-code itself, so the same list can be submitted again to resume. One log per job: logs/<RUN_ID>/<n>.log.
+code itself, so the same list can be submitted again to resume. One log per job: logs/<RUN_ID><SWEEP_TAG>/<n>.log.
 """
 import argparse
 import os
@@ -29,7 +29,8 @@ def main():
     ap.add_argument("--poll", type=int, default=20)
     a = ap.parse_args()
     queue = [(i, line.strip(), 0) for i, line in enumerate(Path(a.jobs).read_text().splitlines()) if line.strip()]
-    log_dir = Path("logs") / os.environ.get("RUN_ID", "sweep")
+    tag = os.environ.get("SWEEP_TAG", "")  # distinguishes a second scheduler of the same RUN_ID
+    log_dir = Path("logs") / (os.environ.get("RUN_ID", "sweep") + tag)
     log_dir.mkdir(parents=True, exist_ok=True)
     running, failed, last_start = [], [], 0.0
     while queue or running:
