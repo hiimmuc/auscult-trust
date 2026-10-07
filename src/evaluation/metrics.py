@@ -1,4 +1,5 @@
 """Metrics. All CIs are patient-level bootstrap, never cycle-level."""
+
 import numpy as np
 from sklearn.metrics import f1_score, recall_score
 
@@ -15,8 +16,10 @@ def class_report(y, pred, n_classes=4):
         Dict with `recall` and `f1`, each a (K,) array.
     """
     lab = list(range(n_classes))
-    return {"recall": recall_score(y, pred, labels=lab, average=None, zero_division=0),
-            "f1": f1_score(y, pred, labels=lab, average=None, zero_division=0)}
+    return {
+        "recall": recall_score(y, pred, labels=lab, average=None, zero_division=0),
+        "f1": f1_score(y, pred, labels=lab, average=None, zero_division=0),
+    }
 
 
 def icbhi_score(y, pred):
@@ -50,8 +53,11 @@ def ece(probs, y, bins=15):
     """
     conf, pred = probs.max(1), probs.argmax(1)
     b = np.minimum((conf * bins).astype(int), bins - 1)
-    return sum(abs((pred[b == i] == y[b == i]).mean() - conf[b == i].mean()) * (b == i).mean()
-               for i in range(bins) if (b == i).any())
+    return sum(
+        abs((pred[b == i] == y[b == i]).mean() - conf[b == i].mean()) * (b == i).mean()
+        for i in range(bins)
+        if (b == i).any()
+    )
 
 
 def coverage(sets, y):
@@ -112,8 +118,10 @@ def sp_se(y, pred):
     """
     y, pred = np.asarray(y), np.asarray(pred)
     n, a = y == 0, y != 0
-    return (float((pred[n] == 0).mean()) if n.any() else 0.0,
-            float((pred[a] == y[a]).mean()) if a.any() else 0.0)
+    return (
+        float((pred[n] == 0).mean()) if n.any() else 0.0,
+        float((pred[a] == y[a]).mean()) if a.any() else 0.0,
+    )
 
 
 def hs(y, pred):
@@ -145,9 +153,19 @@ def by_device(y, pred, devices, n_classes=4):
     for d in [*np.unique(devices), "all"]:
         m = np.ones(len(y), bool) if d == "all" else devices == d
         sp, se = sp_se(y[m], pred[m])
-        se2 = float((pred[m][y[m] != 0] > 0).mean()) if (y[m] != 0).any() else 0.0  # abnormal predicted as any abnormal class
-        out[str(d)] = {"n": int(m.sum()), "sp": sp, "se": se, "score": (sp + se) / 2, "hs": hs(y[m], pred[m]),
-                       "macro_f1": macro_f1(y[m], pred[m], n_classes), "recall": class_report(y[m], pred[m], n_classes)["recall"].tolist(),
-                       "two_cls_se": se2,
-                       "two_cls_score": (sp + se2) / 2, "two_cls_hs": 2 * sp * se2 / (sp + se2) if sp + se2 else 0.0}
+        se2 = (
+            float((pred[m][y[m] != 0] > 0).mean()) if (y[m] != 0).any() else 0.0
+        )  # abnormal predicted as any abnormal class
+        out[str(d)] = {
+            "n": int(m.sum()),
+            "sp": sp,
+            "se": se,
+            "score": (sp + se) / 2,
+            "hs": hs(y[m], pred[m]),
+            "macro_f1": macro_f1(y[m], pred[m], n_classes),
+            "recall": class_report(y[m], pred[m], n_classes)["recall"].tolist(),
+            "two_cls_se": se2,
+            "two_cls_score": (sp + se2) / 2,
+            "two_cls_hs": 2 * sp * se2 / (sp + se2) if sp + se2 else 0.0,
+        }
     return out

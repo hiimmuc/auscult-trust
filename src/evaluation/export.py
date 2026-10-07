@@ -4,17 +4,17 @@ Device held out: calibration and evaluation patients come from the official test
 split 20 times (stratified by device); the held-out device's test cycles are the shifted target. Patients recorded on the
 held-out device and another one are dropped from the other devices, so patients stay disjoint.
 """
+
 import hashlib
 from pathlib import Path
 
 import numpy as np
 import pandas as pd
-
 from src.evaluation.conformal import lac_scores, predict_sets, split_threshold
-from src.processing.icbhi import DEVICES
-from src.processing.splits import calibration_eval_splits
 from src.evaluation.metrics import coverage
 from src.evaluation.shift import prior_matched_coverage
+from src.processing.icbhi import DEVICES
+from src.processing.splits import calibration_eval_splits
 
 
 def load_export(folder, split="test", weights=None):
@@ -26,10 +26,17 @@ def load_export(folder, split="test", weights=None):
     folder = Path(folder)
     if weights is not None:
         h = hashlib.sha256(Path(weights).read_bytes()).hexdigest()
-        assert h == (folder / "model.sha256").read_text().split()[0], "weights differ from the exported model"
+        assert (
+            h == (folder / "model.sha256").read_text().split()[0]
+        ), "weights differ from the exported model"
     d = np.load(folder / f"{split}.npz", allow_pickle=True)
-    return {"probs": d["probs"], "emb": d["emb"], "labels": d["labels"],
-            "device": np.array(DEVICES)[d["device"]], "patient": d["patient"]}
+    return {
+        "probs": d["probs"],
+        "emb": d["emb"],
+        "labels": d["labels"],
+        "device": np.array(DEVICES)[d["device"]],
+        "patient": d["patient"],
+    }
 
 
 def e1_coverage(exp, held, alpha=0.1, n_splits=20, seed=0):
@@ -61,5 +68,8 @@ def e1_coverage(exp, held, alpha=0.1, n_splits=20, seed=0):
         out["cov_in"].append(coverage(predict_sets(probs[ev], thr), y[ev]))
         out["cov_target"].append(coverage(sets_t, y[target]))
         out["cov_target_prior"].append(prior_matched_coverage(sets_t, y[target], prior))
-    return {**{k: np.array(v) for k, v in out.items()}, "n_target": int(target.sum()),
-            "n_dropped": int((~keep & ~target).sum())}
+    return {
+        **{k: np.array(v) for k, v in out.items()},
+        "n_target": int(target.sum()),
+        "n_dropped": int((~keep & ~target).sum()),
+    }

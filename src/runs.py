@@ -10,6 +10,7 @@
 `run_id` is `YYYYMMDD-HHMMSS[_<tag>]`. Set `$RUN_TAG` for a human label, or `$RUN_ID` to resume or share one id across
 processes: a fresh id never touches earlier runs.
 """
+
 import hashlib
 import json
 import os
@@ -30,7 +31,9 @@ def run_id():
         `$RUN_ID` if set, else `YYYYMMDD-HHMMSS` plus `_$RUN_TAG` when a tag is set.
     """
     tag = os.environ.get("RUN_TAG")
-    return os.environ.setdefault("RUN_ID", time.strftime("%Y%m%d-%H%M%S") + (f"_{tag}" if tag else ""))
+    return os.environ.setdefault(
+        "RUN_ID", time.strftime("%Y%m%d-%H%M%S") + (f"_{tag}" if tag else "")
+    )
 
 
 def run_dir(exp, kind="outputs"):
@@ -79,7 +82,9 @@ def sha256_file(path):
 
 def _git(*args):
     try:
-        return subprocess.run(["git", *args], capture_output=True, text=True, timeout=10, cwd=Path(__file__).parent).stdout.strip()
+        return subprocess.run(
+            ["git", *args], capture_output=True, text=True, timeout=10, cwd=Path(__file__).parent
+        ).stdout.strip()
     except Exception:
         return ""
 
@@ -96,13 +101,29 @@ def write_meta(exp, cfg):
         return
     try:
         import torch
-        hw = {"torch": torch.__version__, "gpu": torch.cuda.get_device_name(0) if torch.cuda.is_available() else None}
+
+        hw = {
+            "torch": torch.__version__,
+            "gpu": torch.cuda.get_device_name(0) if torch.cuda.is_available() else None,
+        }
     except Exception:
         hw = {}
-    f.write_text(json.dumps({"exp": exp, "run_id": run_id(), "time": time.strftime("%Y-%m-%dT%H:%M:%S"),
-                             "argv": sys.argv, "git_commit": _git("rev-parse", "--short", "HEAD"),
-                             "git_dirty": bool(_git("status", "--porcelain")), **hw, "config": cfg},
-                            indent=1, default=str))
+    f.write_text(
+        json.dumps(
+            {
+                "exp": exp,
+                "run_id": run_id(),
+                "time": time.strftime("%Y-%m-%dT%H:%M:%S"),
+                "argv": sys.argv,
+                "git_commit": _git("rev-parse", "--short", "HEAD"),
+                "git_dirty": bool(_git("status", "--porcelain")),
+                **hw,
+                "config": cfg,
+            },
+            indent=1,
+            default=str,
+        )
+    )
 
 
 def log_run(exp, cell, seed, cfg, metrics, data_hash=None):
@@ -123,8 +144,20 @@ def log_run(exp, cell, seed, cfg, metrics, data_hash=None):
     out = run_dir(exp) / cell
     out.mkdir(exist_ok=True)
     path = out / f"seed{seed}.json"
-    path.write_text(json.dumps({"time": time.strftime("%Y-%m-%dT%H:%M:%S"), "cell": cell, "seed": seed,
-                                "data_hash": data_hash, "config": cfg, "metrics": metrics}, indent=1, default=float))
+    path.write_text(
+        json.dumps(
+            {
+                "time": time.strftime("%Y-%m-%dT%H:%M:%S"),
+                "cell": cell,
+                "seed": seed,
+                "data_hash": data_hash,
+                "config": cfg,
+                "metrics": metrics,
+            },
+            indent=1,
+            default=float,
+        )
+    )
     return path
 
 

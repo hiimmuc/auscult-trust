@@ -4,11 +4,13 @@ A1  spectrum correction (SC) on STFT magnitude, per device, needs the device id 
 A2  ISA: per-mel-bin moment matching of log-mel on unlabelled target clips
 P3  random smooth per-mel-bin gain in dB, a train-time augmentation and the TTA-EQ view generator
 """
+
 import numpy as np
 
 
 def _stft(wave, n_fft, hop):
     import librosa
+
     return librosa.stft(wave, n_fft=n_fft, hop_length=hop)
 
 
@@ -26,8 +28,15 @@ def mean_spectrum(waves, n_fft=1024, hop=512):
     return np.mean([np.abs(_stft(w, n_fft, hop)).mean(1) for w in waves], axis=0)
 
 
-def limit_coefficients(coef, sc_mode="dynamic", limit_freq_low=50.0, limit_freq_high=2000.0,
-                        limit_freq_diff=20.0, sr=16000, n_fft=1024):
+def limit_coefficients(
+    coef,
+    sc_mode="dynamic",
+    limit_freq_low=50.0,
+    limit_freq_high=2000.0,
+    limit_freq_diff=20.0,
+    sr=16000,
+    n_fft=1024,
+):
     """Bound a raw A1 coefficient curve; two variants are compared by CV score.
 
     Args:
@@ -45,7 +54,9 @@ def limit_coefficients(coef, sc_mode="dynamic", limit_freq_low=50.0, limit_freq_
     """
     assert sc_mode in ("dynamic", "static"), sc_mode
     if sc_mode == "dynamic":
-        return 10 ** (np.clip(20 * np.log10(np.maximum(coef, 1e-8)), -limit_freq_diff, limit_freq_diff) / 20)
+        return 10 ** (
+            np.clip(20 * np.log10(np.maximum(coef, 1e-8)), -limit_freq_diff, limit_freq_diff) / 20
+        )
     freqs = np.fft.rfftfreq(n_fft, 1 / sr)
     band = (freqs >= limit_freq_low) & (freqs <= limit_freq_high)
     return np.where(band, coef, 1.0)
@@ -55,12 +66,25 @@ def reference_spectrum(spectra, reference="arithmetic"):
     """Reference spectrum s_ref: "arithmetic" mean of device spectra (Nguyen & Pernkopf) or "geometric" mean (Kosmider)."""
     assert reference in ("arithmetic", "geometric"), reference
     stack = np.array(list(spectra.values()))
-    return stack.mean(0) if reference == "arithmetic" else np.exp(np.log(np.maximum(stack, 1e-8)).mean(0))
+    return (
+        stack.mean(0)
+        if reference == "arithmetic"
+        else np.exp(np.log(np.maximum(stack, 1e-8)).mean(0))
+    )
 
 
-def spectrum_coefficients(device_spectra, source_devices=None, reference="arithmetic", sc_mode="dynamic",
-                           limit_freq_low=50.0, limit_freq_high=2000.0, limit_freq_diff=20.0, sr=16000, n_fft=1024,
-                           reference_spectra=None):
+def spectrum_coefficients(
+    device_spectra,
+    source_devices=None,
+    reference="arithmetic",
+    sc_mode="dynamic",
+    limit_freq_low=50.0,
+    limit_freq_high=2000.0,
+    limit_freq_diff=20.0,
+    sr=16000,
+    n_fft=1024,
+    reference_spectra=None,
+):
     """A1 coefficients c_k = s_ref / s_k per bin, with s_ref the mean of the source devices' spectra.
 
     Args:
@@ -75,10 +99,17 @@ def spectrum_coefficients(device_spectra, source_devices=None, reference="arithm
         Dict device -> (bins,) coefficients, bounded by `limit_coefficients`. Calibration clips use their own
         (source) coefficients and test clips the target's, so the domains are corrected separately.
     """
-    ref = reference_spectrum(reference_spectra or {d: device_spectra[d] for d in (source_devices or device_spectra)}, reference)
+    ref = reference_spectrum(
+        reference_spectra or {d: device_spectra[d] for d in (source_devices or device_spectra)},
+        reference,
+    )
     raw = {d: ref / np.maximum(s, 1e-8) for d, s in device_spectra.items()}
-    return {d: limit_coefficients(c, sc_mode, limit_freq_low, limit_freq_high, limit_freq_diff, sr, n_fft)
-            for d, c in raw.items()}
+    return {
+        d: limit_coefficients(
+            c, sc_mode, limit_freq_low, limit_freq_high, limit_freq_diff, sr, n_fft
+        )
+        for d, c in raw.items()
+    }
 
 
 def apply_spectrum_correction(wave, coef, n_fft=1024, hop=512):
@@ -88,6 +119,7 @@ def apply_spectrum_correction(wave, coef, n_fft=1024, hop=512):
         Waveform of the same length as `wave`.
     """
     import librosa
+
     return librosa.istft(_stft(wave, n_fft, hop) * coef[:, None], hop_length=hop, length=len(wave))
 
 
@@ -132,5 +164,7 @@ def random_bin_gain(logmel, max_db=6.0, knots=6, rng=None):
         Augmented array, same shape.
     """
     rng = rng or np.random.default_rng()
-    curve = np.interp(np.linspace(0, 1, logmel.shape[1]), np.linspace(0, 1, knots), rng.normal(0, max_db, knots))
+    curve = np.interp(
+        np.linspace(0, 1, logmel.shape[1]), np.linspace(0, 1, knots), rng.normal(0, max_db, knots)
+    )
     return logmel + curve[None, :]

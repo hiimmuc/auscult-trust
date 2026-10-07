@@ -1,12 +1,11 @@
 """Coverage and set-size metrics on a new device: Delta = (1 - alpha) - coverage."""
+
 import numpy as np
 
 
 def coverage_deficit(cov, alpha):
     """Nominal minus empirical coverage. Positive means under-coverage."""
     return (1 - alpha) - cov
-
-
 
 
 def set_stats(sets):
@@ -19,7 +18,11 @@ def set_stats(sets):
         Dict `size`, `singleton`, `empty`.
     """
     n = sets.sum(1)
-    return {"size": float(n.mean()), "singleton": float((n == 1).mean()), "empty": float((n == 0).mean())}
+    return {
+        "size": float(n.mean()),
+        "singleton": float((n == 1).mean()),
+        "empty": float((n == 0).mean()),
+    }
 
 
 def binom_ci(p, n, z=1.96):
@@ -42,17 +45,14 @@ def per_class_coverage(sets, y, n_classes, alpha=0.1):
     out = []
     for k in range(n_classes):
         m = y == k
-        out.append({"n": int(m.sum()), "coverage": float(sets[m, k].mean()) if m.any() else float("nan"),
-                    "half_width": float(binom_ci(1 - alpha, m.sum()))})
+        out.append(
+            {
+                "n": int(m.sum()),
+                "coverage": float(sets[m, k].mean()) if m.any() else float("nan"),
+                "half_width": float(binom_ci(1 - alpha, m.sum())),
+            }
+        )
     return out
-
-
-
-
-
-
-
-
 
 
 def prior_matched_coverage(sets, y, target_prior):
@@ -72,11 +72,3 @@ def prior_matched_coverage(sets, y, target_prior):
     per = np.array([sets[y == k, k].mean() if (y == k).any() else np.nan for k in range(K)])
     w = np.where(np.isnan(per), 0.0, np.asarray(target_prior, float))
     return float((np.nan_to_num(per) * w).sum() / w.sum())
-
-
-
-
-
-
-
-

@@ -1,17 +1,34 @@
 """Training reports: per-device metrics in percent, epoch selection and the CV epoch rule."""
-import numpy as np
 
+import numpy as np
 from src.evaluation.metrics import by_device
 from src.processing.icbhi import DEVICES
 
-_PERCENT_KEYS = ('sp', 'se', 'score', 'hs', 'two_cls_se', 'two_cls_score', 'two_cls_hs')  # `recall` (per class) too
+_PERCENT_KEYS = (
+    "sp",
+    "se",
+    "score",
+    "hs",
+    "two_cls_se",
+    "two_cls_score",
+    "two_cls_hs",
+)  # `recall` (per class) too
 
 
 def per_device_report(y, pred, device_ids, n_cls=4):
     """Sp, Se, Score, HS, per-class recall and the 2-class view in percent, macro-F1 as a fraction, per device name plus `all`."""
     names = np.array(DEVICES)[np.asarray(device_ids)]
-    return {d: {k: (100 * np.asarray(v)).tolist() if k == 'recall' else 100 * v if k in _PERCENT_KEYS else v for k, v in m.items()}
-            for d, m in by_device(y, pred, names, n_cls).items()}
+    return {
+        d: {
+            k: (
+                (100 * np.asarray(v)).tolist()
+                if k == "recall"
+                else 100 * v if k in _PERCENT_KEYS else v
+            )
+            for k, v in m.items()
+        }
+        for d, m in by_device(y, pred, names, n_cls).items()
+    }
 
 
 def pick_epochs(history):
@@ -24,11 +41,11 @@ def pick_epochs(history):
         Dict `last`, `cv_selected`, `test_best_optimistic`, each the history entry of that epoch (keys absent when the
         split was not evaluated).
     """
-    out = {'last': history[-1]}
-    if history[-1].get('val') is not None:
-        out['cv_selected'] = max(history, key=lambda h: h['val']['all']['score'])
-    if history[-1].get('test') is not None:
-        out['test_best_optimistic'] = max(history, key=lambda h: h['test']['all']['score'])
+    out = {"last": history[-1]}
+    if history[-1].get("val") is not None:
+        out["cv_selected"] = max(history, key=lambda h: h["val"]["all"]["score"])
+    if history[-1].get("test") is not None:
+        out["test_best_optimistic"] = max(history, key=lambda h: h["test"]["all"]["score"])
     return out
 
 

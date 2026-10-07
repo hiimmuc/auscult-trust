@@ -1,4 +1,5 @@
 """Audio loading and cycle cropping. Mono float32 at a common sample rate."""
+
 from math import gcd
 
 import numpy as np
@@ -60,4 +61,6 @@ def cycle_wave(x, start, end, sr=SR, sec=CYCLE_SEC):
     Returns:
         1-D array of `sec * sr` samples.
     """
-    return np.resize(x[int(start * sr):int(end * sr)], int(sec * sr))  # tiles, or crops if longer
+    return np.resize(
+        x[int(start * sr) : int(end * sr)], int(sec * sr)
+    )  # tiles, or crops if longer

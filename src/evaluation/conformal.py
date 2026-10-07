@@ -6,6 +6,7 @@ Thresholds broadcast to (n, K): scalar (split) or (K,) per candidate label (labe
 After TTA, recompute `probs` for the calibration set with the adapted model
 before calling any calibrate function. Old scores are invalid.
 """
+
 import numpy as np
 
 
@@ -52,14 +53,6 @@ def split_threshold(scores, alpha):
         Scalar threshold.
     """
     return weighted_threshold(scores, np.ones(len(scores)), 1.0, alpha)
-
-
-
-
-
-
-
-
 
 
 def label_shift_threshold(cal_scores, cal_labels, class_w, alpha):
@@ -143,4 +136,3 @@ def predict_sets(probs, threshold):
         (n, K) boolean membership matrix.
     """
     return (1.0 - probs) <= threshold
-

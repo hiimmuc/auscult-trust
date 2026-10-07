@@ -3,6 +3,7 @@
 Group key is always the patient id. For KAUH the loader must give all three filter
 renderings of one patient the same patient id, so they land in the same split.
 """
+
 import hashlib
 import json
 from pathlib import Path
@@ -39,7 +40,9 @@ def split_frames(df, split):
         Dict name -> DataFrame (index reset), without `drop`.
     """
     df = df[~df.stem.isin(split.get("drop", []))]
-    return {k: df[df.patient.isin(v)].reset_index(drop=True) for k, v in split.items() if k != "drop"}
+    return {
+        k: df[df.patient.isin(v)].reset_index(drop=True) for k, v in split.items() if k != "drop"
+    }
 
 
 def assert_disjoint(split):
@@ -94,7 +97,9 @@ def load_split(path):
 
 def patient_device_crosstab(df):
     """Patients x devices cycle counts. A patient with two non-zero columns breaks device-held-out disjointness (gate G0)."""
-    return df.pivot_table(index="patient", columns="device", values="stem", aggfunc="size", fill_value=0)
+    return df.pivot_table(
+        index="patient", columns="device", values="stem", aggfunc="size", fill_value=0
+    )
 
 
 def device_holdout_official(df, device):
@@ -122,10 +127,16 @@ def device_holdout_official(df, device):
     def part(d, split):
         return d[d.official == split].reset_index(drop=True)
 
-    out = {"train": part(other, "train"), "cal": part(other, "test"),
-           "test_unseen": part(df[held], "test"), "test_seen": part(df[held], "train")}
+    out = {
+        "train": part(other, "train"),
+        "cal": part(other, "test"),
+        "test_unseen": part(df[held], "test"),
+        "test_seen": part(df[held], "train"),
+    }
     assert not set(out["train"].patient) & set(out["cal"].patient)
-    assert not set(out["train"].patient) & set(out["test_unseen"].patient) and not set(out["cal"].patient) & set(out["test_unseen"].patient)
+    assert not set(out["train"].patient) & set(out["test_unseen"].patient) and not set(
+        out["cal"].patient
+    ) & set(out["test_unseen"].patient)
     return {**out, "n_dropped": int(dropped.sum())}
 
 
@@ -156,7 +167,9 @@ def calibration_eval_splits(df, n_splits=20, fracs=(0.5, 0.5), seed=0):
             rng.shuffle(ids)
             n = len(ids)
             target = n * fracs[0]
-            cut = int(target) + (1 if rng.random() < target - int(target) else 0)  # stochastic rounding
+            cut = int(target) + (
+                1 if rng.random() < target - int(target) else 0
+            )  # stochastic rounding
             if n > 1:
                 cut = min(max(cut, 1), n - 1)
             cal.extend(ids[:cut])
@@ -171,7 +184,9 @@ def with_official(df, split):
     Use when the cycle table was built without the official split file (`cycle_table` leaves `official` empty).
     """
     df = df[~df.stem.isin(split.get("drop", []))].copy()
-    side = {p: ("test" if k == "test" else "train") for k, v in split.items() if k != "drop" for p in v}
+    side = {
+        p: ("test" if k == "test" else "train") for k, v in split.items() if k != "drop" for p in v
+    }
     df["official"] = df.patient.map(side)
     return df[df.official.notna()].reset_index(drop=True)
 
@@ -191,7 +206,7 @@ def patient_val_split(patients, frac=0.2, seed=0):
     ids = sorted(set(patients.tolist()))
     rng = np.random.default_rng(10_000 + seed)
     rng.shuffle(ids)
-    val = set(ids[:max(1, int(round(frac * len(ids))))])
+    val = set(ids[: max(1, int(round(frac * len(ids))))])
     is_val = np.array([p in val for p in patients.tolist()])
     return np.flatnonzero(~is_val), np.flatnonzero(is_val)
 

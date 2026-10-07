@@ -13,20 +13,23 @@ Reads one campaign, `outputs/train/<run_id>/<cell>/<unit>/report.json` (default 
 Spectrum-correction (SC) arms are screened with both `sc_mode` values (`<arm>` = dynamic, `<arm>+sc_static` = static); the
 higher mean CV Score is kept, ties go to dynamic. AuscultTrust = the better of `sc` / `sc_gain` by mean CV Score (tie: `sc`).
 """
+
 import argparse
 import json
 import re
 
 import numpy as np
 from scipy import stats
-
 from src.paths import OUTPUTS
+
 from .config import EXP
 from .reporting import cv_epoch, mean_cv_curve, per_device_report
 
-BASE, SC_ARMS = 'baseline', ('sc', 'sc_gain')
-STATIC = '+sc_static'
-NON_INFERIORITY_MARGIN = -1.5  # Score points; about half the published gap between plain AST fine-tuning and Patch-Mix CL
+BASE, SC_ARMS = "baseline", ("sc", "sc_gain")
+STATIC = "+sc_static"
+NON_INFERIORITY_MARGIN = (
+    -1.5
+)  # Score points; about half the published gap between plain AST fine-tuning and Patch-Mix CL
 BENCHMARK_SEEDS = range(5)
 
 
@@ -37,7 +40,7 @@ def run_dir(run):
 def load_units(root, unit_pattern):
     """{(cell, index): report dict} of finished units whose name matches `unit_pattern` (one group: the index)."""
     out = {}
-    for f in root.glob('*/*/report.json'):
+    for f in root.glob("*/*/report.json"):
         m = re.fullmatch(unit_pattern, f.parent.name)
         if m:
             out[(f.parent.parent.name, int(m.group(1)))] = json.loads(f.read_text())
@@ -46,38 +49,60 @@ def load_units(root, unit_pattern):
 
 def screen(a):
     root = run_dir(a.run)
-    units = load_units(root, r'cv(\d+)')
+    units = load_units(root, r"cv(\d+)")
     cells, rows, missing = sorted({c for c, _ in units}), {}, []
     for c in cells:
         folds = [units.get((c, k)) for k in range(a.folds)]
         if any(f is None for f in folds):
             missing.append(c)
             continue
-        curves = [[h['val_score'] for h in f['history']] for f in folds]
+        curves = [[h["val_score"] for h in f["history"]] for f in folds]
         ep = cv_epoch(curves)
-        rows[c] = {'cell': c, 'epoch': ep, 'cv_score': float(mean_cv_curve(curves)[ep - 1]),
-                   'fold_scores': [float(x[ep - 1]) for x in curves], 'sc_mode': 'static' if c.endswith(STATIC) else 'dynamic'}
+        rows[c] = {
+            "cell": c,
+            "epoch": ep,
+            "cv_score": float(mean_cv_curve(curves)[ep - 1]),
+            "fold_scores": [float(x[ep - 1]) for x in curves],
+            "sc_mode": "static" if c.endswith(STATIC) else "dynamic",
+        }
     arms = {}
     for c, r in rows.items():  # per arm keep the better sc_mode; ties go to dynamic
         arm = c.removesuffix(STATIC)
         best = arms.get(arm)
-        if best is None or r['cv_score'] > best['cv_score'] or (r['cv_score'] == best['cv_score'] and r['sc_mode'] == 'dynamic'):
+        if (
+            best is None
+            or r["cv_score"] > best["cv_score"]
+            or (r["cv_score"] == best["cv_score"] and r["sc_mode"] == "dynamic")
+        ):
             arms[arm] = r
     for arm, r in arms.items():
-        r['sc_mode'] = r['sc_mode'] if arm in SC_ARMS else None
-    ranking = sorted(arms, key=lambda x: -arms[x]['cv_score'])
+        r["sc_mode"] = r["sc_mode"] if arm in SC_ARMS else None
+    ranking = sorted(arms, key=lambda x: -arms[x]["cv_score"])
     sc = [x for x in SC_ARMS if x in arms]
-    trust = max(sc, key=lambda x: (arms[x]['cv_score'], x == SC_ARMS[0])) if sc else None  # tie: sc
-    print('| rank | arm | cell | sc_mode | CV epoch | mean CV Score | fold Scores |')
-    print('|---|---|---|---|---|---|---|')
+    trust = (
+        max(sc, key=lambda x: (arms[x]["cv_score"], x == SC_ARMS[0])) if sc else None
+    )  # tie: sc
+    print("| rank | arm | cell | sc_mode | CV epoch | mean CV Score | fold Scores |")
+    print("|---|---|---|---|---|---|---|")
     for i, x in enumerate(ranking, 1):
         r = arms[x]
-        print('| {} | {} | {} | {} | {} | {:.2f} | {} |'.format(i, x, r['cell'], r['sc_mode'] or '-', r['epoch'], r['cv_score'],
-                                                              ', '.join('{:.1f}'.format(s) for s in r['fold_scores'])))
+        print(
+            "| {} | {} | {} | {} | {} | {:.2f} | {} |".format(
+                i,
+                x,
+                r["cell"],
+                r["sc_mode"] or "-",
+                r["epoch"],
+                r["cv_score"],
+                ", ".join("{:.1f}".format(s) for s in r["fold_scores"]),
+            )
+        )
     if missing:
-        print('\nnot finished (all {} folds needed): {}'.format(a.folds, ', '.join(missing)))
-    (root / 'screen.json').write_text(json.dumps({'arms': arms, 'ranking': ranking, 'auscult_trust': trust}, indent=1))
-    print('\nAuscultTrust = {} (better mean CV Score of sc / sc_gain, tie: sc)'.format(trust))
+        print("\nnot finished (all {} folds needed): {}".format(a.folds, ", ".join(missing)))
+    (root / "screen.json").write_text(
+        json.dumps({"arms": arms, "ranking": ranking, "auscult_trust": trust}, indent=1)
+    )
+    print("\nAuscultTrust = {} (better mean CV Score of sc / sc_gain, tie: sc)".format(trust))
 
 
 def _score_counts(y, pred, patients):
@@ -104,95 +129,155 @@ def _score_from_counts(c, two_cls=False):
 def _t_ci(d, level=0.95):
     d = np.asarray(d, float)
     if len(d) < 2:
-        return float(d.mean()), float('nan'), float('nan')
+        return float(d.mean()), float("nan"), float("nan")
     h = stats.t.ppf(0.5 + level / 2, len(d) - 1) * d.std(ddof=1) / np.sqrt(len(d))
     return float(d.mean()), float(d.mean() - h), float(d.mean() + h)
 
 
 def _ms(x):
     x = np.asarray(x, float)
-    return '{:.2f} ± {:.2f}'.format(x.mean(), x.std(ddof=1) if len(x) > 1 else 0.0)
+    return "{:.2f} ± {:.2f}".format(x.mean(), x.std(ddof=1) if len(x) > 1 else 0.0)
 
 
 def _collect(root, runs, arms):
     """Per arm: seeds, per-seed test reports at the registered epoch, test-best score, predictions."""
     res = {}
     for arm, r in arms.items():
-        ep, per = r['epoch'], {}
-        for s in sorted(s for (c, s) in runs if c == r['cell']):
-            rep = runs[(r['cell'], s)]
-            z = np.load(root / r['cell'] / 'seed{}'.format(s) / 'test_preds.npz')
-            pred = z['preds'][list(z['epochs']).index(ep)]
-            per[s] = {'test': rep['fixed'][str(ep)]['test'], 'best': rep['test_best_optimistic']['test']['all']['score'],
-                      'pred': pred, 'labels': z['labels'], 'patient': z['patient'], 'device': z['device']}
-        res[arm] = {'epoch': ep, 'cell': r['cell'], 'per': per}
+        ep, per = r["epoch"], {}
+        for s in sorted(s for (c, s) in runs if c == r["cell"]):
+            rep = runs[(r["cell"], s)]
+            z = np.load(root / r["cell"] / "seed{}".format(s) / "test_preds.npz")
+            pred = z["preds"][list(z["epochs"]).index(ep)]
+            per[s] = {
+                "test": rep["fixed"][str(ep)]["test"],
+                "best": rep["test_best_optimistic"]["test"]["all"]["score"],
+                "pred": pred,
+                "labels": z["labels"],
+                "patient": z["patient"],
+                "device": z["device"],
+            }
+        res[arm] = {"epoch": ep, "cell": r["cell"], "per": per}
     return res
 
 
 def final(a):
     root = run_dir(a.run)
-    scr = json.loads((root / 'screen.json').read_text())
-    res = _collect(root, load_units(root, r'seed(\d+)'), scr['arms'])
-    trust = scr['auscult_trust']
-    L = ['## Final results (official 60/40 split, 4-class, refit on all training patients)\n',
-         'Primary = epoch chosen by 3-fold CV screening (no test selection), seeds 0-4. The last column is the best epoch on test, as '
-         'in the Patch-Mix CL and SG-SCL papers: **optimistic, for comparison only**.\n',
-         '| arm | cell | CV epoch | seeds | Sp | Se | Score | HS | macro-F1 | 2-cls Score | best-on-test Score (optimistic) |',
-         '|---|---|---|---|---|---|---|---|---|---|---|']
+    scr = json.loads((root / "screen.json").read_text())
+    res = _collect(root, load_units(root, r"seed(\d+)"), scr["arms"])
+    trust = scr["auscult_trust"]
+    L = [
+        "## Final results (official 60/40 split, 4-class, refit on all training patients)\n",
+        "Primary = epoch chosen by 3-fold CV screening (no test selection), seeds 0-4. The last column is the best epoch on test, as "
+        "in the Patch-Mix CL and SG-SCL papers: **optimistic, for comparison only**.\n",
+        "| arm | cell | CV epoch | seeds | Sp | Se | Score | HS | macro-F1 | 2-cls Score | best-on-test Score (optimistic) |",
+        "|---|---|---|---|---|---|---|---|---|---|---|",
+    ]
     for arm, r in res.items():
-        per = {s: p for s, p in r['per'].items() if s in BENCHMARK_SEEDS}
-        tests = [p['test']['all'] for p in per.values()]
+        per = {s: p for s, p in r["per"].items() if s in BENCHMARK_SEEDS}
+        tests = [p["test"]["all"] for p in per.values()]
         get = lambda k: [t[k] for t in tests]
-        L.append('| {} | {} | {} | {} | {} | {} | {} | {} | {} | {} | {} |'.format(
-            arm + (' (AuscultTrust)' if arm == trust else ''), r['cell'], r['epoch'], len(tests), _ms(get('sp')), _ms(get('se')),
-            _ms(get('score')), _ms(get('hs')), _ms(get('macro_f1')), _ms(get('two_cls_score')), _ms([p['best'] for p in per.values()])))
-    L.append('\nPublished anchors, same split, 4-class: AST fine-tuning 59.55 ± 0.88; Patch-Mix CL 62.37 ± 0.61; SG-SCL 61.71 ± 1.61 '
-             '(all best epoch on test).')
+        L.append(
+            "| {} | {} | {} | {} | {} | {} | {} | {} | {} | {} | {} |".format(
+                arm + (" (AuscultTrust)" if arm == trust else ""),
+                r["cell"],
+                r["epoch"],
+                len(tests),
+                _ms(get("sp")),
+                _ms(get("se")),
+                _ms(get("score")),
+                _ms(get("hs")),
+                _ms(get("macro_f1")),
+                _ms(get("two_cls_score")),
+                _ms([p["best"] for p in per.values()]),
+            )
+        )
+    L.append(
+        "\nPublished anchors, same split, 4-class: AST fine-tuning 59.55 ± 0.88; Patch-Mix CL 62.37 ± 0.61; SG-SCL 61.71 ± 1.61 "
+        "(all best epoch on test)."
+    )
 
-    devs = ['Meditron', 'Litt3200', 'AKGC417L']
-    L += ['\n### Per device (primary epoch, seeds 0-4), Score mean ± SD\n', '| arm | ' + ' | '.join(devs) + ' |', '|---|' + '---|' * len(devs)]
+    devs = ["Meditron", "Litt3200", "AKGC417L"]
+    L += [
+        "\n### Per device (primary epoch, seeds 0-4), Score mean ± SD\n",
+        "| arm | " + " | ".join(devs) + " |",
+        "|---|" + "---|" * len(devs),
+    ]
     for arm, r in res.items():
-        cells = [_ms([p['test'][d]['score'] for s, p in r['per'].items() if s in BENCHMARK_SEEDS and d in p['test']] or [np.nan]) for d in devs]
-        L.append('| {} | {} |'.format(arm, ' | '.join(cells)))
+        cells = [
+            _ms(
+                [
+                    p["test"][d]["score"]
+                    for s, p in r["per"].items()
+                    if s in BENCHMARK_SEEDS and d in p["test"]
+                ]
+                or [np.nan]
+            )
+            for d in devs
+        ]
+        L.append("| {} | {} |".format(arm, " | ".join(cells)))
 
     if BASE in res:
-        L += ['\n### Paired difference against the baseline (same seeds)\n',
-              '| arm | seeds | ΔScore mean | 95% t-CI (paired seeds) | 95% patient bootstrap CI |', '|---|---|---|---|---|']
-        base, rng = res[BASE]['per'], np.random.default_rng(0)
+        L += [
+            "\n### Paired difference against the baseline (same seeds)\n",
+            "| arm | seeds | ΔScore mean | 95% t-CI (paired seeds) | 95% patient bootstrap CI |",
+            "|---|---|---|---|---|",
+        ]
+        base, rng = res[BASE]["per"], np.random.default_rng(0)
         check = None
         for arm, r in res.items():
             if arm == BASE:
                 continue
-            seeds = sorted(set(r['per']) & set(base))
-            m, lo, hi = _t_ci([r['per'][s]['test']['all']['score'] - base[s]['test']['all']['score'] for s in seeds])
-            y, pat = r['per'][seeds[0]]['labels'], r['per'][seeds[0]]['patient']
-            cv = np.stack([_score_counts(y, r['per'][s]['pred'], pat) for s in seeds])
-            cb = np.stack([_score_counts(y, base[s]['pred'], pat) for s in seeds])
-            w = rng.multinomial(cv.shape[1], np.ones(cv.shape[1]) / cv.shape[1], size=a.boot)  # (boot, patients)
-            diff = (_score_from_counts(np.einsum('bp,spk->bsk', w, cv)) - _score_from_counts(np.einsum('bp,spk->bsk', w, cb))).mean(1)
+            seeds = sorted(set(r["per"]) & set(base))
+            m, lo, hi = _t_ci(
+                [
+                    r["per"][s]["test"]["all"]["score"] - base[s]["test"]["all"]["score"]
+                    for s in seeds
+                ]
+            )
+            y, pat = r["per"][seeds[0]]["labels"], r["per"][seeds[0]]["patient"]
+            cv = np.stack([_score_counts(y, r["per"][s]["pred"], pat) for s in seeds])
+            cb = np.stack([_score_counts(y, base[s]["pred"], pat) for s in seeds])
+            w = rng.multinomial(
+                cv.shape[1], np.ones(cv.shape[1]) / cv.shape[1], size=a.boot
+            )  # (boot, patients)
+            diff = (
+                _score_from_counts(np.einsum("bp,spk->bsk", w, cv))
+                - _score_from_counts(np.einsum("bp,spk->bsk", w, cb))
+            ).mean(1)
             q = np.percentile(diff, [2.5, 97.5])
-            L.append('| {} | {} | {:+.2f} | [{:.2f}, {:.2f}] | [{:.2f}, {:.2f}] |'.format(arm, len(seeds), m, lo, hi, *q))
+            L.append(
+                "| {} | {} | {:+.2f} | [{:.2f}, {:.2f}] | [{:.2f}, {:.2f}] |".format(
+                    arm, len(seeds), m, lo, hi, *q
+                )
+            )
             if arm == trust:
                 check = (len(seeds), m, lo)
         if check:
             n, m, lo = check
-            verdict = 'pass' if np.isfinite(lo) and lo > NON_INFERIORITY_MARGIN else 'FAIL (use the baseline weights with test-time SC)'
-            L.append('\nNon-inferiority ({} vs baseline, {} seeds): ΔScore {:+.2f}, lower bound {:.2f} vs margin {:.1f} -> **{}**.'.format(
-                trust, n, m, lo, NON_INFERIORITY_MARGIN, verdict))
-    txt = '\n'.join(L)
+            verdict = (
+                "pass"
+                if np.isfinite(lo) and lo > NON_INFERIORITY_MARGIN
+                else "FAIL (use the baseline weights with test-time SC)"
+            )
+            L.append(
+                "\nNon-inferiority ({} vs baseline, {} seeds): ΔScore {:+.2f}, lower bound {:.2f} vs margin {:.1f} -> **{}**.".format(
+                    trust, n, m, lo, NON_INFERIORITY_MARGIN, verdict
+                )
+            )
+    txt = "\n".join(L)
     print(txt)
-    (root / 'final.md').write_text(txt + '\n')
+    (root / "final.md").write_text(txt + "\n")
 
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument('mode', choices=['screen', 'final'])
-    ap.add_argument('--run', default='latest', help='run_id under outputs/train/')
-    ap.add_argument('--folds', type=int, default=3)
-    ap.add_argument('--boot', type=int, default=1000)
+    ap.add_argument("mode", choices=["screen", "final"])
+    ap.add_argument("--run", default="latest", help="run_id under outputs/train/")
+    ap.add_argument("--folds", type=int, default=3)
+    ap.add_argument("--boot", type=int, default=1000)
     a = ap.parse_args()
-    screen(a) if a.mode == 'screen' else final(a)
+    screen(a) if a.mode == "screen" else final(a)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

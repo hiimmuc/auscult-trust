@@ -1,4 +1,5 @@
 """One training epoch and one evaluation pass."""
+
 import contextlib
 import sys
 import time
@@ -25,9 +26,14 @@ def train_epoch(loader, model, classifier, projector, criterion, optimizer, epoc
     batch_time, losses, top1 = AverageMeter(), AverageMeter(), AverageMeter()
     end = time.time()
     for idx, (images, labels, _) in enumerate(loader):
-        if args.ma_update:  # state before the step, for the moving average (a frozen encoder does not change)
+        if (
+            args.ma_update
+        ):  # state before the step, for the moving average (a frozen encoder does not change)
             with torch.no_grad():
-                ma_state = [None if m is model and args.freeze_encoder else deepcopy(m.state_dict()) for m in (model, classifier, projector)]
+                ma_state = [
+                    None if m is model and args.freeze_encoder else deepcopy(m.state_dict())
+                    for m in (model, classifier, projector)
+                ]
         images, labels = images.cuda(non_blocking=True), labels.cuda(non_blocking=True)
         bsz = labels.shape[0]
         if args.freq_mixstyle > 0:
@@ -35,9 +41,11 @@ def train_epoch(loader, model, classifier, projector, criterion, optimizer, epoc
         warmup_learning_rate(args, epoch, idx, len(loader), optimizer)
 
         with torch.cuda.amp.autocast():
-            if args.method == 'patchmix':
+            if args.method == "patchmix":
                 with _encoder_context(args):
-                    mix_images, labels_a, labels_b, lam, _ = model(images, y=labels, patch_mix=True, time_domain=args.time_domain)
+                    mix_images, labels_a, labels_b, lam, _ = model(
+                        images, y=labels, patch_mix=True, time_domain=args.time_domain
+                    )
                 output = classifier(mix_images)
                 loss = criterion[1](output, labels_a, labels_b, lam)
             else:
@@ -45,17 +53,19 @@ def train_epoch(loader, model, classifier, projector, criterion, optimizer, epoc
                     features = model(images)
                 output = classifier(features)
                 loss = criterion[0](output, labels)
-            if args.method == 'patchmix_cl':
-                if args.target_type == 'grad_block':
+            if args.method == "patchmix_cl":
+                if args.target_type == "grad_block":
                     proj1 = features.detach().clone()
-                elif args.target_type == 'grad_flow':
+                elif args.target_type == "grad_flow":
                     proj1 = features
-                elif args.target_type == 'project_block':
+                elif args.target_type == "project_block":
                     proj1 = projector(features).detach().clone()
                 else:  # project_flow
                     proj1 = projector(features)
                 with _encoder_context(args):
-                    mix_images, _, labels_b, lam, index = model(images, y=labels, patch_mix=True, time_domain=args.time_domain)
+                    mix_images, _, labels_b, lam, index = model(
+                        images, y=labels, patch_mix=True, time_domain=args.time_domain
+                    )
                 proj2 = projector(mix_images)
                 loss += args.alpha * criterion[1](proj1, proj2, labels, labels_b, lam, index, args)
 
@@ -76,8 +86,11 @@ def train_epoch(loader, model, classifier, projector, criterion, optimizer, epoc
                 update_moving_average(args.ma_beta, projector, ma_state[2])
 
         if (idx + 1) % args.print_freq == 0:
-            print('Train: [{0}][{1}/{2}]\tBT {bt.val:.3f} ({bt.avg:.3f})\tloss {l.val:.3f} ({l.avg:.3f})\tAcc@1 {a.val:.3f} ({a.avg:.3f})'.format(
-                  epoch, idx + 1, len(loader), bt=batch_time, l=losses, a=top1))
+            print(
+                "Train: [{0}][{1}/{2}]\tBT {bt.val:.3f} ({bt.avg:.3f})\tloss {l.val:.3f} ({l.avg:.3f})\tAcc@1 {a.val:.3f} ({a.avg:.3f})".format(
+                    epoch, idx + 1, len(loader), bt=batch_time, l=losses, a=top1
+                )
+            )
             sys.stdout.flush()
     return losses.avg, top1.avg
 

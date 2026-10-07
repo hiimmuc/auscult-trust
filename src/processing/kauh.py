@@ -6,12 +6,12 @@ three renderings of subject n are one acoustic event, so they share a patient id
 Unit: one whole recording (about 13.5 s, 4 kHz), one recording-level sound label. Sound codes: I/E inspiratory/
 expiratory, W wheeze, C or Crep crackle, B bronchial, N normal.
 """
+
 import re
 from itertools import permutations
 from pathlib import Path
 
 import pandas as pd
-
 from src.processing.splits import split_patients
 
 FILTERS = {"B": "Bell", "D": "Diaphragm", "E": "Extended"}
@@ -46,8 +46,20 @@ def file_table(root):
         m = _NAME.match(f.stem)
         assert m, f"unexpected KAUH file name: {f.name}"
         flt, n, dx, snd, site, age, sex = m.groups()
-        rows.append({"stem": f.stem, "wav": str(f), "patient": f"kauh_P{n}", "filter": FILTERS[flt], "diagnosis": dx.strip().lower(),
-                     "sound": snd.strip(), "site": site.strip(), "age": int(age), "sex": sex, "label": sound_label(snd.strip())})
+        rows.append(
+            {
+                "stem": f.stem,
+                "wav": str(f),
+                "patient": f"kauh_P{n}",
+                "filter": FILTERS[flt],
+                "diagnosis": dx.strip().lower(),
+                "sound": snd.strip(),
+                "site": site.strip(),
+                "age": int(age),
+                "sex": sex,
+                "label": sound_label(snd.strip()),
+            }
+        )
     return pd.DataFrame(rows)
 
 
@@ -63,7 +75,9 @@ def partitions(df, n=5, fracs=(0.6, 0.2, 0.2)):
         List of split dicts (name -> patient ids) usable with `src.processing.splits.split_frames`. All filter
         renderings of a patient fall in one part because the key is the patient id.
     """
-    return [split_patients(df.patient, fracs, seed=i, names=("train", "cal", "test")) for i in range(n)]
+    return [
+        split_patients(df.patient, fracs, seed=i, names=("train", "cal", "test")) for i in range(n)
+    ]
 
 
 def rotation_partitions(df, n_folds=5, seed=0):
@@ -81,11 +95,20 @@ def rotation_partitions(df, n_folds=5, seed=0):
         List of `n_folds` split dicts (train/cal/test -> patient ids).
     """
     import numpy as np
+
     ids = sorted(set(df.patient))
     np.random.default_rng(seed).shuffle(ids)
     groups = [sorted(g) for g in np.array_split(np.array(ids, dtype=object), n_folds)]
-    return [{"train": sorted(p for j, g in enumerate(groups) if j not in (i, (i + 1) % n_folds) for p in g),
-             "cal": groups[(i + 1) % n_folds], "test": groups[i]} for i in range(n_folds)]
+    return [
+        {
+            "train": sorted(
+                p for j, g in enumerate(groups) if j not in (i, (i + 1) % n_folds) for p in g
+            ),
+            "cal": groups[(i + 1) % n_folds],
+            "test": groups[i],
+        }
+        for i in range(n_folds)
+    ]
 
 
 def windows(df, sec=8.0):
@@ -104,11 +127,19 @@ def windows(df, sec=8.0):
     """
     import numpy as np
     import soundfile as sf
+
     rows = []
     for r in df[df.label >= 0].itertuples(index=False):
         i = sf.info(r.wav)
         dur = i.frames / i.samplerate
         n = max(1, int(dur // sec))
         for w, s in enumerate(np.linspace(0, max(dur - sec, 0), n)):
-            rows.append({**r._asdict(), "start": round(float(s), 3), "end": round(float(min(s + sec, dur)), 3), "window": w})
+            rows.append(
+                {
+                    **r._asdict(),
+                    "start": round(float(s), 3),
+                    "end": round(float(min(s + sec, dur)), 3),
+                    "window": w,
+                }
+            )
     return pd.DataFrame(rows)

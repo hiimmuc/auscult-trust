@@ -1,4 +1,5 @@
 """Optimiser, learning-rate schedule, moving average and running meters."""
+
 import math
 
 import numpy as np
@@ -9,14 +10,14 @@ import torch.optim as optim
 def adjust_learning_rate(args, optimizer, epoch):
     lr = args.learning_rate
     if args.cosine:
-        eta_min = lr * (args.lr_decay_rate ** 3)
+        eta_min = lr * (args.lr_decay_rate**3)
         lr = eta_min + (lr - eta_min) * (1 + math.cos(math.pi * epoch / args.epochs)) / 2
     else:
         steps = np.sum(epoch > np.asarray(args.lr_decay_epochs))
         if steps > 0:
-            lr = lr * (args.lr_decay_rate ** steps)
+            lr = lr * (args.lr_decay_rate**steps)
     for param_group in optimizer.param_groups:
-        param_group['lr'] = lr
+        param_group["lr"] = lr
 
 
 def warmup_learning_rate(args, epoch, batch_id, total_batches, optimizer):
@@ -24,13 +25,15 @@ def warmup_learning_rate(args, epoch, batch_id, total_batches, optimizer):
         p = (batch_id + (epoch - 1) * total_batches) / (args.warm_epochs * total_batches)
         lr = args.warmup_from + p * (args.warmup_to - args.warmup_from)
         for param_group in optimizer.param_groups:
-            param_group['lr'] = lr
+            param_group["lr"] = lr
 
 
 def set_optimizer(args, params):
-    if args.optimizer == 'sgd':
-        return optim.SGD(params, lr=args.learning_rate, momentum=args.momentum, weight_decay=args.weight_decay)
-    if args.optimizer == 'adam':
+    if args.optimizer == "sgd":
+        return optim.SGD(
+            params, lr=args.learning_rate, momentum=args.momentum, weight_decay=args.weight_decay
+        )
+    if args.optimizer == "adam":
         return optim.Adam(params, lr=args.learning_rate, weight_decay=args.weight_decay)
     raise ValueError(args.optimizer)
 
