@@ -2,11 +2,13 @@ import numpy as np
 import torch
 import torch.nn as nn
 from torch.cuda.amp import autocast
-import os
-import wget
 import timm
 from copy import deepcopy
 from timm.models.layers import to_2tuple,trunc_normal_
+
+from src.paths import DATA
+
+AUDIOSET_CKPT = DATA / 'models' / 'ast' / 'audioset_10_10_0.4593.pth'  # AST AudioSet weights (mAP 0.4593), see docs/SETUP.md
 
 
 # override the timm package to relax the input shape constraint.
@@ -48,7 +50,7 @@ class ASTModel(nn.Module):
     :param audioset_pretrain: if use full AudioSet and ImageNet pretrained model
     :param model_size: the model size of AST, should be in [tiny224, small224, base224, base384], base224 and base 384 are same model, but are trained differently during ImageNet pretraining.
     """
-    def __init__(self, label_dim=527, fstride=10, tstride=10, input_fdim=128, input_tdim=1024, imagenet_pretrain=True, audioset_pretrain=False, model_size='base384', verbose=True, mix_beta=None, bin_affine_dim=None):
+    def __init__(self, label_dim=527, fstride=10, tstride=10, input_fdim=128, input_tdim=1024, imagenet_pretrain=True, audioset_pretrain=False, model_size='base384', verbose=True, mix_beta=None):
         super(ASTModel, self).__init__()
         assert timm.__version__ == '0.4.5', 'Please use timm == 0.4.5, the code might not be compatible with newer versions.'
 
@@ -61,9 +63,6 @@ class ASTModel(nn.Module):
         timm.models.vision_transformer.Attention.forward = _sdpa_attention_forward
         self.final_feat_dim = 768
         self.mix_beta = mix_beta
-        # P6: learnable per-mel-bin affine layer on the input, identity at init
-        self.bin_gamma = nn.Parameter(torch.ones(1, 1, 1, bin_affine_dim)) if bin_affine_dim else None
-        self.bin_beta = nn.Parameter(torch.zeros(1, 1, 1, bin_affine_dim)) if bin_affine_dim else None
 
         # if AudioSet pretraining is not used (but ImageNet pretraining may still apply)
         if audioset_pretrain == False:
@@ -130,16 +129,9 @@ class ASTModel(nn.Module):
                 raise ValueError('currently only has base384 AudioSet pretrained model.')
             device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
             
-            out_dir = './pretrained_models/'
-            if not os.path.exists(out_dir):
-                os.makedirs(out_dir, exist_ok=True)
-            
-            if os.path.exists(os.path.join(out_dir, 'audioset_10_10_0.4593.pth')) == False:
-                # this model performs 0.4593 mAP on the audioset eval set
-                audioset_mdl_url = 'https://www.dropbox.com/s/cv4knew8mvbrnvq/audioset_0.4593.pth?dl=1'
-                wget.download(audioset_mdl_url, out=os.path.join(out_dir, 'audioset_10_10_0.4593.pth'))
-            
-            sd = torch.load(os.path.join(out_dir, 'audioset_10_10_0.4593.pth'), map_location=device)
+            if not AUDIOSET_CKPT.exists():
+                raise FileNotFoundError('AST AudioSet weights not found at {}; see docs/SETUP.md'.format(AUDIOSET_CKPT))
+            sd = torch.load(AUDIOSET_CKPT, map_location=device)
             audio_model = ASTModel(label_dim=527, fstride=10, tstride=10, input_fdim=128, input_tdim=1024, imagenet_pretrain=False, audioset_pretrain=False, model_size='base384', verbose=False)
             audio_model = torch.nn.DataParallel(audio_model)
             audio_model.load_state_dict(sd, strict=False)
@@ -227,8 +219,6 @@ class ASTModel(nn.Module):
         :return: prediction
         """
         # x = x.unsqueeze(1)
-        if self.bin_gamma is not None:
-            x = x * self.bin_gamma + self.bin_beta
         x = x.transpose(2, 3)
         h_patch, w_patch = int((x.size()[2] - 16) / 10) + 1, int((x.size()[3] - 16) / 10) + 1
 

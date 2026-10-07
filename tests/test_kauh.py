@@ -3,7 +3,9 @@ import pytest
 from src.processing.kauh import ORDERED_PAIRS, file_table, partitions, sound_label
 from src.processing.splits import assert_disjoint, split_frames
 
-ROOT = "../data/raw/kauh"
+from src.paths import DATA
+
+ROOT = str(DATA / "raw" / "kauh")
 
 
 def test_sound_label():

@@ -1,0 +1,21 @@
+# Patch-Mix CL recipe (AST, AudioSet + ImageNet init, moving average) shared by every Stage 1 arm.
+n_cls: 4
+epochs: 50
+batch_size: 8
+optimizer: adam
+learning_rate: 5.0e-05
+weight_decay: 1.0e-06
+cosine: true
+pad_types: repeat
+n_mels: 128
+ma_update: true
+ma_beta: 0.5
+from_sl_official: true
+audioset_pretrained: true
+method: patchmix_cl
+temperature: 0.06
+proj_dim: 768
+alpha: 1.0
+mix_beta: 1.0
+selection: cv
+val_frac: 0.2

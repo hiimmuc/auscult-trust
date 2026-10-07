@@ -11,11 +11,10 @@ import numpy as np
 import pandas as pd
 
 from src.evaluation.conformal import lac_scores, predict_sets, split_threshold
+from src.processing.icbhi import DEVICES
 from src.processing.splits import calibration_eval_splits
 from src.evaluation.metrics import coverage
 from src.evaluation.shift import prior_matched_coverage
-
-DEVICES = ["Meditron", "LittC2SE", "Litt3200", "AKGC417L"]
 
 
 def load_export(folder, split="test", weights=None):

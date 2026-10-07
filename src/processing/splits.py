@@ -174,3 +174,62 @@ def with_official(df, split):
     side = {p: ("test" if k == "test" else "train") for k, v in split.items() if k != "drop" for p in v}
     df["official"] = df.patient.map(side)
     return df[df.official.notna()].reset_index(drop=True)
+
+
+def patient_val_split(patients, frac=0.2, seed=0):
+    """Hold out whole patients of the training set as a validation set.
+
+    Args:
+        patients: (n,) patient id per training cycle.
+        frac: Fraction of training patients for validation.
+        seed: RNG seed (fixed per run so that all variants of one seed use the same split).
+
+    Returns:
+        Tuple (train_idx, val_idx), disjoint by patient.
+    """
+    patients = np.asarray(patients)
+    ids = sorted(set(patients.tolist()))
+    rng = np.random.default_rng(10_000 + seed)
+    rng.shuffle(ids)
+    val = set(ids[:max(1, int(round(frac * len(ids))))])
+    is_val = np.array([p in val for p in patients.tolist()])
+    return np.flatnonzero(~is_val), np.flatnonzero(is_val)
+
+
+def patient_folds(patients, devices, n_folds=3, seed=12345):
+    """Assign every training patient to one of `n_folds` grouped-CV folds, stratified by the patient's main device.
+
+    The assignment depends only on the patient list and `seed`, not on the run seed, so every variant and every seed
+    sees the same folds (paired screening). Devices with few patients (Litt3200 in the official train split) are spread
+    over the folds instead of landing in one.
+
+    Args:
+        patients: (n,) patient id per training cycle.
+        devices: (n,) device id per training cycle.
+        n_folds: Number of folds.
+        seed: RNG seed of the assignment (fixed by default; do not tie it to the run seed).
+
+    Returns:
+        Dict patient id -> fold index in [0, n_folds).
+    """
+    patients, devices = np.asarray(patients), np.asarray(devices)
+    main_dev = {}
+    for p in sorted(set(patients.tolist())):
+        vals, counts = np.unique(devices[patients == p], return_counts=True)
+        main_dev[p] = int(vals[np.argmax(counts)])
+    rng = np.random.default_rng(seed)
+    fold, k = {}, 0
+    for d in sorted(set(main_dev.values())):
+        ids = [p for p in sorted(main_dev) if main_dev[p] == d]
+        rng.shuffle(ids)
+        for p in ids:  # round-robin across devices, so fold sizes stay balanced overall
+            fold[p] = k % n_folds
+            k += 1
+    return fold
+
+
+def cv_split(patients, devices, n_folds, fold):
+    """(train_idx, val_idx) of grouped-CV fold `fold`; disjoint by patient. See `patient_folds`."""
+    assign = patient_folds(patients, devices, n_folds)
+    is_val = np.array([assign[p] == fold for p in np.asarray(patients).tolist()])
+    return np.flatnonzero(~is_val), np.flatnonzero(is_val)

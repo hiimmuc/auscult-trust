@@ -8,6 +8,7 @@ from pathlib import Path
 import pandas as pd
 
 CLASSES = ["normal", "crackle", "wheeze", "both"]
+DEVICES = ["Meditron", "LittC2SE", "Litt3200", "AKGC417L"]  # device ids 0..3 in training batches and exports
 OFFICIAL_SPLIT = "ICBHI_challenge_train_test.txt"
 
 

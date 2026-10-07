@@ -1,20 +1,26 @@
-"""Run logging and artefact paths. Everything lives inside the repo and is gitignored.
+"""Run directories: one new directory per run, never overwritten. Everything lives in the repo and is gitignored.
 
-    outputs/<exp>/<run_id>/meta.json          once per run: config, command, git commit, hardware
-    outputs/<exp>/<run_id>/summary.txt        what the entry point printed (`start_summary`)
-    outputs/<exp>/<run_id>/<cell>/seed<N>.json  one record per seed (config, split hash, encoder, metrics)
-    checkpoints/<exp>/<run_id>/<cell>/seed<N>.pt  trained heads; other artefacts as <exp>/<run_id>/<name>.pt
+    outputs/<exp>/<run_id>/meta.json            once per run: config, command, git commit, hardware
+    outputs/<exp>/<run_id>/summary.txt          what the entry point printed (`start_summary`)
+    outputs/<exp>/<run_id>/<cell>/<unit>/       small artefacts of one unit (reports, predictions, config)
+    checkpoints/<exp>/<run_id>/<cell>/<unit>/   weights of that unit
+    outputs/<exp>/latest -> <run_id>            symlink to the newest run
 
-`exp` is the config file stem, `cell` one variant inside it (`fm`, `fm+branch`, ...), `run_id` is
-`YYYYMMDD-HHMMSS[_<tag>]`. Set `$RUN_TAG` for a human label, or `$RUN_ID` to share one id across
-processes. Embedding caches stay in `$cache_root` (data, not results).
+`exp` is the experiment name (config file stem), `cell` one variant, `unit` one fit (`cv0`, `seed3`, `fix_seed3`),
+`run_id` is `YYYYMMDD-HHMMSS[_<tag>]`. Set `$RUN_TAG` for a human label, or `$RUN_ID` to resume or share one id across
+processes: a fresh id never touches earlier runs.
 """
+import hashlib
 import json
 import os
 import subprocess
 import sys
 import time
 from pathlib import Path
+
+from src.paths import CHECKPOINTS, OUTPUTS
+
+_KINDS = {"outputs": OUTPUTS, "checkpoints": CHECKPOINTS}
 
 
 def run_id():
@@ -28,23 +34,52 @@ def run_id():
 
 
 def run_dir(exp, kind="outputs"):
-    """Directory of this run, created on demand.
+    """Directory of this run, created on demand; `<kind>/<exp>/latest` is pointed at it.
 
     Args:
-        exp: Experiment name (config file stem).
+        exp: Experiment name.
         kind: `outputs` or `checkpoints`.
 
     Returns:
         Path `<kind>/<exp>/<run_id>`.
     """
-    d = Path(kind) / exp / run_id()
+    d = _KINDS[kind] / exp / run_id()
+    d.mkdir(parents=True, exist_ok=True)
+    latest = d.parent / "latest"
+    if latest.is_symlink() or not latest.exists():
+        latest.unlink(missing_ok=True)
+        latest.symlink_to(d.name)
+    return d
+
+
+def unit_dir(exp, cell, unit, kind="outputs"):
+    """Directory of one fit inside this run, created on demand. Existing content is kept (resume), never replaced."""
+    d = run_dir(exp, kind) / cell / unit
     d.mkdir(parents=True, exist_ok=True)
     return d
 
 
+def twin_dir(path, kind="checkpoints"):
+    """The `<kind>` directory that mirrors an `outputs/` or `checkpoints/` unit directory."""
+    path = Path(path).resolve()
+    for root in _KINDS.values():
+        if path.is_relative_to(root.resolve()):
+            return _KINDS[kind] / path.relative_to(root.resolve())
+    raise ValueError("{} is neither under outputs/ nor checkpoints/".format(path))
+
+
+def sha256_file(path):
+    """SHA-256 hex digest of a file."""
+    h = hashlib.sha256()
+    with open(path, "rb") as f:
+        for chunk in iter(lambda: f.read(1 << 20), b""):
+            h.update(chunk)
+    return h.hexdigest()
+
+
 def _git(*args):
     try:
-        return subprocess.run(["git", *args], capture_output=True, text=True, timeout=10).stdout.strip()
+        return subprocess.run(["git", *args], capture_output=True, text=True, timeout=10, cwd=Path(__file__).parent).stdout.strip()
     except Exception:
         return ""
 
@@ -70,17 +105,16 @@ def write_meta(exp, cfg):
                             indent=1, default=str))
 
 
-def log_run(exp, cell, seed, cfg, data_hash, encoder, metrics):
+def log_run(exp, cell, seed, cfg, metrics, data_hash=None):
     """Write one seed record to `outputs/<exp>/<run_id>/<cell>/seed<seed>.json`.
 
     Args:
-        exp: Experiment name (config file stem).
+        exp: Experiment name.
         cell: Variant within the experiment.
         seed: Random seed.
         cfg: Config dict used for the run.
-        data_hash: Hash of the split file used.
-        encoder: Encoder name, e.g. "opera_ct_v2".
         metrics: JSON-serialisable dict of results. Negative results are logged too.
+        data_hash: Hash of the split file used.
 
     Returns:
         Path of the written file.
@@ -90,16 +124,8 @@ def log_run(exp, cell, seed, cfg, data_hash, encoder, metrics):
     out.mkdir(exist_ok=True)
     path = out / f"seed{seed}.json"
     path.write_text(json.dumps({"time": time.strftime("%Y-%m-%dT%H:%M:%S"), "cell": cell, "seed": seed,
-                                "data_hash": data_hash, "encoder": encoder, "config": cfg, "metrics": metrics},
-                               indent=1, default=float))
+                                "data_hash": data_hash, "config": cfg, "metrics": metrics}, indent=1, default=float))
     return path
-
-
-def ckpt_path(exp, cell, seed):
-    """Path for a trained head: `checkpoints/<exp>/<run_id>/<cell>/seed<seed>.pt`."""
-    d = run_dir(exp, "checkpoints") / cell
-    d.mkdir(exist_ok=True)
-    return d / f"seed{seed}.pt"
 
 
 class _Tee:
