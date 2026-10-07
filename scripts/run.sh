@@ -24,7 +24,7 @@ cd "$(dirname "$0")/.." || exit 1
 export RUN_ID=${RUN_ID:-$(date +%Y%m%d-%H%M%S)}
 export PYTHONPATH=. PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
 PY=${PY:-.venv-train/bin/python}
-[[ "$PY" == *venv-dass* ]] && export LD_LIBRARY_PATH=$HOME/miniconda3/envs/cuda128/lib:${LD_LIBRARY_PATH:-}  # DASS kernel runtime libraries
+[[ "$PY" == *venv-dass* ]] && export LD_LIBRARY_PATH=/usr/local/cuda-13.0/lib64:$HOME/miniconda3/envs/cuda128/lib:${LD_LIBRARY_PATH:-}  # DASS kernel runtime libraries (CUDA 13.0 or the conda 12.8 build)
 CONF=experiments/train
 FOLDS=${FOLDS:-3}
 JOBS=$(mktemp)
