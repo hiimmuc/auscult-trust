@@ -68,6 +68,13 @@ The registered title (fixed) commits the study to spectrum correction (SC) and c
 
 **v8 variants P2, P6, P7, P8, P9.** Not candidates; reported in an appendix if run.
 
+**TTA-EQ (cold-start comparator, F5; inference only).**
+- Mean softmax over K = 8 views. Each view applies a random smooth per-bin gain drawn from the P3 distribution (6 dB SD).
+- Fixed seed list for the views: ______.
+- Conformal calibration scores use the same K-view ensemble.
+- K ∈ {1, 4, 8, 16} is reported only as a cost curve. The verdict-free F5 comparison uses K = 8.
+- Rejected before any run: consensus over several resampling rates (low-pass only; in-band shift untouched).
+
 ## 4. Hypotheses, controls and rejection rules (replaces v8 §4)
 
 | ID | Primary test | Rejected if |
@@ -84,6 +91,8 @@ The registered title (fixed) commits the study to spectrum correction (SC) and c
 
 **Isolation contrast** (P0 weights with vs without test-time SC): reported for H1 and H2. No verdict.
 
+**Comparator arms** (A2, TTA-EQ, SC + TTA-EQ, P4): reported with the same statistics. No verdict. H2 compares SC with the baseline, not with the best arm.
+
 ## 5. Stage 2 design (replaces v8 §5)
 
 **LODO.**
@@ -91,7 +100,13 @@ The registered title (fixed) commits the study to spectrum correction (SC) and c
 - A patient with any recording on the held-out device is removed from training and calibration. Their held-out-device recordings stay in test.
 - Calibration: 20% of the remaining patients, stratified by device, seed 0.
 - Recipe and epoch count frozen from Stage 1; seeds 0–4.
-- Arms: P0, P4, AuscultTrust, and P0 + test-time SC.
+- Arms:
+  - trained: P0, P4, AuscultTrust;
+  - inference only: P0 + test-time SC; TTA-EQ on P0 and on AuscultTrust.
+- Secondary protocol matching [46] (arXiv 2605.29862v2), reference only, no verdict:
+  - every patient on > 1 device removed;
+  - folds AKGC417L, Meditron, pooled Littmann (LittC2SE + Litt3200);
+  - same arms, seeds 0–4.
 
 **E0.**
 - Official-test patients split into calibration and evaluation halves, stratified by device, 20 re-splits.

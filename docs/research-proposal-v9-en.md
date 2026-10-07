@@ -2,7 +2,7 @@
 
 **Registered title (fixed):** *Nghiên cứu giải pháp cải thiện độ tin cậy của mô hình phân loại âm thanh phổi dưới sự dịch chuyển thiết bị bằng hiệu chỉnh phổ và dự đoán Conformal cho hỗ trợ sàng lọc bệnh đường hô hấp*
 
-> Proposal v9, 07/10/2026. KHKT 2026–2027, THPT chuyên Chu Văn An. Replaces v8 (decision log: Appendix C).
+> Proposal v9, 07/10/2026 (revised the same day: [46] read, TTA-EQ comparator added). KHKT 2026–2027, THPT chuyên Chu Văn An. Replaces v8 (decision log: Appendix C).
 > Tags: **[Fact]** cited and checked, or measured in our repo · **[Interpretation]** reasoned from facts · **[Hypothesis]** testable, not shown · **[Assumption]** planning choice, to confirm · **[Pending]** blocked on hardware.
 > Repo facts: `auscult-trust` `report.md` (Phase 0, to 05/10/2026). Open items: *[to verify]*.
 
@@ -45,7 +45,7 @@
 | # | Contribution | Evidence |
 |---|---|---|
 | C1 | AuscultTrust: a lung-sound classifier with an SC front end and a conformal screening layer, benchmarked on the ICBHI official split with per-device Sp and Se | Stage 1: G, F1 |
-| C2 | Measured effect of SC on conformal coverage across real devices, without target labels; published models re-run under one LODO protocol | H2; F2–F5 |
+| C2 | Measured effect of SC on conformal coverage across real devices, without target labels; published models re-run under one centralised LODO protocol, with a secondary split matching [46] | H2; F2–F5 |
 | C3 | Physical test of the gain assumption and of prediction invariance with real stethoscopes | H3, H1 [Pending] |
 
 **Not claimed:** a new algorithm (the solution assembles known parts and tests them where they were never tested); a SOTA Score; disease diagnosis (the screening endpoint is abnormal lung sound); guarantees on patients; KAUH software filters as real hardware.
@@ -62,7 +62,7 @@
 | SC: per-bin gain from mean spectra. Aligned and unaligned (different content) variants gave equal accuracy; few recordings suffice; mobile-device accuracy 59→66% and 61→72% | [Fact] | [1] |
 | SC on ICBHI: Score 56.67 ± 1.16 → 58.29 ± 0.46 (co-tuned ResNet50, official split). Reference from all four devices, including test devices. No unseen device, no calibration or coverage reported | [Fact] | [3] Tab. IV |
 | IR augmentation + Freq-MixStyle improve unseen-device accuracy in acoustic scene classification; no coverage reported | [Fact] | [4] |
-| ICBHI cycles per device, train/test: Meditron 997/459; LittC2SE 594/0; Litt3200 41/461; AKGC417L 2,510/1,836 | [Fact] | [8]. [14] swaps the Litt3200/LittC2SE labels; our runs confirm Litt3200 has official-test cycles and LittC2SE has none (report §17.2). Filename recount: TODO |
+| ICBHI cycles per device, train/test: Meditron 997/459; LittC2SE 594/0; Litt3200 41/461; AKGC417L 2,510/1,836 | [Fact] | [8]. [14] swaps the Litt3200/LittC2SE labels; our runs confirm Litt3200 has official-test cycles and LittC2SE has none (report §17.2). [46] Tab. 1 per-device counts sum to 7,511, not 6,898 (unit differs). Filename recount: TODO |
 | AKGC417L holds 1,543 of 1,864 crackle cycles | [Fact] | [14] |
 | ICBHI patients per device (repo recount): AKGC417L 32, Litt3200 11, LittC2SE 23, Meditron 64. Patients 112, 158, 218, 226 are on two devices. The published official split puts 2 patients on both sides | [Fact], repo | report §1 |
 | ICBHI recordings sampled at 4 kHz (90), 10 kHz (6), 44.1 kHz (824) | [Fact] | [30] |
@@ -70,7 +70,11 @@
 | KAUH sampled at 4 kHz | [Assumption] | Repo loader; check the files |
 | Unclipped SC between a 4 kHz-band and a full-band device at 16 kHz gives +65 to +70 dB gain above 2.2 kHz (synthetic noise; depends on the resampler) | [Fact], repo check 07/10 | `src/shift/correction.py` |
 | Split conformal is valid under exchangeability; validity breaks under shift unless corrected | [Fact] | [15]–[17] |
-| No published leave-one-device-out ICBHI result among the checked references | [Assumption], search-limited | [46] unread: *[to verify before registration]* |
+| Device leave-out on ICBHI exists in a federated setting: held-out AKGC417L, Meditron, SPRSound-Yunting, and pooled Littmann (LittC2SE + Litt3200); patients on > 1 stethoscope removed; 3 seeds, no SD. Patch-Mix CL OOD Score: AKGC 51.32, Meditron 58.81, Yunting 52.88, LittC2SE 56.58, Litt3200 35.90. No calibration or coverage reported | [Fact] | [46] Tab. 4 |
+| Deterministic removal of a device mean (background log-mel), close in spirit to SC, gave mixed OOD results vs FedAvg: AKGC 32.59 vs 50.26 (Sp 11.49), Yunting 39.04 vs 62.20, Meditron 54.08 vs 52.31, LittC2SE 64.53 vs 61.19, Litt3200 38.01 vs 38.11 | [Fact] | [46] Tab. 2 |
+| Stochastic style intervention (random gain + smooth frequency-gated perturbation) gave the largest OOD gain in ablation (e.g. AKGC 48.15 → 52.82) | [Fact] | [46] Tab. 3 |
+| In [46], all methods stay near or below the constant-normal Score of 50 on AKGC417L, Meditron and Litt3200 | [Fact] | [46] §4.2.1 |
+| No centralised LODO result with calibration or coverage on ICBHI among the checked references | [Assumption], search-limited | [8], [46], [48]–[50] |
 
 **Problems.**
 - **P1 — Silent failure.** Coverage and predictions change with the device, and nothing warns the user.
@@ -85,10 +89,12 @@
 |---|---|---|
 | SC | Accuracy gains, acoustic scenes [1], [2]; ICBHI official split [3] | Unseen stethoscope; prediction invariance; coverage |
 | Conformal for respiratory audio | Cough and respiratory events [25], [26] | Lung auscultation under device shift |
-| Device-robust lung-sound training | SG-SCL [8], metadata contrastive [9] | Coverage; per-device Sp/Se; one LODO protocol for all models |
+| Device-robust lung-sound training | SG-SCL [8], metadata contrastive [9]; federated device leave-out with style intervention [46] | Coverage; per-device Sp/Se; SC under unseen devices; centralised LODO for all models |
 | Stethoscope frequency response | Phantom studies [6], [7], [10] | Link from measured response to classifier output |
 
-Closest work: [3] (SC on ICBHI, Score only).
+Closest work:
+- [3]: SC on ICBHI, Score only.
+- [46]: device leave-out on ICBHI, Score only. In [46], a deterministic device-mean removal was unreliable and stochastic style perturbation helped. This is a direct risk for SC, tested here, not assumed away.
 
 ---
 
@@ -157,7 +163,7 @@ Arms are named per test.
 | F2 | LODO benchmark: Sp, Se, Score per held-out device and macro-averaged (with and without the AKGC417L fold), for P0, P4, AuscultTrust (optional AST-CE, SG-SCL). Class-mix vs device split of coverage error (raw, prior-matched, V4-oracle). Isolation contrast | LODO |
 | F3 | Screening view: referral rate, screening Se and Sp of singleton decisions. Deployment check B1 (ICBHI-calibrated threshold applied to each KAUH filter) | ICBHI E0, KAUH |
 | F4 | SC practicality: unlabelled target recordings needed (n ∈ {5, 10, 20, 50, all}, capped by availability); sensitivity to the target class mix; arithmetic vs geometric reference | KAUH, LODO folds |
-| F5 | Alternatives and fallback: A2 input-statistics adaptation (TTA arm); k-shot recalibration (k ∈ {5, 10} patients, only where ≥ k + 5 target patients remain), with and without SC | LODO folds, KAUH |
+| F5 | Alternatives and fallback, each with and without SC (§5.7): **A2** input-statistics adaptation; **TTA-EQ**, a cold-start arm needing no device information (also: view disagreement as a label-free shift score); **k-shot recalibration** (k ∈ {5, 10} patients, only where ≥ k + 5 target patients remain) | LODO folds, KAUH, phantom |
 
 ---
 
@@ -210,7 +216,7 @@ flowchart TD
 |---|---|---|
 | P0 | `P0_baseline` | Baseline (benchmark model) |
 | P1 | `P1_a1_input` | Proposed |
-| P1P3 | `P1P3_sc_gain`: SC + random smooth per-bin gain, 6 dB SD | Proposed variant; the augmentation covers SC estimation error |
+| P1P3 | `P1P3_sc_gain`: SC + random smooth per-bin gain, 6 dB SD | Proposed variant; the augmentation covers SC estimation error. Stochastic spectral perturbation helped most in [46] |
 | P4 | `P4_freq_mixstyle`, p = 0.5 | Competitor: learned invariance [4] |
 
 v8 variants (P2, P6, P7, P8, P9) are not candidates. They are reported in an appendix if run.
@@ -264,7 +270,8 @@ v8 variants (P2, P6, P7, P8, P9) are not candidates. They are reported in an app
 | Calibration | 20% of the remaining patients, stratified by device, seed 0 [Assumption] |
 | Recipe | Frozen from Stage 1, including the epoch count; seeds 0–4 per fold |
 | SC | s_ref from the fold's training devices; the held-out device's spectrum from its unlabelled recordings |
-| Arms | P0, P4, AuscultTrust; P0 + test-time SC (isolation); optional AST-CE and SG-SCL [8] (patched copy, if time). Published models are re-run, since no published LODO numbers were found |
+| Arms | Trained: P0, P4, AuscultTrust. Inference only: P0 + test-time SC (isolation); TTA-EQ on P0 and on AuscultTrust (F5). Optional: AST-CE, SG-SCL [8] (patched copy, if time). Published models are re-run: [46] is federated, 3 seeds |
+| Secondary protocol | Matches [46]: every patient on > 1 device removed; folds AKGC417L, Meditron and pooled Littmann (LittC2SE + Litt3200). Same arms; 5 seeds. Reported next to [46] Tab. 4 as reference only (centralised vs federated; SPRSound not used). Extra cost: the pooled-Littmann fold only |
 | Reported | Per fold and macro mean (with and without AKGC417L): Sp, Se, Score, HS (F2); coverage raw, prior-matched, V4-oracle; \|Δ\|; set size |
 
 AKGC417L fold: the training side keeps at most 321 of 1,864 crackle cycles [Fact, arithmetic on [14]], so this fold is dominated by class mix.
@@ -288,7 +295,8 @@ AKGC417L fold: the training side keeps at most 321 of 1,864 crackle cycles [Fact
 
 **Measurement C, correction.** A and B are rerun with:
 - **SC (proposed):** target spectrum per filter from unlabelled KAUH recordings;
-- **A2 (TTA arm):** per-mel-bin mean and SD of the target fbank mapped to the training statistics [21], [22].
+- **A2 (TTA arm):** per-mel-bin mean and SD of the target fbank mapped to the training statistics [21], [22];
+- **TTA-EQ (cold-start arm):** §5.7, alone and after SC.
 
 All comparisons are paired, on the same recordings.
 
@@ -340,9 +348,18 @@ All comparisons are paired, on the same recordings.
 | A0 | None | — | Baseline |
 | A1 | SC | Domain boundary (device known), unlabelled target recordings | Proposed |
 | A2 | Input-statistics adaptation | Domain boundary, unlabelled target recordings | TTA arm (F5) |
+| TTA-EQ | Mean softmax over K = 8 views, each passed through a random smooth per-bin gain drawn from the P3 distribution (6 dB SD), fixed seed list | Nothing: works on one recording from an unknown device | Cold-start arm (F5) |
 | V1 | Split conformal [17] | Calibration patients | Primary |
 | V5 | k-shot recalibration, k ∈ {5, 10} target patients | Target labels | Fallback and upper bound (F5) |
 | V4-oracle, prior-matched | True target class mix | Evaluation only | H2 statistic; class-mix vs device split (F2) |
+
+**TTA-EQ rules.**
+- **What it is.** Monte Carlo averaging over device-style nuisance, the test-time counterpart of P3 and of the style intervention in [46]. It targets in-band frequency-response differences.
+- **What it cannot do.** It does not remove the new device's own response: random gains applied to a shifted input stay shifted. Expected effect: smoother decisions and fewer flips, not a coverage guarantee [Hypothesis].
+- **Conformal.** The calibration scores are computed with the same K-view ensemble as the test scores, so exchangeability is kept on the source.
+- **Shift score.** View disagreement (mean TV distance of each view from the ensemble) is reported as a label-free shift score: its rank correlation with |Δ| across conditions (exploratory).
+- **Settings.** K, the gain distribution and the seed list are fixed before any Stage-2 result is seen. K ∈ {1, 4, 8, 16} is run only as a cost curve.
+- **Rejected variant.** Consensus over several resampling rates (e.g. 4, 8, 16 kHz). Resampling only low-passes the input, so in-band device differences (Bell 20–200 Hz vs Diaphragm 100–500 Hz emphasis [31]) remain in every view, and the views are strongly correlated. It is a no-op on 4 kHz data such as KAUH. Its one benefit, removing the bandwidth cue, is obtained once and consistently by the common-band option (App. B2).
 
 Moved out of the core (their Phase 0 results stay in the report): Mondrian V2, weighted V3, BBSE V4, Tent, IR augmentation.
 
@@ -371,7 +388,8 @@ Uncertainty:
 | R1 | KAUH positive controls fail | Low | Check the SC code, clip and filter linearity before reading other Stage-2 results |
 | R2 | No LODO fold passes the H2 null gate | Med | H2 decided on the phantom; report the ICBHI result as "not detectable" |
 | R3 | LODO coverage error is class mix | High | Prior-matched Δ is the H2 statistic; V4-oracle split (F2) |
-| R4 | Target mean spectrum carries disease content | Med | F4 class-mix sensitivity; band smoothing of coefficients |
+| R4 | Target mean spectrum carries disease content; a device-mean removal already failed on AKGC417L in [46] (Sp 11.49) | High | F4 class-mix sensitivity; band smoothing of coefficients; coefficients from all recordings of the device, not background only |
+| R8 | SC loses to the stochastic arms (P1P3, P4, TTA-EQ) | Med | Reported as a finding. H2 tests SC against the baseline, not against the best arm; the title commits to SC, not to SC winning |
 | R5 | Bandwidth mismatch breaks SC | High until fixed | Clip ±20 dB or common band; unit test before screening |
 | R6 | < 3 transducers by 30/11/2026 | High | Low-cost transducers (§5.6). Otherwise H1 and H3 are reported as planned, and C2 rests on LODO |
 | R7 | Stage 1 overruns before 17/10 | Med | P1 fallback for AuscultTrust; gate G seeds 5–9 after the school round |
@@ -390,10 +408,10 @@ Uncertainty:
 
 | ID | Date | Milestone | Exit criterion |
 |---|---|---|---|
-| M0 | 09/10/2026 | Registration | [46] read; v9 and amendment dated and committed; SC clip and s_ref export with unit test; `stage1_summary` v9 mode |
+| M0 | 09/10/2026 | Registration | v9 and amendment dated and committed; SC clip and s_ref export with unit test; `stage1_summary` v9 mode |
 | M1 | 14/10/2026 | Stage 1 core | 4 arms screened; refit with seeds 0–4; F1; model frozen and exported; E0; minimal KAUH inference + measurement A (preview) |
 | M2 | 17/10/2026 | School round | 10-min talk + poster: Stage 1 table, KAUH-A control, Stage 2 plan |
-| M3 | 31/10/2026 | Gate and Stage 2 code | Seeds 5–9 for G; LODO split, screening view, KAUH B2, A2 test-time, H2 null simulation |
+| M3 | 31/10/2026 | Gate and Stage 2 code | Seeds 5–9 for G; LODO split (main and [46]-matched), screening view, KAUH B2, A2 and TTA-EQ at test time, H2 null simulation |
 | M4 | 30/11/2026 | Public-data Stage 2 | LODO 4 folds × 5 seeds × 4 arms; KAUH A/B/C; H2 on ICBHI; F2–F5 |
 | M5 | 31/12/2026 | Phantom | Hardware by 30/11; recordings; H1, H2 co-primary, H3 |
 | M6 | 31/01/2027 | Research cut-off | Final report; negative results included |
@@ -406,7 +424,8 @@ Compute: ≈ 1 GPU-hour per seed per arm on an RTX 5000 Ada [Fact, report §9].
 | Refit, seeds 0–4 | 4 arms × 5 seeds | 20 |
 | Gate G, seeds 5–9 | 2 arms × 5 seeds | 10 |
 | LODO | 4 folds × 5 seeds × 3 trained arms (P0, P4, AuscultTrust) | 60 |
-| KAUH and phantom | Inference only | Minutes |
+| LODO, [46]-matched pooled-Littmann fold | 1 fold × 5 seeds × 3 arms | 15 |
+| TTA-EQ, KAUH and phantom | Inference only (TTA-EQ costs K = 8 forward passes) | < 2 |
 
 ---
 
@@ -511,7 +530,7 @@ URL: https://thuvienphapluat.vn/van-ban/Bo-may-hanh-chinh/Luat-Bao-ve-du-lieu-ca
 [43] Ministry of Education and Training of Vietnam, Circular No. 24/2025/TT-BGDĐT, 2025.
 URL: https://thuviennhadat.vn/van-ban-phap-luat-viet-nam/thong-tu-24-2025-tt-bgddt-sua-doi-quy-che-kem-theo-thong-tu-06-2024-tt-bgddt-682924.html
 
-[46] "Mitigating stethoscope-induced shortcuts in respiratory sound classification under federated domain generalization with causality-inspired interventions," arXiv:2605.29862, 2026. *[authors and protocol to verify; may contain leave-one-stethoscope-out results]*
+[46] H. Koo, Y. T. Kim, M. Toikkanen, and J.-W. Kim, "Mitigating stethoscope-induced shortcuts in respiratory sound classification under federated domain generalization with causality-inspired interventions," arXiv:2605.29862v2, 2026.
 URL: https://arxiv.org/abs/2605.29862
 
 [48] S. Bae *et al.*, "Patch-Mix contrastive learning with audio spectrogram transformer on respiratory sound classification," in *Proc. Interspeech*, 2023.
@@ -550,6 +569,7 @@ URL: https://arxiv.org/abs/2604.24096
 | B5 | Window aggregation for the screening view | Mean; max as sensitivity |
 | B6 | Optional LODO arms | AST-CE, SG-SCL if compute allows |
 | B7 | Expert contact | Dr. Nguyễn Thị Kim Trúc, co-author of [11] |
+| B8 | TTA-EQ settings | K = 8; gain distribution = P3 (6 dB SD, smooth across bins); fixed seed list. Registered before Stage 2 |
 
 ## Appendix C. Decision Log: v8 → v9
 
@@ -570,3 +590,7 @@ URL: https://arxiv.org/abs/2604.24096
 | TTA | Tent | A2 input-statistics adaptation | Tent effect ≤ 0.02 in Phase 0 |
 | Dropped from core | H-diag, H-inv, decodability, leakage, encoder ladder, V2/V3/V4, IR augmentation, Tier 2 | Appendix or report only | Do not serve the chain |
 | Facts corrected | [7] authors unverified; device counts single-sourced | [7] Ang et al. 2023 with Tab. 3 values; [8] vs [14] label swap noted | Checked against the PDFs |
+| Prior LODO work | "No published LODO" ([46] unread) | [46] read: federated device leave-out exists, Score only; secondary protocol matches it | Novelty narrowed to coverage, SC and the centralised protocol |
+| SC risk | Medium | High (R4) | [46]: deterministic device-mean removal failed on AKGC417L and Yunting |
+| Cold-start arm | — | TTA-EQ in F5 | No device information needed; tests the stochastic route that helped in [46] |
+| Multi-rate resampling consensus | Proposed 07/10 | Rejected | Low-pass only; in-band shift untouched; no-op on 4 kHz data |

@@ -57,7 +57,7 @@ Ngày 07/10/2026. Nguồn chuẩn: `docs/research-proposal-v9-en.md` (repo) và 
 |---|---|---|
 | a | "Đóng băng" | KAUH và phổi giả dùng một mô hình cố định. LODO cố định công thức và số epoch, huấn luyện lại mỗi fold |
 | b | "Cố định tham số hiệu chỉnh" | s_ref, giới hạn ±20 dB, α, ngưỡng conformal. Chỉ phổ của thiết bị đích được ước lượng, từ bản ghi không nhãn |
-| c | LODO | Bệnh nhân có bản ghi trên thiết bị bị giữ phải rời khỏi tập huấn luyện. So sánh với P0 và P4 chạy lại cùng giao thức, vì không có số LODO công bố. [46] cần đọc trước |
+| c | LODO | Bệnh nhân có bản ghi trên thiết bị bị giữ phải rời khỏi tập huấn luyện. So sánh với P0 và P4 chạy lại cùng giao thức. [46] có LODO nhưng theo kiểu federated, 3 seed, chỉ báo Score. Thêm giao thức phụ theo đúng [46] để đặt số cạnh Bảng 4 của họ |
 | d | KAUH | A = bất biến; B1 = ngưỡng ICBHI (kiểm tra triển khai); B2 = ngưỡng từ bộ lọc nguồn của KAUH (đối chứng dương); C = chạy lại với SC và A2 |
 | e | TTA | Hiểu là A2 (chuẩn hóa thống kê đầu vào), không dùng Tent |
 
@@ -109,7 +109,7 @@ Ngày 07/10/2026. Nguồn chuẩn: `docs/research-proposal-v9-en.md` (repo) và 
 
 | Ngày | Việc | GPU-h |
 |---|---|---|
-| 07–08/10 | Đọc [46]; chọn clip hoặc dải chung; sửa SC + lưu s_ref + test; sửa `stage1_summary`; đăng ký prereg | 0 |
+| 07–08/10 | Chọn clip hoặc dải chung, và danh sách seed cho TTA-EQ; sửa SC + lưu s_ref + test; sửa `stage1_summary`; đăng ký prereg | 0 |
 | 08–10/10 | Sàng lọc P0, P1, P1P3, P4 × 3 fold | ≈ 12 |
 | 10–12/10 | Refit 4 arm × seed 0–4 | ≈ 20 |
 | 12–13/10 | Đóng băng, export; E0; KAUH-A (đối chứng dương, P0 so với AuscultTrust) | < 1 |
@@ -130,3 +130,35 @@ Không thiết kế trung thực nào bảo đảm mọi giả thuyết đúng. 
 | Đầy đủ (31/12) | H1, H2, H3 trên phổi giả với ống nghe thật | Phụ thuộc phần cứng. Đầu thu rẻ giảm rủi ro |
 
 **Rủi ro lớn nhất còn lại:** bằng chứng trên thiết bị thật trước khi có phổi giả chỉ đến từ LODO, mà LODO bị lẫn tỷ lệ lớp. Giảm rủi ro bằng cách đặt mua hoặc tự làm phổi giả và 3 đầu thu ngay trong tháng 10.
+
+## 7. Cập nhật 07/10 (vẫn là v9): đã đọc [46], thêm nhánh TTA-EQ
+
+### 7.1 Những gì [46] (Koo, Kim, Toikkanen, Kim; arXiv 2605.29862v2) thay đổi
+
+| Điểm | Trước | Sau |
+|---|---|---|
+| Đã có LODO công bố chưa | "Chưa thấy" ([Giả định]) | [Fact]: có, nhưng là leave-out thiết bị kiểu federated, chỉ báo Score, 3 seed, không SD. Patch-Mix CL OOD: AKGC 51,32; Meditron 58,81; Yunting 52,88; LittC2SE 56,58; Litt3200 35,90 |
+| Điểm mới của đề tài | Có LODO | Thu hẹp còn 3 điểm: độ phủ/calibration dưới dịch chuyển thiết bị; SC trên thiết bị chưa thấy; giao thức huấn luyện tập trung |
+| Rủi ro SC (R4) | Trung bình | Cao. Trừ trung bình thiết bị (gần với SC) cho OOD tệ hơn FedAvg trên AKGC (32,59 so với 50,26; Sp 11,49) và Yunting (39,04 so với 62,20) |
+| P1P3 | Biến thể | Có thêm lý do: nhiễu loạn phổ ngẫu nhiên (gain + GIN) cho lợi ích OOD lớn nhất trong ablation của [46] |
+| Rủi ro mới R8 | — | SC thua các nhánh ngẫu nhiên. Nếu xảy ra thì báo như một phát hiện; H2 so SC với baseline, không so với nhánh tốt nhất |
+| LODO | 1 giao thức | Thêm giao thức phụ theo [46]: bỏ mọi bệnh nhân dùng nhiều thiết bị; các fold AKGC, Meditron, Littmann gộp; chỉ để tham chiếu. Tốn thêm khoảng 15 GPU-h |
+| Số đếm theo thiết bị | — | Bảng 1 của [46] cộng lại được 7.511 chu kỳ, khác 6.898: thêm lý do phải đếm lại từ tên file |
+
+### 7.2 Nhánh TTA-EQ (trong F5, không phải giả thuyết)
+
+- **Định nghĩa:** trung bình softmax qua K = 8 view; mỗi view qua một gain trơn ngẫu nhiên theo bin, lấy từ phân phối của P3 (6 dB SD), danh sách seed cố định.
+- **Vai trò:** khởi động lạnh. Không cần thông tin thiết bị, chạy được từ bản ghi đầu tiên. SC thì cần biết ranh giới thiết bị và vài bản ghi không nhãn.
+- **Chạy:** đơn lẻ và kết hợp với SC (SC + TTA-EQ), trên P0 và AuscultTrust, ở LODO, KAUH và phổi giả. Chỉ cần suy luận.
+- **Conformal:** điểm hiệu chuẩn tính bằng cùng ensemble K view.
+- **Đo thêm:** độ bất đồng giữa các view làm điểm báo dịch chuyển không cần nhãn. Tương quan hạng với |Δ| chỉ mang tính thăm dò.
+- **Không làm được:** không khử đáp ứng riêng của thiết bị mới. Kỳ vọng: ít đổi nhãn hơn, không phải bảo đảm độ phủ.
+- **Đã loại:** consensus qua nhiều tần số lấy mẫu. Resample chỉ là lọc thông thấp, khác biệt trong dải vẫn nguyên, và không có tác dụng trên dữ liệu 4 kHz như KAUH.
+
+### 7.3 Sửa Google Doc v4 thêm
+
+- **Mục 2:** thêm hàng [46] vào bảng khoảng trống. Đoạn "Nhóm gần nhất" thêm [46] (leave-out thiết bị, chỉ có Score; loại bỏ cố định không ổn định).
+- **Mục 4.3:** thêm giao thức phụ của LODO theo [46].
+- **Mục 4.4:** thêm hàng TTA-EQ và một dòng giải thích vì sao loại phương án nhiều tần số lấy mẫu.
+- **Mục 4.8:** R4 nâng lên Cao; thêm R8.
+- **References [46]:** điền tác giả, bản v2.
