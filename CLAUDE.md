@@ -83,7 +83,7 @@ Run from repo root, imports are `src.*`.
 - Code comments and docs in English.
 
 ## TODO (v9, in dependency order)
-1. Register: choose clip vs common band and the TTA-EQ seed list, then date `docs/prereg-v9-amendment-draft.md`, append it to `docs/prereg-v8.md`, commit before any new Stage-1 run. Recount ICBHI cycles per device from filenames ([8] and [14] disagree on Litt3200/LittC2SE labels).
+1. ~~Register: choose clip vs common band and the TTA-EQ seed list, then date, append and commit~~ — done (`docs/prereg-v9-amendment.md`, 07/10/2026; `sc_mode` decided by CV, not by hand). Still open: recount ICBHI cycles per device from filenames ([8] and [14] disagree on Litt3200/LittC2SE labels).
 2. SC safety: done — `sc_mode` (`dynamic` clip, `static` band) in `util/stage1.py:a1_coefficients` / `limit_coefficients` and `src/shift/correction.py:limit_coefficients`, unit tested (`tests/test_correction.py`). Still open: save s_ref, per-device coefficients and the screened `sc_mode` with every P1 run; add `--sc_mode` to the Stage-1 screen so both values are run per SC arm before picking one (`stage1_summary.py`, TODO 3).
 3. Stage 1 screen + final for P0, P1, P1P3 (`P1P3_sc_gain.json`), P4. Needed first: `stage1_summary.py screen` auto-adds P8 (from the P0 folds) and keeps only top 3 + P0, so P8 can push P4 or an SC arm out. Add a v9 mode: no P8, finalists = every screened arm, write `auscult_trust` = better mean CV Score of P1 / P1P3 (tie: P1) to `stage1_screen.json`.
 4. External-audio inference for the frozen Patch-Mix model: KAUH 8 s windows and phantom clips -> softmax npz, with optional SC from saved s_ref + target spectrum from unlabelled clips (`--sc_n` to cap the number of target recordings, F4).
