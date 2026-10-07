@@ -41,6 +41,8 @@ One question: does spectrum correction (SC) let a benchmark-level lung-sound cla
 - Test 3 phantom [pending]: 1,200 ICBHI official-test cycles replayed per transducer; calibration/test halves and bootstrap by source patient; sweep ratio Y_B/Y_A (no reference sensor); 100-clip remove-and-replace repeat per transducer for the ceiling; conformal calibrated on transducer A clips (phantom-internal, allowed), tested on B clips.
 - Stage 2 excludes the 2 patients that the published official split puts on both sides. ICBHI recording label for the screening view: abnormal if any cycle has a crackle or wheeze.
 
+Arm names in code and configs: P0 = `baseline`, P1 = `sc`, P1+P3 = `sc_gain`, P4 = `freq_mixstyle`; gate G = the non-inferiority check in `summary.py`; Stage 1 = the `train` experiment.
+
 ## Commands
 
 Two envs: analysis/tests `.venv` and training `.venv-train` (Python 3.10, `timm==0.4.5`). Data: `bash scripts/download_data.sh`, `python scripts/prepare_data.py`. Details: `docs/SETUP.md`, `docs/QUICKSTART.md`.
@@ -101,7 +103,7 @@ Run from repo root, imports are `src.*` (`pyproject.toml` sets `pythonpath`).
 
 1. ~~Register: choose clip vs common band and the TTA-EQ seed list, then date, append and commit~~ — done (`docs/prereg-v9-amendment.md`, 07/10/2026; `sc_mode` decided by CV, not by hand). Still open: recount ICBHI cycles per device from filenames ([8] and [14] disagree on Litt3200/LittC2SE labels).
 2. ~~SC safety~~ — done: `sc_mode` bound in `src/processing/correction.py`, `sc_state.npz` (s_ref, per-device spectra and coefficients, `sc_mode`) and `s_ref_sha256` saved with every SC run, `run.sh screen` runs both `sc_mode` values per SC arm.
-3. ~~Stage 1 v9 summary~~ — done (`summary.py`: no P8, finalists = every arm, `auscult_trust`, gate G). Still to run: Stage 1 screen + final for P0, P1, P1P3, P4 (`bash scripts/run.sh`).
+3. ~~Stage 1 summary~~ — done (`summary.py`). Still to run: Stage 1 screen + final (`bash scripts/run.sh`).
 4. External-audio inference for the frozen Patch-Mix model: KAUH 8 s windows and phantom clips -> softmax npz, with optional SC from saved s_ref + target spectrum from unlabelled clips (`--sc_n` to cap the number of target recordings, F4).
 5. Paired invariance metrics in `src/evaluation/shift.py`: flip rate, TV distance, set change rate, patient-paired bootstrap.
 6. Screening view: window -> recording aggregation (mean, max), recording-level labels for ICBHI and KAUH, 2-class conformal, triage counts.
