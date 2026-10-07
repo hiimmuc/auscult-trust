@@ -188,7 +188,11 @@ class ICBHIDataset(Dataset):
             spectra = stage1.device_mean_spectra(by_dev)
             if train_flag:
                 args._a1_ref = spectra
-            coef = stage1.a1_coefficients(spectra, args._a1_ref, getattr(args, 'a1_reference', 'arithmetic'))
+            coef = stage1.a1_coefficients(spectra, args._a1_ref, getattr(args, 'a1_reference', 'arithmetic'),
+                                           getattr(args, 'sc_mode', 'dynamic'),
+                                           getattr(args, 'sc_limit_freq_low', 50.0),
+                                           getattr(args, 'sc_limit_freq_high', 2000.0),
+                                           getattr(args, 'sc_limit_freq_diff', 20.0))
             corr = stage1.import_src('src.shift.correction').apply_spectrum_correction
             self.cycle_list = [(torch.from_numpy(corr(a.numpy()[0], coef[int(m[-1].item())]).astype(np.float32))[None], l, m)
                                for a, l, m in self.cycle_list]

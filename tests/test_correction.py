@@ -1,7 +1,7 @@
 import numpy as np
 
-from src.shift.correction import (apply_spectrum_correction, isa_match, logmel_stats, mean_spectrum, random_bin_gain,
-                                  spectrum_coefficients)
+from src.shift.correction import (apply_spectrum_correction, isa_match, limit_coefficients, logmel_stats,
+                                  mean_spectrum, random_bin_gain, spectrum_coefficients)
 
 
 def _device(waves, g):
@@ -50,3 +50,24 @@ def test_spectrum_reference_arithmetic_vs_geometric():
     ar = spectrum_coefficients(spec, reference="arithmetic")["A"]
     ge = spectrum_coefficients(spec, reference="geometric")["A"]
     assert np.allclose(ar, [2.5, 1.0]) and np.allclose(ge, [2.0, 1.0])
+
+
+def test_dynamic_sc_mode_clips_a_4khz_device_against_a_16khz_reference():
+    # A 4 kHz-band device has ~0 energy above 2 kHz; the raw ratio there blows up (the +-65 dB fact in CLAUDE.md).
+    n_fft, sr = 1024, 16000
+    freqs = np.fft.rfftfreq(n_fft, 1 / sr)
+    s_ref = np.full_like(freqs, 1.0)
+    s_dev = np.where(freqs <= 2000, 1.0, 1e-4)  # no energy above 2 kHz
+    raw = s_ref / np.maximum(s_dev, 1e-8)
+    clipped = limit_coefficients(raw, sc_mode="dynamic", limit_freq_diff=20.0)
+    assert np.all(20 * np.log10(clipped) <= 20.0 + 1e-6)
+    assert 20 * np.log10(raw[freqs > 2000]).max() > 20.0  # confirms the clip actually bound something
+
+
+def test_static_sc_mode_is_a_no_op_outside_the_band():
+    n_fft, sr = 1024, 16000
+    freqs = np.fft.rfftfreq(n_fft, 1 / sr)
+    raw = np.full_like(freqs, 3.0)
+    out = limit_coefficients(raw, sc_mode="static", limit_freq_low=50.0, limit_freq_high=2000.0, sr=sr, n_fft=n_fft)
+    band = (freqs >= 50) & (freqs <= 2000)
+    assert np.allclose(out[band], 3.0) and np.allclose(out[~band], 1.0)

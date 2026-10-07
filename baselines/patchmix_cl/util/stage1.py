@@ -50,6 +50,45 @@ def patient_val_split(patients, frac=0.2, seed=0):
     return np.flatnonzero(~is_val), np.flatnonzero(is_val)
 
 
+def patient_folds(patients, devices, n_folds=3, seed=12345):
+    """Assign every training patient to one of `n_folds` grouped-CV folds, stratified by the patient's main device.
+
+    The assignment depends only on the patient list and `seed`, not on the run seed, so every variant and every seed
+    sees the same folds (paired screening). Devices with few patients (Litt3200 in the official train split) are spread
+    over the folds instead of landing in one.
+
+    Args:
+        patients: (n,) patient id per training cycle.
+        devices: (n,) device id per training cycle.
+        n_folds: Number of folds.
+        seed: RNG seed of the assignment (fixed by default; do not tie it to the run seed).
+
+    Returns:
+        Dict patient id -> fold index in [0, n_folds).
+    """
+    patients, devices = np.asarray(patients), np.asarray(devices)
+    main_dev = {}
+    for p in sorted(set(patients.tolist())):
+        vals, counts = np.unique(devices[patients == p], return_counts=True)
+        main_dev[p] = int(vals[np.argmax(counts)])
+    rng = np.random.default_rng(seed)
+    fold, k = {}, 0
+    for d in sorted(set(main_dev.values())):
+        ids = [p for p in sorted(main_dev) if main_dev[p] == d]
+        rng.shuffle(ids)
+        for p in ids:  # round-robin across devices, so fold sizes stay balanced overall
+            fold[p] = k % n_folds
+            k += 1
+    return fold
+
+
+def cv_split(patients, devices, n_folds, fold):
+    """(train_idx, val_idx) of grouped-CV fold `fold`; disjoint by patient. See `patient_folds`."""
+    assign = patient_folds(patients, devices, n_folds)
+    is_val = np.array([assign[p] == fold for p in np.asarray(patients).tolist()])
+    return np.flatnonzero(~is_val), np.flatnonzero(is_val)
+
+
 def _f1(y, pred, k):
     tp = ((pred == k) & (y == k)).sum()
     p, r = tp / max((pred == k).sum(), 1), tp / max((y == k).sum(), 1)
@@ -100,9 +139,31 @@ def pick_epochs(history, select_metric='score'):
     Returns:
         Dict `last`, `cv_selected`, `test_best_optimistic`, each the history entry of that epoch.
     """
-    key = (lambda h: h['val']['all']['score']) if select_metric == 'score' else (lambda h: worst_device_score(h['val']))
-    return {'last': history[-1], 'cv_selected': max(history, key=key),
-            'test_best_optimistic': max(history, key=lambda h: h['test']['all']['score'])}
+    out = {'last': history[-1]}
+    if history[-1].get('val') is not None:
+        key = (lambda h: h['val']['all']['score']) if select_metric == 'score' else (lambda h: worst_device_score(h['val']))
+        out['cv_selected'] = max(history, key=key)
+    if history[-1].get('test') is not None:
+        out['test_best_optimistic'] = max(history, key=lambda h: h['test']['all']['score'])
+    return out
+
+
+def mean_cv_curve(fold_curves):
+    """Mean over folds of per-epoch validation curves; truncated to the shortest curve.
+
+    Args:
+        fold_curves: List (one per fold) of per-epoch values (epoch 1 first).
+
+    Returns:
+        (n_epochs,) array.
+    """
+    n = min(len(c) for c in fold_curves)
+    return np.mean([np.asarray(c[:n], float) for c in fold_curves], 0)
+
+
+def cv_epoch(fold_curves):
+    """Registered epoch rule: the epoch (1-based) that maximises the mean CV curve; earliest on ties."""
+    return int(np.argmax(mean_cv_curve(fold_curves))) + 1
 
 
 def random_bin_gain_image(image, max_db, rng):
@@ -144,16 +205,29 @@ def device_mean_spectra(waves_by_device, n_fft=1024, hop=512):
     return {d: ms(w, n_fft, hop) for d, w in waves_by_device.items() if len(w)}
 
 
-def a1_coefficients(device_spectra, reference_spectra=None, reference='arithmetic'):
+def a1_coefficients(device_spectra, reference_spectra=None, reference='arithmetic', sc_mode='dynamic',
+                     limit_freq_low=50.0, limit_freq_high=2000.0, limit_freq_diff=20.0, sr=16000, n_fft=1024):
     """P1 coefficients c = s_ref / s_device per device in `device_spectra`.
 
     The reference comes from `reference_spectra` (the training devices; default `device_spectra` itself). Train clips use
     their own (source) device spectra, test clips their own (target) spectra, both against the same train reference.
+
+    `sc_mode`, `limit_freq_low`, `limit_freq_high`, `limit_freq_diff`, `sr`, `n_fft`: registered SC bound
+    (prereg App. B2), matching `src.shift.correction.limit_coefficients`. "dynamic" clips every bin to
+    +-`limit_freq_diff` dB; "static" leaves the [`limit_freq_low`, `limit_freq_high`] Hz band unclipped and
+    zeroes the correction (coefficient = 1) outside it.
     """
     assert reference in ('arithmetic', 'geometric'), reference
+    assert sc_mode in ('dynamic', 'static'), sc_mode
     stack = np.array(list((reference_spectra or device_spectra).values()))
     s_ref = stack.mean(0) if reference == 'arithmetic' else np.exp(np.log(np.maximum(stack, 1e-8)).mean(0))
-    return {d: s_ref / np.maximum(s, 1e-8) for d, s in device_spectra.items()}
+    raw = {d: s_ref / np.maximum(s, 1e-8) for d, s in device_spectra.items()}
+    if sc_mode == 'dynamic':
+        return {d: 10 ** (np.clip(20 * np.log10(np.maximum(c, 1e-8)), -limit_freq_diff, limit_freq_diff) / 20)
+                for d, c in raw.items()}
+    freqs = np.fft.rfftfreq(n_fft, 1 / sr)
+    band = (freqs >= limit_freq_low) & (freqs <= limit_freq_high)
+    return {d: np.where(band, c, 1.0) for d, c in raw.items()}
 
 
 def device_bin_norm(images, device_ids, ref_stats=None):

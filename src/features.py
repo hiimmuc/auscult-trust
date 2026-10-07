@@ -100,7 +100,11 @@ def _device_coefficients(df, cfg):
             raw = {r.wav: load_wav(r.wav)}
         waves_by_device.setdefault(r.device, []).append(cycle_wave(raw[r.wav], r.start, r.end))
     spectra = {d: mean_spectrum(ws, n_fft, hop) for d, ws in waves_by_device.items()}
-    return spectrum_coefficients(spectra, source_devices=cc.get("source_devices"), reference=cc.get("reference", "arithmetic")), n_fft, hop
+    return spectrum_coefficients(
+        spectra, source_devices=cc.get("source_devices"), reference=cc.get("reference", "arithmetic"),
+        sc_mode=cc.get("sc_mode", "dynamic"), limit_freq_low=cc.get("limit_freq_low", 50.0),
+        limit_freq_high=cc.get("limit_freq_high", 2000.0), limit_freq_diff=cc.get("limit_freq_diff", 20.0),
+    ), n_fft, hop
 
 
 def extract(cfg, limit=None):
