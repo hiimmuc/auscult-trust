@@ -51,3 +51,18 @@ Read from the PDFs (Patch-Mix CL 2305.14032, SG-SCL 2312.09603, Lung-SRAD 2606.1
 
 Changed after this check: `encoder_dass.yaml` now sets batch size 16 and tau 0.2 as in Lung-SRAD.
 Reproduction anchor already met: AST + Patch-Mix, 4 seeds, best-on-test Score 59.69 ± 0.51 against 59.46 ± 0.78 in the Patch-Mix CL ablation.
+
+## Cached spectrograms vs the native input of each encoder (2026-10-08)
+
+Spectrograms are computed once per encoder and split (`data/cache/train_images/<encoder>_<split>_...npy`), so each must equal what that encoder saw in pretraining or in its reference code. Checked against the reference code in `repos/`:
+
+| Encoder | Native input (source) | Cached input | Result |
+|---|---|---|---|
+| AST | Kaldi fbank, 128 mel, 10 ms shift, fixed mean -4.2677 / std 4.5690, 8 s = 798 frames (Patch-Mix CL `generate_fbank`) | same | match |
+| DASS | same fbank, but normalised with the mean and std of each cycle (Lung-SRAD `generate_fbank`, every model except AST) | per-cycle normalisation | **fixed**: was the fixed AST constants |
+| HTS-AT | 32 kHz, n_fft 1024, hop 320, 64 mel, 50-14000 Hz, ref 1, amin 1e-10, 10 s AudioSet clips = 1001 frames (`config.py`) | 8 s cycle repeat-padded to 10 s, 1001 frames | **fixed**: was 8 s = 801 frames, stretched to the 1024-frame grid by 1.28 instead of 1.02 |
+| OPERA-CT | 16 kHz, 64 mel, 50-8000 Hz, n_fft 1024, hop 512, power-to-dB, min-max per clip, 8 s repeat pad = 251 frames (`util.py`, `icbhi_processing.py`) | same | match |
+| CLAP | HF `ClapFeatureExtractor`, 48 kHz, 64 mel, repeat-padded to 10 s = 1001 frames | the same extractor | match |
+| HeAR | `audio_utils.preprocess_audio`: 2 s clips, mel-PCEN, 192 x 128 | the same function on four 2 s clips of the 8 s cycle | match |
+
+Consequences: HTS-AT results obtained before the fix (801 frames) are kept in `outputs/train/repro-wave1-htsat801/` and are not used; HTS-AT is rerun. No DASS run existed yet. Mel scale for the random-gain arm: dB-to-image-unit factor is 1 for HTS-AT and CLAP (dB images), 1/80 for OPERA-CT (min-max over an 80 dB range), 1/(2 std) for AST and (approximately) DASS; it is undefined for HeAR (PCEN).
