@@ -24,5 +24,5 @@ export LD_LIBRARY_PATH=$C/lib:$C/targets/x86_64-linux/lib:${LD_LIBRARY_PATH:-}
 SM=$(.venv-dass/bin/python -c "import torch;m,n=torch.cuda.get_device_capability(0);print(f'{m}{n}')")
 BUILD=${TMPDIR:-/tmp}/selective_scan-$USER; rm -rf $BUILD; cp -r ../repos/DASS/kernels/selective_scan $BUILD
 sed -i "65a\\    cc_flag.extend(['-gencode', 'arch=compute_$SM,code=sm_$SM'])" $BUILD/setup.py
-uv pip install --python "$PWD/.venv-dass/bin/python" --no-build-isolation --reinstall $BUILD
+uv pip install --python "$PWD/.venv-dass/bin/python" --no-build-isolation --no-deps --reinstall $BUILD  # --no-deps: do not let the kernel package replace the pinned torch
 echo "kernel built; at run time export LD_LIBRARY_PATH=$C/lib (scripts/run.sh does this for PY=.venv-dass/bin/python)"
