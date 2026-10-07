@@ -17,8 +17,12 @@ uv pip install --python .venv-dass/bin/python $IDX -r requirements-train.lock ni
 
 PYINC=${TMPDIR:-/tmp}/pyinc-$USER
 mkdir -p $PYINC/x86_64-linux-gnu && ln -sfn /usr/include/x86_64-linux-gnu/python3.10 $PYINC/x86_64-linux-gnu/python3.10
-export CUDA_HOME=$C PATH=$C/bin:$PATH CC=$C/bin/x86_64-conda-linux-gnu-gcc CXX=$C/bin/x86_64-conda-linux-gnu-g++ TORCH_CUDA_ARCH_LIST="${TORCH_CUDA_ARCH_LIST:-12.0}"
+export CUDA_HOME=$C PATH=$C/bin:$PATH CC=$C/bin/x86_64-conda-linux-gnu-gcc CXX=$C/bin/x86_64-conda-linux-gnu-g++ TORCH_CUDA_ARCH_LIST="${TORCH_CUDA_ARCH_LIST:-12.0}"  # only used by torch, not by this setup.py
 export CPATH=$PYINC:$C/targets/x86_64-linux/include:$C/include LIBRARY_PATH=$C/lib:$C/targets/x86_64-linux/lib
 export LD_LIBRARY_PATH=$C/lib:$C/targets/x86_64-linux/lib:${LD_LIBRARY_PATH:-}
-(cd ../repos/DASS/kernels/selective_scan && uv pip install --python "$OLDPWD/.venv-dass/bin/python" --no-build-isolation .)
+# the kernel's setup.py hardcodes sm_70/80/90; build from a copy with the GPU's own architecture added (the repo stays untouched)
+SM=$(.venv-dass/bin/python -c "import torch;m,n=torch.cuda.get_device_capability(0);print(f'{m}{n}')")
+BUILD=${TMPDIR:-/tmp}/selective_scan-$USER; rm -rf $BUILD; cp -r ../repos/DASS/kernels/selective_scan $BUILD
+sed -i "65a\\    cc_flag.extend(['-gencode', 'arch=compute_$SM,code=sm_$SM'])" $BUILD/setup.py
+uv pip install --python "$PWD/.venv-dass/bin/python" --no-build-isolation --reinstall $BUILD
 echo "kernel built; at run time export LD_LIBRARY_PATH=$C/lib (scripts/run.sh does this for PY=.venv-dass/bin/python)"
