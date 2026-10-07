@@ -193,7 +193,7 @@ class ICBHIDataset(Dataset):
                                            getattr(args, 'sc_limit_freq_low', 50.0),
                                            getattr(args, 'sc_limit_freq_high', 2000.0),
                                            getattr(args, 'sc_limit_freq_diff', 20.0))
-            corr = stage1.import_src('src.shift.correction').apply_spectrum_correction
+            corr = stage1.import_src('src.processing.correction').apply_spectrum_correction
             self.cycle_list = [(torch.from_numpy(corr(a.numpy()[0], coef[int(m[-1].item())]).astype(np.float32))[None], l, m)
                                for a, l, m in self.cycle_list]
 

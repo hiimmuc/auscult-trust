@@ -1,10 +1,10 @@
 import numpy as np
 import pytest
 
-from src.conformal.conformal import label_shift_threshold, lac_scores, predict_sets, split_threshold
-from src.data.icbhi import parse_name
-from src.data.splits import assert_disjoint, load_split, save_split, split_patients
-from src.eval.metrics import coverage, icbhi_score, patient_bootstrap
+from src.evaluation.conformal import label_shift_threshold, lac_scores, predict_sets, split_threshold
+from src.processing.icbhi import parse_name
+from src.processing.splits import assert_disjoint, load_split, save_split, split_patients
+from src.evaluation.metrics import coverage, icbhi_score, patient_bootstrap
 
 
 def test_parse_name():
@@ -51,7 +51,7 @@ def test_bootstrap_ci_contains_estimate():
 
 def test_device_holdout_official_disjoint_and_seen_flag():
     import pandas as pd
-    from src.data.splits import device_holdout_official, patient_device_crosstab
+    from src.processing.splits import device_holdout_official, patient_device_crosstab
     rows = [("a1", "A", "train"), ("a2", "A", "test"), ("b1", "B", "train"), ("b2", "B", "test"), ("c1", "B", "train"), ("c1", "A", "train")]
     df = pd.DataFrame(rows, columns=["patient", "device", "official"]).assign(stem=lambda d: d.index.astype(str))
     ct = patient_device_crosstab(df)
@@ -63,7 +63,7 @@ def test_device_holdout_official_disjoint_and_seen_flag():
 
 def test_calibration_eval_splits_disjoint_and_stratified_by_device():
     import pandas as pd
-    from src.data.splits import calibration_eval_splits
+    from src.processing.splits import calibration_eval_splits
     # 4 patients on device A, 1 on device B (rare-device edge case: must not crash or drop B).
     df = pd.DataFrame({
         "patient": ["a1", "a2", "a3", "a4", "b1"],
@@ -82,7 +82,7 @@ def test_calibration_eval_splits_disjoint_and_stratified_by_device():
 
 def test_calibration_eval_splits_odd_device_size_is_not_systematically_biased():
     import pandas as pd
-    from src.data.splits import calibration_eval_splits
+    from src.processing.splits import calibration_eval_splits
     df = pd.DataFrame({"patient": [f"p{i}" for i in range(3)], "device": ["A"] * 3})
     splits = calibration_eval_splits(df, n_splits=20, fracs=(0.5, 0.5), seed=0)
     cal_sizes = {len(s["calibration"]) for s in splits}
@@ -90,7 +90,7 @@ def test_calibration_eval_splits_odd_device_size_is_not_systematically_biased():
 
 
 def test_sp_se_hs_macro_f1_by_device():
-    from src.eval.metrics import by_device, hs, icbhi_score, macro_f1, sp_se
+    from src.evaluation.metrics import by_device, hs, icbhi_score, macro_f1, sp_se
     y = np.array([0, 0, 1, 2, 3, 0, 1, 1])
     p = np.array([0, 1, 1, 0, 3, 0, 1, 2])
     sp, se = sp_se(y, p)
@@ -102,7 +102,7 @@ def test_sp_se_hs_macro_f1_by_device():
 
 
 def test_v4_oracle_and_v5_patient_k():
-    from src.conformal.conformal import (kshot_patients_threshold, label_shift_threshold,
+    from src.evaluation.conformal import (kshot_patients_threshold, label_shift_threshold,
                                          oracle_label_shift_threshold)
     rng = np.random.default_rng(0)
     scores, labels = rng.uniform(size=400), rng.integers(0, 2, 400)
@@ -116,7 +116,7 @@ def test_v4_oracle_and_v5_patient_k():
 
 
 def test_e1_coverage_from_export_detects_target_device_shift():
-    from src.conformal.export import e1_coverage
+    from src.evaluation.export import e1_coverage
     rng = np.random.default_rng(0)
     n_pat, per = 40, 12
     dev = np.repeat(np.array(["Meditron"] * 20 + ["AKGC417L"] * 20), per)

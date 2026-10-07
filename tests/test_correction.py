@@ -1,6 +1,6 @@
 import numpy as np
 
-from src.shift.correction import (apply_spectrum_correction, isa_match, limit_coefficients, logmel_stats,
+from src.processing.correction import (apply_spectrum_correction, isa_match, limit_coefficients, logmel_stats,
                                   mean_spectrum, random_bin_gain, spectrum_coefficients)
 
 
@@ -38,7 +38,7 @@ def test_random_bin_gain_is_smooth_per_clip_offset():
 
 
 def test_random_stft_gain_changes_spectrum_keeps_rms():
-    from src.shift.correction import random_stft_gain
+    from src.processing.correction import random_stft_gain
     w = np.random.default_rng(0).normal(size=32000).astype(np.float32)
     y = random_stft_gain(w, 6.0, rng=np.random.default_rng(1))
     assert y.shape == w.shape and np.isclose(np.sqrt(np.mean(y ** 2)), np.sqrt(np.mean(w ** 2)), rtol=1e-3)

@@ -1,6 +1,6 @@
 import numpy as np
 
-from src.eval.shift import coverage_deficit, per_class_coverage, prior_matched_coverage, set_stats
+from src.evaluation.shift import coverage_deficit, per_class_coverage, prior_matched_coverage, set_stats
 
 
 def test_coverage_deficit():

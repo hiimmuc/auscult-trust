@@ -171,7 +171,7 @@ def random_bin_gain_image(image, max_db, rng):
 
     `max_db` is in dB of the raw log-mel; the dataset normalises fbank by 2 * std (std = 4.5689974), so the gain is rescaled.
     """
-    rbg = import_src('src.shift.correction').random_bin_gain
+    rbg = import_src('src.processing.correction').random_bin_gain
     out = rbg(image[..., 0], max_db / (2 * 4.5689974), rng=rng)
     return out[..., None].astype(image.dtype)
 
@@ -200,8 +200,8 @@ def freq_mixstyle(x, p=0.5, alpha=0.1, eps=1e-6):
 
 
 def device_mean_spectra(waves_by_device, n_fft=1024, hop=512):
-    """Mean |STFT| per device (P1 source/target statistics). Delegates to `src.shift.correction`."""
-    ms = import_src('src.shift.correction').mean_spectrum
+    """Mean |STFT| per device (P1 source/target statistics). Delegates to `src.processing.correction`."""
+    ms = import_src('src.processing.correction').mean_spectrum
     return {d: ms(w, n_fft, hop) for d, w in waves_by_device.items() if len(w)}
 
 
@@ -213,7 +213,7 @@ def a1_coefficients(device_spectra, reference_spectra=None, reference='arithmeti
     their own (source) device spectra, test clips their own (target) spectra, both against the same train reference.
 
     `sc_mode`, `limit_freq_low`, `limit_freq_high`, `limit_freq_diff`, `sr`, `n_fft`: registered SC bound
-    (prereg App. B2), matching `src.shift.correction.limit_coefficients`. "dynamic" clips every bin to
+    (prereg App. B2), matching `src.processing.correction.limit_coefficients`. "dynamic" clips every bin to
     +-`limit_freq_diff` dB; "static" leaves the [`limit_freq_low`, `limit_freq_high`] Hz band unclipped and
     zeroes the correction (coefficient = 1) outside it.
     """

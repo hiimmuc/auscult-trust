@@ -12,7 +12,7 @@ from pathlib import Path
 
 import pandas as pd
 
-from src.data.splits import split_patients
+from src.processing.splits import split_patients
 
 FILTERS = {"B": "Bell", "D": "Diaphragm", "E": "Extended"}
 ORDERED_PAIRS = list(permutations(FILTERS.values(), 2))  # 6 (source filter, target filter) pairs
@@ -60,7 +60,7 @@ def partitions(df, n=5, fracs=(0.6, 0.2, 0.2)):
         fracs: Patient fractions for train, cal, test.
 
     Returns:
-        List of split dicts (name -> patient ids) usable with `src.data.splits.split_frames`. All filter
+        List of split dicts (name -> patient ids) usable with `src.processing.splits.split_frames`. All filter
         renderings of a patient fall in one part because the key is the patient id.
     """
     return [split_patients(df.patient, fracs, seed=i, names=("train", "cal", "test")) for i in range(n)]

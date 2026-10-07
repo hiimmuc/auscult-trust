@@ -5,7 +5,7 @@ def test_run_layout(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     monkeypatch.delenv("RUN_ID", raising=False)
     monkeypatch.setenv("RUN_TAG", "demo")
-    from src import runlog
+    from src import runs as runlog
     p = runlog.log_run("exp", "fm+branch", 3, {"a": 1}, "hash", "enc", {"score": 0.5})
     assert p.parts[-4] == "exp"
     assert p.name == "seed3.json" and p.parent.name == "fm+branch"
