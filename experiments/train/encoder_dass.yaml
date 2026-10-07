@@ -1,0 +1,2 @@
+# Encoder: dass (needs PY=.venv-dass/bin/python, see scripts/build_dass_env.sh).
+encoder: dass

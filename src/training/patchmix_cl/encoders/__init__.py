@@ -48,7 +48,12 @@ def _hear():
     return EncoderSpec('hear', (768, 128), None, True, preprocess_hear, build_hear)
 
 
-_FACTORIES = {'ast': _ast, 'htsat': _htsat, 'opera_ct': _opera_ct, 'clap': _clap, 'hear': _hear}
+def _dass():
+    from .dass import DB_SCALE, IMAGE_SHAPE, build_dass, preprocess_dass
+    return EncoderSpec('dass', IMAGE_SHAPE, DB_SCALE, False, preprocess_dass, build_dass)
+
+
+_FACTORIES = {'ast': _ast, 'dass': _dass, 'htsat': _htsat, 'opera_ct': _opera_ct, 'clap': _clap, 'hear': _hear}
 NAMES = list(_FACTORIES)
 
 

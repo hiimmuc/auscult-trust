@@ -18,12 +18,13 @@
 #
 # PARALLEL=N runs N jobs at the same time on the GPU (scripts/sweep.py: a job starts only when MEM_GB of GPU memory is free,
 # default 8). Without it the jobs run one after the other.
-# Environment variables: PY (python of the training env, default .venv-train/bin/python), RUN_ID (default: timestamp),
+# Environment variables: PY (python of the training env, default .venv-train/bin/python; .venv-dass/bin/python for DASS), RUN_ID (default: timestamp),
 # FOLDS (default 3), EXTRA_ARGS (appended to every training call).
 cd "$(dirname "$0")/.." || exit 1
 export RUN_ID=${RUN_ID:-$(date +%Y%m%d-%H%M%S)}
 export PYTHONPATH=. PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
 PY=${PY:-.venv-train/bin/python}
+[[ "$PY" == *venv-dass* ]] && export LD_LIBRARY_PATH=$HOME/miniconda3/envs/cuda128/lib:${LD_LIBRARY_PATH:-}  # DASS kernel runtime libraries
 CONF=experiments/train
 FOLDS=${FOLDS:-3}
 JOBS=$(mktemp)

@@ -52,6 +52,10 @@ fi
 ast=$DATA_DIR/models/ast/pretrained_models/audioset_10_10_0.4593.pth
 [ -f "$ast" ] || fetch "$AST_URL" "$ast"
 
+# DASS weights (medium, AudioSet)
+dass=$DATA_DIR/models/dass/pretrained_models/DASS_medium_v2.pth
+[ -f "$dass" ] || fetch https://github.com/Saurabhbhati/DASS/releases/download/v0.2/DASS_medium_v2.pth "$dass"
+
 # OPERA-CT weights
 opera=$DATA_DIR/models/opera/encoder-operaCT.ckpt
 [ -f "$opera" ] || fetch "https://huggingface.co/evelyn0414/OPERA/resolve/main/encoder-operaCT.ckpt?download=true" "$opera"
@@ -74,6 +78,7 @@ clone https://github.com/RSC-Toolkit/Lung-SRAD Lung-SRAD
 clone https://github.com/microsoft/RespireNet RespireNet
 clone https://github.com/kaen2891/stethoscope-guided_supervised_contrastive_learning SG-SCL
 clone https://github.com/RetroCirce/HTS-Audio-Transformer HTS-Audio-Transformer
+clone https://github.com/Saurabhbhati/DASS DASS  # selective-scan CUDA kernel, see scripts/build_dass_env.sh
 
 if [ "${1:-}" = "--hf-lung" ] && [ ! -d "$DATA_DIR/raw/hf_lung/train" ]; then
   git clone https://gitlab.com/techsupportHF/HF_Lung_V1 "$DATA_DIR/raw/hf_lung_download"
