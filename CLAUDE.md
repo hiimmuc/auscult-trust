@@ -28,7 +28,7 @@ One question: does spectrum correction (SC) let a benchmark-level lung-sound cla
 
 - Official 60/40 split, 4-class primary, 2-class view of the same predictions, Sp/Se/Score/HS per device and pooled, 5 seeds (0-4, same in every arm).
 - Arms: P0 Patch-Mix CL; P1 = P0 + SC (`--a1_input`); P1+P3 = SC + random per-bin gain (6 dB SD); P4 Freq-MixStyle p = 0.5 (competitor). AuscultTrust = P1 or P1+P3 by mean 3-fold CV Score (tie: P1). v8 variants P2, P6, P7, P8, P9 are not candidates; report them in an appendix if run.
-- SC: STFT n_fft 1024, hop 512, 16 kHz; reference = arithmetic mean of training-device mean spectra; `sc_mode` (`--sc_mode`, `src/shift/correction.py:limit_coefficients`): `dynamic` (default) clips every bin to +-20 dB (4 kHz devices have no energy above 2 kHz); `static` leaves 50-2000 Hz unclipped, no-op outside. Not a reported ablation: at CV screening run both, keep the higher mean CV Score per SC arm, tie -> `dynamic`. Device from file name; target-device spectrum from unlabelled clips only.
+- SC: STFT n_fft 1024, hop 512, 16 kHz; reference = arithmetic mean of training-device mean spectra; `sc_mode` (`--sc_mode`, `src/processing/correction.py:limit_coefficients`): `dynamic` (default) clips every bin to +-20 dB (4 kHz devices have no energy above 2 kHz); `static` leaves 50-2000 Hz unclipped, no-op outside. Not a reported ablation: at CV screening run both, keep the higher mean CV Score per SC arm, tie -> `dynamic`. Device from file name; target-device spectrum from unlabelled clips only.
 - Primary result: refit all four arms at their CV epoch (`--selection fixed`), seeds 0-4, test once; seeds 5-9 for P0 and AuscultTrust (gate G). Literature column: best epoch on test, labelled optimistic. Stage-1 SC estimates test-device spectra from unlabelled official-test clips (transductive, as in [3]).
 - Hand-off to Stage 2: frozen checkpoint + SHA-256, saved s_ref and coefficients, exported softmax (`export_probs.py`).
 
@@ -43,21 +43,23 @@ One question: does spectrum correction (SC) let a benchmark-level lung-sound cla
 
 ## Commands
 
-Env uses `uv`: `uv venv .venv && uv pip install -r requirements.txt`.
+Two envs: analysis/tests `.venv` (`uv venv .venv && uv pip install -r requirements.txt`) and training `.venv-train` (Python 3.10, `timm==0.4.5`, `requirements-train.txt`). Details: `docs/SETUP.md`, `docs/QUICKSTART.md`.
 
-- Tests: `uv run --no-project --python .venv/bin/python python -m pytest -q tests` (single: append `tests/test_core.py::test_icbhi_score`). `test_registry_lists_all_encoders...` needs `pytorch_lightning` (OPERA).
-- Stage 1 (v9 core): `bash scripts/run_stage1.sh screen P0_baseline P1_a1_input P1P3_sc_gain P4_freq_mixstyle` then `cd baselines/patchmix_cl && .venv/bin/python stage1_summary.py screen`; `bash scripts/run_stage1.sh final`; `.venv/bin/python stage1_summary.py final` -> `save/stage1_final.md`. Resumable; finished runs are skipped. Single run: `baselines/patchmix_cl/main.py --config <json[,json]> --tag <tag> [--cv_folds 3 --cv_fold k | --selection fixed --report_epochs E]`.
-- Freeze/export: `baselines/patchmix_cl/export_probs.py <run_dir> [--ckpt report_epoch_<E>.pth]` -> softmax, embeddings, `model.sha256`.
-- Phase 0 tools (kept for `report.md`, not extended): encoder ladder `scripts/run_ladder.sh <enc>`, `python -m src.auscult_trust ...`, feature cache `python -m src.features configs/extract_<enc>.yaml`, shift study `src/shift_study.py`, legacy v4 stack `python -m src.legacy.*`.
+- Tests: `uv run --no-project --python .venv/bin/python python -m pytest -q tests` (single: append `tests/test_stage1.py::test_summary_counts_match_metrics`).
+- Stage 1 (v9 core), one campaign = one `RUN_ID`: `bash scripts/run_stage1.sh screen`, `summary`, `final`, `report` (see the script header). Resumable: same `RUN_ID` skips finished units and resumes interrupted ones from `last.pth`. Single unit: `PYTHONPATH=. .venv-train/bin/python -m src.training.patchmix_cl.main --config experiments/stage1/base.yaml,experiments/stage1/<arm>.yaml [--cv_folds 3 --cv_fold k | --selection fixed --report_epochs E] --seed S`.
+- Freeze/export: `python -m src.training.patchmix_cl.export_probs <outputs unit dir> --ckpt report_epoch_<E>.pth` -> softmax, embeddings, `export/model.sha256`.
+- Phase 0 tools (encoder ladder, shift study, legacy v4 stack, feature cache) are in `../archive/auscult-trust-phase0` (original layout: `git checkout pre-restructure`); not extended.
 - CPU-heavy extraction: prefix `OMP_NUM_THREADS=4 OPENBLAS_NUM_THREADS=4`.
 
 ## Code map
 
-Run from repo root, imports are `src.*`.
+Run from repo root, imports are `src.*` (`pyproject.toml` sets `pythonpath`).
 
-- Stage 1: `baselines/patchmix_cl/` (patched copy of Patch-Mix CL): `main.py` (selection cv/test/fixed, `--cv_folds`, variant flags), `util/icbhi_dataset.py` (P1 SC on the waveform, P2, P7), `util/stage1.py` (per-device metrics, folds, `a1_coefficients`, `pick_epochs`, `cv_epoch`), `stage1_summary.py` (screen ranking, final table, paired CIs, expected-max optimism), `export_probs.py`. Variant configs: `configs/stage1_variants/`.
-- Stage 2: `src/shift/correction.py` (A1 SC, A2 ISA, random bin gain), `src/conformal/conformal.py` (V1, V5 in patients, V4-oracle; V2/V3/V4 kept, not core), `src/eval/shift.py` (coverage deficit, prior-matched coverage, set stats, binomial CI), `src/eval/metrics.py` (Sp/Se/HS/macro-F1 per device), `src/data/kauh.py` (loader, ordered filter pairs, `rotation_partitions`, `windows`), `src/data/splits.py` (`device_holdout_official`, `calibration_eval_splits`).
-- Phase 0 only: `src/encoders/`, `src/features.py`, `src/auscult_trust/` (ladder), `src/features_handcrafted.py`, decodability/MMD in `src/eval/shift.py`, `src/legacy/`.
+- `src/paths.py` (REPO, DATA = `$AT_DATA` or `../data`, OUTPUTS, CHECKPOINTS), `src/runs.py` (run directories `outputs|checkpoints/<exp>/<run_id>/<cell>/<unit>/`, `meta.json`, `sha256_file`, `twin_dir`).
+- `src/processing/`: `icbhi.py` (cycle table, `DEVICES`), `kauh.py` (loader, ordered filter pairs, `rotation_partitions`, `windows`), `audio.py`, `splits.py` (`device_holdout_official`, `calibration_eval_splits`, `patient_val_split`, `patient_folds`, `cv_split`), `correction.py` (SC: `spectrum_coefficients`, `reference_spectrum`, `limit_coefficients`; A2 `isa_match`; `random_bin_gain`).
+- `src/training/patchmix_cl/` (patched Patch-Mix CL, AST only): `config.py` (CLI + YAML), `dataset.py` (cycles, SC on the waveform, loaders), `cycles.py`, `augment.py` (SpecAugment, P3, P4), `modeling.py`, `engine.py`, `optim.py`, `losses.py`, `models/` (AST, projector), `main.py`, `reporting.py` (per-device percent report, `pick_epochs`, `cv_epoch`), `summary.py` (screen/final tables, gate G), `export_probs.py`.
+- `src/evaluation/`: `metrics.py` (Sp/Se/HS/macro-F1 per device, `by_device`), `shift.py` (coverage deficit, prior-matched coverage, set stats, binomial CI), `conformal.py` (LAC, V1 split, V5 k-shot in patients, V4-oracle), `export.py` (Stage 2 reader of the softmax export).
+- `experiments/stage1/`: `base.yaml` + arm files (`P0_baseline`, `P1_a1_input`, `P1P3_sc_gain`, `P4_freq_mixstyle`, override `sc_static`).
 - Docstrings: Google style.
 
 ## Data tiers (hard rules)
@@ -85,8 +87,9 @@ Run from repo root, imports are `src.*`.
 
 ## Working conventions
 
-- `../repos/*` is read-only reference. Never edit, build, or write results there. Patched copies go in `baselines/`.
-- Results: `<exp>` = config stem, `<cell>` = variant, `run_id` = `YYYYMMDD-HHMMSS[_$RUN_TAG]`, or a fixed `RUN_ID` for resumable pipelines.
+- `../repos/*` is read-only reference. Never edit, build, or write results there. Patched copies go under `src/training/`.
+- Results: `outputs|checkpoints/<exp>/<run_id>/<cell>/<unit>/`; `<exp>` = experiment (`stage1`), `<cell>` = variant (config stems joined by `+`, no `base`), `<unit>` = `cv<k>` or `seed<s>`, `run_id` = `YYYYMMDD-HHMMSS[_$RUN_TAG]` or a `RUN_ID` set to resume one campaign. Never write elsewhere, never reuse a unit with another config.
+- Frozen Phase 0 code lives in `../archive`; the wrapper holds `../data`, `../repos`, `../docs`.
 - Install a missing package before reaching for a workaround.
 - Simplest change that works. No speculative abstractions.
 - Do not modify `data/raw/` or committed split files.
@@ -97,12 +100,12 @@ Run from repo root, imports are `src.*`.
 ## TODO (v9, in dependency order)
 
 1. ~~Register: choose clip vs common band and the TTA-EQ seed list, then date, append and commit~~ — done (`docs/prereg-v9-amendment.md`, 07/10/2026; `sc_mode` decided by CV, not by hand). Still open: recount ICBHI cycles per device from filenames ([8] and [14] disagree on Litt3200/LittC2SE labels).
-2. SC safety: done — `sc_mode` (`dynamic` clip, `static` band) in `util/stage1.py:a1_coefficients` / `limit_coefficients` and `src/shift/correction.py:limit_coefficients`, unit tested (`tests/test_correction.py`). Still open: save s_ref, per-device coefficients and the screened `sc_mode` with every P1 run; add `--sc_mode` to the Stage-1 screen so both values are run per SC arm before picking one (`stage1_summary.py`, TODO 3).
-3. Stage 1 screen + final for P0, P1, P1P3 (`P1P3_sc_gain.json`), P4. Needed first: `stage1_summary.py screen` auto-adds P8 (from the P0 folds) and keeps only top 3 + P0, so P8 can push P4 or an SC arm out. Add a v9 mode: no P8, finalists = every screened arm, write `auscult_trust` = better mean CV Score of P1 / P1P3 (tie: P1) to `stage1_screen.json`.
+2. ~~SC safety~~ — done: `sc_mode` bound in `src/processing/correction.py`, `sc_state.npz` (s_ref, per-device spectra and coefficients, `sc_mode`) and `s_ref_sha256` saved with every SC run, `run_stage1.sh screen` runs both `sc_mode` values per SC arm.
+3. ~~Stage 1 v9 summary~~ — done (`summary.py`: no P8, finalists = every arm, `auscult_trust`, gate G). Still to run: Stage 1 screen + final for P0, P1, P1P3, P4 (`bash scripts/run_stage1.sh`).
 4. External-audio inference for the frozen Patch-Mix model: KAUH 8 s windows and phantom clips -> softmax npz, with optional SC from saved s_ref + target spectrum from unlabelled clips (`--sc_n` to cap the number of target recordings, F4).
-5. Paired invariance metrics in `src/eval/shift.py`: flip rate, TV distance, set change rate, patient-paired bootstrap.
+5. Paired invariance metrics in `src/evaluation/shift.py`: flip rate, TV distance, set change rate, patient-paired bootstrap.
 6. Screening view: window -> recording aggregation (mean, max), recording-level labels for ICBHI and KAUH, 2-class conformal, triage counts.
-7. LODO split over all recordings (`device_holdout_all` in `src/data/splits.py` and a `--holdout_device` path in `baselines/patchmix_cl`): a patient with any held-out-device recording leaves training and calibration; calibration carve-out 20% stratified by device. H2 statistic: prior-matched |Δ|, two-level bootstrap with recalibration, null gate from 200 exchangeable re-splits.
+7. LODO split over all recordings (`device_holdout_all` in `src/processing/splits.py` and a `--holdout_device` path in `src/training/patchmix_cl`): a patient with any held-out-device recording leaves training and calibration; calibration carve-out 20% stratified by device. H2 statistic: prior-matched |Δ|, two-level bootstrap with recalibration, null gate from 200 exchangeable re-splits.
 8. KAUH B2 with the frozen model: calibrate on the other 4 rotation groups (current `rotation_partitions` gives a single group as `cal`, about 22 patients: add a variant), test target filter of the held-out group.
 9. A2 at test time on fbank for the frozen model (per-mel-bin mean/SD of target mapped to training statistics). TTA-EQ at test time: reuse `random_bin_gain` (P3) to draw K views, average softmax, store per-view probs for the disagreement score; same ensemble for calibration and test. LODO secondary split matching [46] (`device_holdout_all(..., drop_multi_device=True)`, pooled-Littmann fold).
 10. Phantom capture and analysis scripts (sweep ratio, clip-half gain, ceiling, explained fraction) once hardware is fixed.

@@ -1,19 +1,34 @@
 # auscult-trust
 
-Code for the lung-sound device-shift study (KHKT 2026–2027). Spec: `../docs/research-proposal-AB-gain-decomposition-v7-en.md`. Rules for working in this repo: `CLAUDE.md`. Published reference numbers: `../docs/papers/anchors.md`. Results of the archived v4 experiments: `report.md`.
+AuscultTrust: spectrum correction (SC) + AST (Patch-Mix CL recipe) + split-conformal layer for lung-sound classification
+under stethoscope shift (KHKT 2026-2027). Main line: proposal v9, `docs/research-proposal-v9-en.md`; pre-registration
+`docs/prereg-v8.md` + `docs/prereg-v9-amendment.md`. Working rules: `CLAUDE.md`. Setup: `docs/SETUP.md`, run: `docs/QUICKSTART.md`.
 
-Question: what fraction of stethoscope-induced shift in log-mel features is a per-frequency gain, and does correcting it restore conformal coverage?
+Question: does SC let a benchmark-level lung-sound classifier keep its predictions and its conformal coverage when the
+stethoscope changes, without labels from the new stethoscope?
 
-## Pipeline
+## Layout
 
+```text
+src/
+  paths.py, runs.py        repo/data locations; run directories (outputs|checkpoints/<exp>/<run_id>/<cell>/<unit>)
+  processing/              ICBHI/KAUH loaders, patient-disjoint splits, spectrum correction (SC, A2, random bin gain)
+  training/patchmix_cl/    Stage 1: config, dataset, model, engine, main, export_probs, summary
+  evaluation/              metrics, coverage/shift metrics, conformal layer, Stage 2 export reader
+experiments/stage1/        YAML: base recipe + one file per arm
+scripts/                   run_stage1.sh, migrate_legacy_layout.py
+tests/  notebooks/  docs/  data/ (README only)  checkpoints/ (gitignored)  outputs/ (gitignored)
 ```
-data/        icbhi.py (cycle table), kauh.py, splits.py (patient-disjoint split files), audio.py
-encoders/    one interface for OPERA-CT, OPERA-CE, AST, CLAP, HeAR: wave -> (32, D) frames per cached layer
-features.py  cache of layers (+ tokens for ViT encoders) per encoder: python -m src.features configs/extract_<enc>.yaml
-auscult_trust/  ladder rungs on cached features: L0 probe, L1 head, L2 last-k blocks, L3 LoRA; ConformalLayer
-conformal/ eval/ shift/   conformal V1-V5, metrics, shift metrics, gain corrections A1/A2
-legacy/      archived v4 branch/phase stack (not extended)
+
+Next to the repo (wrapper directory, not versioned): `data/`, `repos/` (read-only reference repos), `docs/` (proposals), `archive/`
+(Phase 0 code, see `archive/README.md`).
+
+## Quick commands
+
+```bash
+uv venv .venv && uv pip install -r requirements.txt             # analysis, tests, Stage 2
+uv run --no-project --python .venv/bin/python python -m pytest -q tests
+bash scripts/run_stage1.sh screen        # Stage 1 screening, then: summary, final, report
 ```
 
-Run the ladder for one encoder (resumable): `bash scripts/run_ladder.sh opera_ct|opera_ce|clap|ast|hear`.
-Tests: `uv run --no-project --python .venv/bin/python python -m pytest -q tests`.
+Every run is a new `run_id` directory; nothing is overwritten (`src/runs.py`).

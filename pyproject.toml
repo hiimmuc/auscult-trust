@@ -1,0 +1,16 @@
+[project]
+name = "auscult-trust"
+version = "0.9.0"
+description = "AuscultTrust: spectrum correction + split conformal for lung-sound classification under stethoscope shift"
+requires-python = ">=3.10"
+dynamic = ["dependencies"]
+
+[tool.setuptools.dynamic]
+dependencies = { file = ["requirements.txt"] }
+
+[tool.setuptools.packages.find]
+include = ["src*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]

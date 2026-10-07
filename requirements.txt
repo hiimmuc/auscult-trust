@@ -1,22 +1,14 @@
+# Analysis and Stage 2 environment (Python >= 3.10): uv venv .venv && uv pip install -r requirements.txt
+# torch: the RTX/GTX drivers here are CUDA 12.8, so use the cu128 build:
+# uv pip install "torch==2.9.1+cu128" torchvision torchaudio --index-url https://download.pytorch.org/whl/cu128 --extra-index-url https://pypi.org/simple --index-strategy unsafe-best-match
 numpy
 scipy
 pandas
 scikit-learn
 pyyaml
-# torch: GTX 1660 Ti driver is CUDA 12.8, so use the cu128 build:
-# uv pip install "torch==2.9.1+cu128" --index-url https://download.pytorch.org/whl/cu128 --extra-index-url https://pypi.org/simple --index-strategy unsafe-best-match
-torch
-pytest
-pytorch-lightning
-efficientnet-pytorch
-torchlibrosa
-timm
 librosa
 soundfile
-huggingface_hub
-transformers
-torchaudio  # same cu128 build as torch; needed by AST/CLAP feature extractors
-peft
-openpyxl
-matplotlib  # only baselines/opera_bench (OPERA benchmark code imports it)
-seaborn
+torch
+torchvision
+torchaudio
+pytest
