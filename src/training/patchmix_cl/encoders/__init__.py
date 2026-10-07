@@ -30,7 +30,7 @@ def _ast():
 
 def _htsat():
     from .swin import build_htsat, preprocess_htsat
-    return EncoderSpec('htsat', (801, 64), 1.0, False, preprocess_htsat, build_htsat)
+    return EncoderSpec('htsat', (1001, 64), 1.0, False, preprocess_htsat, build_htsat)
 
 
 def _opera_ct():

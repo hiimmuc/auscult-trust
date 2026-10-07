@@ -24,6 +24,7 @@ OPERA_HTSAT = REPOS / "OPERA" / "src" / "model" / "htsat"
 HTSAT_AUDIOSET = DATA / "models" / "htsat" / "AudioSet" / "HTSAT_AudioSet_Saved_1.ckpt"
 OPERA_CT = DATA / "models" / "opera" / "encoder-operaCT.ckpt"
 FEATURE_DIM = 768
+CLIP_SAMPLES = 160000  # 10 s at 16 kHz
 
 
 @lru_cache(maxsize=1)
@@ -102,7 +103,12 @@ def _htsat_frontend():
 
 
 def preprocess_htsat(wave):
-    """(1, N) 16 kHz waveform -> (time, 64, 1) log-mel as the HTS-AT authors compute it (32 kHz, hop 320)."""
+    """(1, N) 16 kHz waveform -> (1001, 64, 1) log-mel as the HTS-AT authors compute it (32 kHz, hop 320, 10 s clips).
+
+    AudioSet clips are 10 s, so the 8 s cycle is repeat-padded to 10 s; otherwise the network would stretch 801 frames to its
+    1024-frame grid instead of the 1001 it was pretrained with.
+    """
+    wave = torch.cat([wave, wave[:, :CLIP_SAMPLES - wave.shape[1]]], 1) if wave.shape[1] < CLIP_SAMPLES else wave[:, :CLIP_SAMPLES]
     spec, mel = _htsat_frontend()
     with torch.no_grad():
         out = mel(

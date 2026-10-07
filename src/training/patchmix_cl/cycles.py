@@ -89,20 +89,14 @@ def individual_cycles(annotations, data_folder, filename, args):
     return out
 
 
-def generate_fbank(audio, sample_rate, n_mels=128):
-    """Kaldi fbank of AST, normalised; shape (time, n_mels, 1) numpy."""
-    assert sample_rate == 16000, "input audio sampling rate must be 16kHz"
-    device = (
-        "cuda" if torch.cuda.is_available() else "cpu"
-    )  # the same maths on the GPU, much faster than 4000 cycles on the CPU
-    fbank = torchaudio.compliance.kaldi.fbank(
-        audio.to(device),
-        htk_compat=True,
-        sample_frequency=sample_rate,
-        use_energy=False,
-        window_type="hanning",
-        num_mel_bins=n_mels,
-        dither=0.0,
-        frame_shift=10,
-    )
-    return ((fbank - FBANK_MEAN) / (FBANK_STD * 2)).unsqueeze(-1).cpu().numpy()
+def generate_fbank(audio, sample_rate, n_mels=128, per_sample_norm=False):
+    """Kaldi fbank of AST, normalised; shape (time, n_mels, 1) numpy.
+
+    AST uses fixed training-set constants; DASS (Lung-SRAD) normalises each cycle with its own mean and std.
+    """
+    assert sample_rate == 16000, 'input audio sampling rate must be 16kHz'
+    device = 'cuda' if torch.cuda.is_available() else 'cpu'  # the same maths on the GPU, much faster than 4000 cycles on the CPU
+    fbank = torchaudio.compliance.kaldi.fbank(audio.to(device), htk_compat=True, sample_frequency=sample_rate, use_energy=False,
+                                              window_type='hanning', num_mel_bins=n_mels, dither=0.0, frame_shift=10)
+    mean, std = (fbank.mean(), fbank.std()) if per_sample_norm else (FBANK_MEAN, FBANK_STD)
+    return ((fbank - mean) / (std * 2)).unsqueeze(-1).cpu().numpy()

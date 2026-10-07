@@ -1,6 +1,6 @@
 """DASS (distilled audio state-space model, VMamba medium) from the Lung-SRAD repository, with its Patch-Mix.
 
-Same input as AST (798 x 128 Kaldi fbank). The network is the Lung-SRAD one with the Gaussian blur blocks switched off, so
+Same shape as AST (798 x 128 Kaldi fbank) but normalised per cycle, as Lung-SRAD does for DASS. The network is the Lung-SRAD one with the Gaussian blur blocks switched off, so
 this is plain DASS; its own 2-D Patch-Mix (the AST-equivalent token swap) is used, like for the other encoders.
 Needs the selective-scan CUDA kernel and runs in the separate `.venv-dass` (CUDA 12.8 build, see docs/SETUP.md).
 Weights: DASS_medium_v2.pth (AudioSet) in `<data>/models/dass/pretrained_models/`.
@@ -76,7 +76,8 @@ def build_dass(args):
 
 
 def preprocess_dass(wave):
-    return generate_fbank(wave, 16000, n_mels=IMG_MEL)
+    return generate_fbank(wave, 16000, n_mels=IMG_MEL, per_sample_norm=True)  # as in Lung-SRAD for every model but AST
 
 
+# ponytail: the per-cycle std varies a little around FBANK_STD, so the dB scale of the random gain is approximate for DASS
 IMAGE_SHAPE, DB_SCALE = (IMG_TIME, IMG_MEL), 1 / (2 * FBANK_STD)

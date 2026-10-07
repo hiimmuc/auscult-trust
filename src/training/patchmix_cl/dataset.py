@@ -92,13 +92,7 @@ class ICBHIDataset(Dataset):
     def _cache_paths(self):
         a = self.args
         stem = "{}_{}_{}cls_{}s_{}_{}hz_{}mel".format(
-            "ast" if a.encoder == "dass" else a.encoder,  # DASS reads the same fbank as AST
-            self.split,
-            a.n_cls,
-            a.desired_length,
-            a.pad_types,
-            a.sample_rate,
-            a.n_mels,
+            a.encoder, self.split, a.n_cls, a.desired_length, a.pad_types, a.sample_rate, a.n_mels
         )
         return CACHE / (stem + ".npy"), CACHE / (stem + ".meta.npz")
 

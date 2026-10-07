@@ -39,6 +39,16 @@ def finished(cmd):
     return Path("outputs/train", os.environ.get("RUN_ID", "sweep"), cell.group(1), unit, "report.json").exists()
 
 
+def running_elsewhere(cmd):
+    """True when a process of another scheduler (or a shell) is already training this unit."""
+    cell, seed, fold = (re.search(p, cmd) for p in (r"--cell (\S+)", r"--seed (\d+)", r"--cv_fold (\d+)"))
+    if not cell:
+        return False
+    flag = f"--cv_fold {fold.group(1)}" if fold and "--cv_folds" in cmd else f"--seed {seed.group(1) if seed else 0}"
+    ps = subprocess.run(["ps", "-eo", "args"], capture_output=True, text=True).stdout
+    return any("patchmix_cl.main" in l and f"--cell {cell.group(1)} " in l and re.search(re.escape(flag) + r"( |$)", l) for l in ps.splitlines())
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("jobs")
@@ -51,8 +61,8 @@ def main():
     ap.add_argument("--num-workers", type=int, default=4, help="data loader workers per job")
     a = ap.parse_args()
     jobs = [(i, line.strip()) for i, line in enumerate(Path(a.jobs).read_text().splitlines()) if line.strip()]
-    queue = [(i, cmd, 0) for i, cmd in jobs if not finished(cmd)]
-    print(f"{len(jobs)} jobs, {len(jobs) - len(queue)} already finished, {len(queue)} to run", flush=True)
+    queue = [(i, cmd, 0) for i, cmd in jobs if not finished(cmd) and not running_elsewhere(cmd)]
+    print(f"{len(jobs)} jobs, {len(jobs) - len(queue)} finished or running elsewhere, {len(queue)} to run", flush=True)
     tag = os.environ.get("SWEEP_TAG", "")  # distinguishes a second scheduler of the same RUN_ID
     log_dir = Path("logs") / (os.environ.get("RUN_ID", "sweep") + tag)
     log_dir.mkdir(parents=True, exist_ok=True)
@@ -71,7 +81,7 @@ def main():
                 else:
                     failed.append(i)
                     print(f"job {i}: FAILED, see {log_dir / f'{i}.log'}", flush=True)
-        while queue and finished(queue[0][1]):  # finished by another scheduler in the meantime
+        while queue and (finished(queue[0][1]) or running_elsewhere(queue[0][1])):  # taken over by someone else meanwhile
             queue.pop(0)
         if queue and len(running) < a.workers and time.time() - last_start > a.ramp and free_gb() >= a.mem_gb and free_ram_gb() >= a.ram_gb:
             i, cmd, tries = queue.pop(0)
