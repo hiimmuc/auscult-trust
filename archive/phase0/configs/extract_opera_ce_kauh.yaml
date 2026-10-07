@@ -1,6 +1,0 @@
-# KAUH 8 s windows (resumable): python -m src.features configs/extract_opera_ce_kauh.yaml
-dataset: kauh
-kauh_root: ../data/raw/kauh
-cache_root: ../data/cache
-name: opera_ce_feat_kauh
-encoder: opera_ce

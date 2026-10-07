@@ -1,7 +1,0 @@
-# Same for HeAR (ViT-L, 24 blocks): python -m src.features configs/extract_hear.yaml
-icbhi_root: ../data/raw/icbhi/ICBHI_final_database
-cache_root: ../data/cache
-name: hear_feat
-encoder: hear
-keep_layers: [4, 8, 12, 16, 20, 24]
-token_layer: 20       # tokens cached after block 20: blocks 21-24 can be fine-tuned (up to 4)

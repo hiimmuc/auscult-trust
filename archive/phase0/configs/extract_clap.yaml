@@ -1,5 +1,0 @@
-# Last-layer frames of frozen CLAP audio tower (HTS-AT, 768-d) (resumable): python -m src.features configs/extract_clap.yaml
-icbhi_root: ../data/raw/icbhi/ICBHI_final_database
-cache_root: ../data/cache
-name: clap_htsat_feat
-encoder: clap_htsat
