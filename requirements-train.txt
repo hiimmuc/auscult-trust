@@ -3,6 +3,8 @@
 # Install torch / torchvision / torchaudio with the cu128 build first (see requirements.txt).
 timm==0.4.5
 wget  # imported by the reference AST module
+transformers  # CLAP and HeAR
+torchlibrosa  # HTS-AT network of the OPERA repository
 numpy
 scipy
 pandas

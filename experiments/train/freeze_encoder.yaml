@@ -1,2 +1,3 @@
-# Frozen pretrained encoder: only the classifier and projector are trained. Combine as an extra file, e.g. baseline.yaml,freeze_encoder.yaml.
+# Frozen pretrained encoder: only the classifier and projector are trained (new parts: higher learning rate).
 freeze_encoder: true
+learning_rate: 1.0e-3

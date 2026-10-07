@@ -14,7 +14,6 @@ from_sl_official: true
 audioset_pretrained: true
 method: patchmix_cl
 temperature: 0.06
-proj_dim: 768
 alpha: 1.0
 mix_beta: 1.0
 selection: cv

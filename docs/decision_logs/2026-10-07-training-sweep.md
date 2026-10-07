@@ -21,7 +21,10 @@
 ## Cost [Interpretation, measured on one RTX 5000 Ada]
 AST fine-tune: about 1 h per seed (50 epochs, test scored every epoch); frozen AST: about 20 min. Full grid = 6 encoders x 2 methods x 4 arms x 2 modes x 5 seeds = 480 runs, roughly 400-500 GPU-hours before LODO: not feasible as one sweep. Proposed order: AST first (done end to end), then add one encoder at a time; Patch-Mix only for baseline and the best arm; the three arms on all encoders only with Patch-Mix CL.
 
-## Encoder readiness
+## Encoder readiness (updated)
+Done and smoke-tested (1 epoch, screening fold): AST, HTS-AT (fine-tune), OPERA-CT, CLAP, HeAR (frozen only, as decided). Each encoder in `src/training/patchmix_cl/encoders/` has its own spectrogram front end and Patch-Mix on its patch tokens (HTS-AT, OPERA-CT: HTS-AT Swin network of the OPERA repository; CLAP: HF audio tower; HeAR: four 2 s clips per cycle). Frozen mode: no gradients through the encoder, eval mode, learning rate 1e-3 for the new parts. HeAR weights are used from the local cache (account not on the gated list). DASS still open. Old notes below.
+
+## Encoder readiness (earlier)
 - AST: ready (reference code). Patch-Mix, Patch-Mix CL, frozen mode work (smoke tested).
 - DASS: needs the DASS selective-scan CUDA kernel built with CUDA 12.8 (nvcc here is 13.0) and the v0.2 checkpoints; Lung-SRAD code in `repos/Lung-SRAD`.
 - HTS-AT / CLAP / OPERA-CT: checkpoints in `data/models/{htsat,opera}`; Swin-style windows need a Patch-Mix adaptation (not in the reference code).

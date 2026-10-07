@@ -2,7 +2,7 @@
 # Download every public dataset and model file the project needs into the data directory
 # (DATA_DIR, default ../data next to the repo; same as AT_DATA in src/paths.py). Already complete files are skipped.
 #
-#   bash scripts/download_data.sh            ICBHI, KAUH, AST weights, reference repositories
+#   bash scripts/download_data.sh            ICBHI, KAUH, encoder weights, reference repositories
 #   bash scripts/download_data.sh --hf-lung  also HF_Lung_V1 (large; only needed for the archived early experiments)
 #
 # Sources
@@ -10,7 +10,10 @@
 #       official site https://bhichallenge.med.auth.gr (its certificate has expired, so the zip is verified by md5),
 #       mirror https://dataverse.harvard.edu/dataset.xhtml?persistentId=doi:10.7910/DVN/HT6PKI (also on Kaggle)
 #   KAUH lung sounds (Fraiwan et al.), Mendeley Data jwyy9np4gv version 3: Audio Files.zip, Data annotation.xlsx
-#   AST AudioSet weights (mAP 0.4593) from the AST authors
+#   Encoder weights: AST AudioSet (AST authors), OPERA-CT (Hugging Face evelyn0414/OPERA), CLAP (laion/clap-htsat-unfused) and
+#       HeAR (google/hear-pytorch, gated: request access on its Hugging Face page and run `hf auth login` first) into
+#       DATA_DIR/models/huggingface; HTS-AT AudioSet weights are a manual download (Google Drive folder of the HTS-AT authors,
+#       https://drive.google.com/drive/folders/1f5VYMk0uos_YnuBshgmaTVioXbs7Kmz6) to DATA_DIR/models/htsat/AudioSet/
 #   HF_Lung_V1: https://gitlab.com/techsupportHF/HF_Lung_V1 (git clone, then unzip train and test)
 # Then run: python scripts/prepare_data.py
 set -euo pipefail
@@ -49,9 +52,28 @@ fi
 ast=$DATA_DIR/models/ast/pretrained_models/audioset_10_10_0.4593.pth
 [ -f "$ast" ] || fetch "$AST_URL" "$ast"
 
-# Reference repositories (read-only; Patch-Mix CL provides the model, the loss and the official ICBHI split)
+# OPERA-CT weights
+opera=$DATA_DIR/models/opera/encoder-operaCT.ckpt
+[ -f "$opera" ] || fetch "https://huggingface.co/evelyn0414/OPERA/resolve/main/encoder-operaCT.ckpt?download=true" "$opera"
+
+# CLAP and HeAR through the Hugging Face hub (HeAR needs an authorised account; skipped with a message otherwise)
+hub=$DATA_DIR/models/huggingface/hub
+HF=${HF:-hf}
+$HF download laion/clap-htsat-unfused --cache-dir "$hub" > /dev/null || echo "CLAP download failed"
+$HF download google/hear-pytorch --cache-dir "$hub" > /dev/null || echo "HeAR download failed: request access at https://huggingface.co/google/hear-pytorch and run 'hf auth login'"
+[ -f "$DATA_DIR/models/htsat/AudioSet/HTSAT_AudioSet_Saved_1.ckpt" ] || echo "HTS-AT weights missing: download HTSAT_AudioSet_Saved_1.ckpt (link in the header) to DATA_DIR/models/htsat/AudioSet/"
+
+# Reference repositories (read-only): Patch-Mix CL (model, loss, official ICBHI split), OPERA (HTS-AT network), HeAR (preprocessing),
+# Lung-SRAD (DASS), RespireNet and SG-SCL (baselines), HTS-AT
 mkdir -p "$REPOS_DIR"
-[ -d "$REPOS_DIR/patch-mix_contrastive_learning" ] || git clone https://github.com/raymin0223/patch-mix_contrastive_learning "$REPOS_DIR/patch-mix_contrastive_learning"
+clone() { [ -d "$REPOS_DIR/$2" ] || git clone "$1" "$REPOS_DIR/$2"; }
+clone https://github.com/raymin0223/patch-mix_contrastive_learning patch-mix_contrastive_learning
+clone https://github.com/evelyn0414/OPERA OPERA
+clone https://github.com/Google-Health/hear hear
+clone https://github.com/RSC-Toolkit/Lung-SRAD Lung-SRAD
+clone https://github.com/microsoft/RespireNet RespireNet
+clone https://github.com/kaen2891/stethoscope-guided_supervised_contrastive_learning SG-SCL
+clone https://github.com/RetroCirce/HTS-Audio-Transformer HTS-Audio-Transformer
 
 if [ "${1:-}" = "--hf-lung" ] && [ ! -d "$DATA_DIR/raw/hf_lung/train" ]; then
   git clone https://gitlab.com/techsupportHF/HF_Lung_V1 "$DATA_DIR/raw/hf_lung_download"

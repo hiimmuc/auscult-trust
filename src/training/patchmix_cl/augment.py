@@ -8,7 +8,6 @@ import numpy as np
 import torch
 
 from src.processing.correction import random_bin_gain
-from .cycles import FBANK_STD
 
 
 class SpecAugment(torch.nn.Module):
@@ -16,7 +15,7 @@ class SpecAugment(torch.nn.Module):
 
     Masks are filled with the image mean. Input (channel, time, freq), output the same shape.
     """
-    F, M_F, T, M_T, P = 48, 2, 160, 2, 1.0  # max mask widths, mask counts, application probability
+    F, M_F, T, M_T, P = 48, 2, 160, 2, 1.0  # max mask widths for a 128-mel x 798-frame image, mask counts, application probability
 
     @staticmethod
     def _mask(mel, axis, max_width, count):
@@ -34,16 +33,19 @@ class SpecAugment(torch.nn.Module):
     def forward(self, img):
         mel = img.transpose(2, 1)  # (channel, freq, time)
         if self.P >= torch.randn(1):
-            mel = self._mask(self._mask(mel, 1, self.F, self.M_F), 2, self.T, self.M_T)
+            # widths scale with the image so that every encoder's spectrogram is masked in the same proportion
+            mel = self._mask(self._mask(mel, 1, self.F * mel.shape[1] / 128, self.M_F), 2, self.T * mel.shape[2] / 798, self.M_T)
         return mel.transpose(2, 1)
 
 
-def random_bin_gain_image(image, max_db, rng):
-    """P3: smooth random per-mel-bin gain on a (time, mel, 1) dataset image, in normalised units.
+def random_bin_gain_image(image, max_db, db_scale, rng):
+    """Smooth random per-mel-bin gain on a (time, mel, 1) dataset image.
 
-    `max_db` is in dB of the raw log-mel; the dataset normalises fbank by 2 * std, so the gain is rescaled.
+    `max_db` is the gain SD in dB of the raw log-mel; `db_scale` converts dB to the units of the image (encoder specific).
     """
-    out = random_bin_gain(image[..., 0], max_db / (2 * FBANK_STD), rng=rng)
+    if db_scale is None:
+        raise ValueError('random gain needs an encoder whose image is a log-mel')
+    out = random_bin_gain(image[..., 0], max_db * db_scale, rng=rng)
     return out[..., None].astype(image.dtype)
 
 

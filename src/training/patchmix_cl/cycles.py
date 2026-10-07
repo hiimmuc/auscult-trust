@@ -11,6 +11,7 @@ import torchaudio
 from torchaudio import transforms as T
 
 FBANK_MEAN, FBANK_STD = -4.2677393, 4.5689974  # AST normalisation of the Kaldi fbank
+IMG_TIME, IMG_MEL = 798, 128  # AST fbank of an 8 s cycle
 FADE_RATIO = 16  # fade length = sample_rate / FADE_RATIO
 
 

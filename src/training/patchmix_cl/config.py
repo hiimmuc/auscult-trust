@@ -11,6 +11,7 @@ import yaml
 
 from src.paths import DATA
 from src.processing.icbhi import CLASSES
+from .encoders import NAMES, get_encoder
 
 EXP = 'train'
 
@@ -76,6 +77,7 @@ def build_parser():
     # model (AST) and loss
     p.add_argument('--from_sl_official', action='store_true', help='start from the ImageNet-pretrained DeiT weights')
     p.add_argument('--audioset_pretrained', action='store_true', help='start from the AudioSet-pretrained AST weights')
+    p.add_argument('--encoder', type=str, default='ast', choices=NAMES, help='backbone; opera_ct, clap and hear are frozen-only')
     p.add_argument('--freeze_encoder', action='store_true', help='train only the classifier and projector, not the pretrained encoder')
     p.add_argument('--ma_update', action='store_true', help='moving-average update of the weights')
     p.add_argument('--ma_beta', type=float, default=0.0)
@@ -118,6 +120,7 @@ def parse_args(argv=None):
         assert args.cv_folds == 0, 'fixed refit trains on all training patients; do not combine with --cv_folds'
     if args.cv_folds:
         assert args.selection == 'cv' and 0 <= args.cv_fold < args.cv_folds
+    assert args.freeze_encoder or not get_encoder(args.encoder).frozen_only, '{} is only trained with a frozen encoder (add freeze_encoder.yaml)'.format(args.encoder)
     args.lr_decay_epochs = [int(e) for e in args.lr_decay_epochs.split(',')]
     args.cls_list = CLASSES if args.n_cls == 4 else ['normal', 'abnormal']
     if args.warm:

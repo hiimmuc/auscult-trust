@@ -13,9 +13,8 @@ from src.processing.correction import apply_spectrum_correction, mean_spectrum, 
 from src.processing.icbhi import DEVICES
 from src.processing.splits import cv_split, patient_val_split
 from .augment import SpecAugment, random_bin_gain_image
-from .cycles import generate_fbank, individual_cycles, read_annotations
-
-IMG_TIME, IMG_MEL = 798, 128  # fbank of an 8 s cycle
+from .cycles import individual_cycles, read_annotations
+from .encoders import get_encoder
 
 
 class ICBHIDataset(Dataset):
@@ -47,8 +46,9 @@ class ICBHIDataset(Dataset):
         if self.sc:
             audio = self.sc.pop('audio')
 
-        self.images = [generate_fbank(a, args.sample_rate, n_mels=args.n_mels) for a in audio]
-        assert self.images[0].shape == (IMG_TIME, IMG_MEL, 1), self.images[0].shape
+        self.encoder = get_encoder(args.encoder)
+        self.images = [self.encoder.preprocess(a) for a in audio]
+        assert self.images[0].shape == (*self.encoder.image_shape, 1), self.images[0].shape
         if print_flag:
             counts = np.bincount(self.labels, minlength=args.n_cls)
             print('[{} dataset] {} cycles, {}'.format(self.split, len(self.labels), ', '.join(
@@ -73,7 +73,7 @@ class ICBHIDataset(Dataset):
     def __getitem__(self, index):
         image = self.images[index]
         if self.train_flag and self.args.random_gain_db > 0:  # P3
-            image = random_bin_gain_image(image, self.args.random_gain_db, np.random.default_rng(random.getrandbits(32)))
+            image = random_bin_gain_image(image, self.args.random_gain_db, self.encoder.db_scale, np.random.default_rng(random.getrandbits(32)))
         if self.transform is not None:
             image = self.transform(image)
         return image, self.labels[index], self.devices[index]

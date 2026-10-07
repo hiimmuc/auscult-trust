@@ -1,4 +1,5 @@
 """One training epoch and one evaluation pass."""
+import contextlib
 import sys
 import time
 from copy import deepcopy
@@ -11,15 +12,22 @@ from .optim import AverageMeter, accuracy, update_moving_average, warmup_learnin
 from .reporting import per_device_report
 
 
+def _encoder_context(args):
+    """A frozen encoder runs without gradients (saves memory); a trained one with."""
+    return torch.no_grad() if args.freeze_encoder else contextlib.nullcontext()
+
+
 def train_epoch(loader, model, classifier, projector, criterion, optimizer, epoch, args, scaler):
     """One epoch of Patch-Mix CL (or CE) training. Returns (mean loss, mean top-1 accuracy)."""
     model.train(), classifier.train(), projector.train()
+    if args.freeze_encoder:
+        model.eval()  # frozen encoder: no batch-norm statistics update, no dropout
     batch_time, losses, top1 = AverageMeter(), AverageMeter(), AverageMeter()
     end = time.time()
     for idx, (images, labels, _) in enumerate(loader):
-        if args.ma_update:  # state before the step, for the moving average
+        if args.ma_update:  # state before the step, for the moving average (a frozen encoder does not change)
             with torch.no_grad():
-                ma_state = [deepcopy(m.state_dict()) for m in (model, classifier, projector)]
+                ma_state = [None if m is model and args.freeze_encoder else deepcopy(m.state_dict()) for m in (model, classifier, projector)]
         images, labels = images.cuda(non_blocking=True), labels.cuda(non_blocking=True)
         bsz = labels.shape[0]
         if args.freq_mixstyle > 0:
@@ -28,11 +36,13 @@ def train_epoch(loader, model, classifier, projector, criterion, optimizer, epoc
 
         with torch.cuda.amp.autocast():
             if args.method == 'patchmix':
-                mix_images, labels_a, labels_b, lam, _ = model(images, y=labels, patch_mix=True, time_domain=args.time_domain)
+                with _encoder_context(args):
+                    mix_images, labels_a, labels_b, lam, _ = model(images, y=labels, patch_mix=True, time_domain=args.time_domain)
                 output = classifier(mix_images)
                 loss = criterion[1](output, labels_a, labels_b, lam)
             else:
-                features = model(images)
+                with _encoder_context(args):
+                    features = model(images)
                 output = classifier(features)
                 loss = criterion[0](output, labels)
             if args.method == 'patchmix_cl':
@@ -44,7 +54,8 @@ def train_epoch(loader, model, classifier, projector, criterion, optimizer, epoc
                     proj1 = projector(features).detach().clone()
                 else:  # project_flow
                     proj1 = projector(features)
-                mix_images, _, labels_b, lam, index = model(images, y=labels, patch_mix=True, time_domain=args.time_domain)
+                with _encoder_context(args):
+                    mix_images, _, labels_b, lam, index = model(images, y=labels, patch_mix=True, time_domain=args.time_domain)
                 proj2 = projector(mix_images)
                 loss += args.alpha * criterion[1](proj1, proj2, labels, labels_b, lam, index, args)
 
@@ -59,7 +70,8 @@ def train_epoch(loader, model, classifier, projector, criterion, optimizer, epoc
 
         if args.ma_update:
             with torch.no_grad():
-                update_moving_average(args.ma_beta, model, ma_state[0])
+                if ma_state[0] is not None:
+                    update_moving_average(args.ma_beta, model, ma_state[0])
                 update_moving_average(args.ma_beta, classifier, ma_state[1])
                 update_moving_average(args.ma_beta, projector, ma_state[2])
 
