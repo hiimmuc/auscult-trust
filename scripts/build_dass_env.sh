@@ -37,6 +37,10 @@ SM=$($PY -c "import torch;m,n=torch.cuda.get_device_capability(0);print(f'{m}{n}
 export TORCH_CUDA_ARCH_LIST="${SM:0:-1}.${SM: -1}"
 BUILD=${TMPDIR:-/tmp}/selective_scan-$USER; rm -rf $BUILD; cp -r ../repos/DASS/kernels/selective_scan $BUILD
 sed -i "65a\\    cc_flag.extend(['-gencode', 'arch=compute_$SM,code=sm_$SM'])" $BUILD/setup.py
-[ "$CUDA_TAG" = cu130 ] && sed -i '/compute_70/d' $BUILD/setup.py  # CUDA 13 dropped Volta (sm_70)
+if [ "$CUDA_TAG" = cu130 ]; then
+  sed -i '/compute_70/d' $BUILD/setup.py  # CUDA 13 dropped Volta (sm_70)
+  # CUDA 13's CUB lost LaneId() and CTA_SYNC(); the kernel uses 1-D thread blocks, so the lane is threadIdx.x % 32
+  sed -i 's/cub::LaneId()/(threadIdx.x \& 31)/; s/cub::CTA_SYNC()/__syncthreads()/' $BUILD/csrc/selective_scan/reverse_scan.cuh
+fi
 uv pip install --python $PY --no-build-isolation --reinstall-package selective-scan $BUILD
 $PY -c "import torch,torchvision,selective_scan_cuda_oflex;print('torch',torch.__version__,'torchvision',torchvision.__version__,'kernel ok')"
