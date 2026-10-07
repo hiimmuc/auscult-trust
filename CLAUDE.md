@@ -5,9 +5,26 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Status
 Main line: **proposal v9** (`docs/research-proposal-v9-en.md`, 07/10/2026). Registered title (fixed): *Nghiên cứu giải pháp cải thiện độ tin cậy của mô hình phân loại âm thanh phổi dưới sự dịch chuyển thiết bị bằng hiệu chỉnh phổ và dự đoán Conformal cho hỗ trợ sàng lọc bệnh đường hô hấp*. v8 and earlier (A+B, H, v4) are superseded; their results stay in `report.md` as Phase 0.
 Pre-registration: `docs/prereg-v8.md`, amended 07/10/2026 (`docs/prereg-v9-amendment.md`, appended to the end of `prereg-v8.md`; registered, no Stage-1 run preceded it).
+Vietnamese write-ups (Google Docs, outside the repo; v9 is the source of truth): **v5 technical report** (full design, IDs P/H/G/F allowed) and **v5 summary report** (about 15 pages for the school committee, no IDs, results left blank). Both are proposal-only: Phase 0 numbers were removed and will be re-run. `docs/v9-change-list-vi.md` maps the old Google Doc v4 to v9; its timeline (§5) is outdated.
 Data in `../data/raw/`: ICBHI (920 wav, 6898 cycles, 126 patients), HF_Lung_V1 (9765 wav, not used in v9 core), KAUH (336 wav = 112 patients x 3 filters). Reference repos in `../repos` (read-only): OPERA, patch-mix_contrastive_learning, SG-SCL.
 Model name: **AuscultTrust** = SC front end + AST (Patch-Mix CL recipe) + split-conformal layer (cycle 4-class view + recording-level screening view).
-Dates: school round 17/10/2026 (10-min talk + poster, results report required); research cut-off 31/01/2027.
+
+## Timeline
+Research period 01/09/2026 to 31/01/2027 (cut-off). School round runs 17/09 to 10/10/2026; the talk (with stage report) is on **10/10/2026**.
+
+| ID | Date | Milestone |
+|---|---|---|
+| M0 | 09/10/2026 | Registration done; stage report ready; s_ref exported with checkpoints; `stage1_summary` v9 mode |
+| M1 | 10/10/2026 | School-round talk: design, reproduced baseline, Stage 2 plan |
+| M2 | 31/10/2026 | Stage 1 complete: screen 4 arms x both `sc_mode`; refit seeds 0-4; seeds 5-9 (gate G); F1; freeze + export; E0; KAUH-A |
+| M3 | 15/11/2026 | Stage 2 code: LODO splits (main and [46]-matched), screening view, KAUH B2, A2 and TTA-EQ at test time, H2 null simulation |
+| M4 | 30/11/2026 | Stage 2 on public data: LODO 4 folds x 5 seeds, KAUH A/B/C, H2 on ICBHI, F2-F5; phantom and >= 3 transducers ready |
+| M5 | 31/12/2026 | Phantom: recordings; H1, H2 (co-primary), H3 |
+| M6 | 31/01/2027 | Final report, negative results included |
+
+- If Stage 1 is not done by 31/10: AuscultTrust = P1, P1P3 and P4 become ablations.
+- **Open conflict:** the registered fallback "if P1P3 is not screened by 10/10, AuscultTrust = P1" falls on the talk date. Leave it unless the user decides; moving the date needs a dated prereg amendment before the first screen run.
+- `docs/research-proposal-v9-en.md` §5.9 R7 and §7 M0-M6 still carry the old dates (school round 17/10): update to the table above.
 
 ## Project (v9)
 One question: does spectrum correction (SC) let a benchmark-level lung-sound classifier keep its predictions and its conformal coverage when the stethoscope changes, without labels from the new stethoscope?
@@ -33,21 +50,21 @@ One question: does spectrum correction (SC) let a benchmark-level lung-sound cla
 - E0 reference: official-test patients split into calibration/evaluation halves, stratified by device, 20 re-splits (`calibration_eval_splits`).
 - Test 1 LODO: hold out all recordings of one device (Meditron, LittC2SE, Litt3200, AKGC417L); train on the rest minus 20% calibration patients (stratified by device); a patient with any recording on the held-out device leaves training and calibration (their held-out-device recordings stay in test); recipe and epoch count frozen from Stage 1; 5 seeds. AKGC417L fold is class-mix dominated (training keeps at most 321 of 1,864 crackle cycles): report, flag, add a macro mean without it. Arms: P0, P4, AuscultTrust (trained); P0 + test-time SC, TTA-EQ on P0 and AuscultTrust (inference only). Secondary protocol matching [46] (reference only): every multi-device patient removed; folds AKGC417L, Meditron, pooled Littmann.
 - Test 2 KAUH, frozen Stage-1 model, no KAUH training. A: paired invariance across Bell/Diaphragm/Extended (flip rate, TV distance, set change) = positive control. B1: ICBHI threshold (E0 calibration halves) applied per filter (deployment check, F3). B2: 5-fold patient rotation, calibrate on source-filter recordings of the other 4 groups, test target filter of the held-out group, 6 ordered pairs = positive control. C: A and B again with SC (target spectrum per filter from unlabelled recordings) and with A2.
-- Test 3 phantom [pending]: 1,200 ICBHI official-test cycles replayed per transducer; calibration/test halves and bootstrap by source patient; sweep ratio Y_B/Y_A (no reference sensor); 100-clip remove-and-replace repeat per transducer for the ceiling; conformal calibrated on transducer A clips (phantom-internal, allowed), tested on B clips.
+- Test 3 phantom [pending]: 1,200 ICBHI official-test cycles replayed per transducer; calibration/test halves and bootstrap by source patient; sweep ratio Y_B/Y_A (no reference sensor); 100-clip remove-and-replace repeat per transducer for the ceiling; conformal calibrated on transducer A clips (phantom-internal, allowed), tested on B clips. Low-cost transducers count (electret in a stethoscope tube, phone adapter, piezo contact mic, borrowed electronic stethoscope); filter modes of one stethoscope do not. Material budget about 3.2-5.0 million VND (estimates, see v5 reports).
 - Stage 2 excludes the 2 patients that the published official split puts on both sides. ICBHI recording label for the screening view: abnormal if any cycle has a crackle or wheeze.
 
 ## Commands
 Env uses `uv`: `uv venv .venv && uv pip install -r requirements.txt`.
 - Tests: `uv run --no-project --python .venv/bin/python python -m pytest -q tests` (single: append `tests/test_core.py::test_icbhi_score`). `test_registry_lists_all_encoders...` needs `pytorch_lightning` (OPERA).
-- Stage 1 (v9 core): `bash scripts/run_stage1.sh screen P0_baseline P1_a1_input P1P3_sc_gain P4_freq_mixstyle` then `cd baselines/patchmix_cl && .venv/bin/python stage1_summary.py screen`; `bash scripts/run_stage1.sh final`; `.venv/bin/python stage1_summary.py final` -> `save/stage1_final.md`. Resumable; finished runs are skipped. Single run: `baselines/patchmix_cl/main.py --config <json[,json]> --tag <tag> [--cv_folds 3 --cv_fold k | --selection fixed --report_epochs E]`.
+- Stage 1 (v9 core): `bash scripts/run_stage1.sh screen P0_baseline P1_a1_input P1P3_sc_gain P4_freq_mixstyle` then `cd baselines/patchmix_cl && .venv/bin/python stage1_summary.py screen`; `bash scripts/run_stage1.sh final`; `.venv/bin/python stage1_summary.py final` -> `save/stage1_final.md`. Resumable; finished runs are skipped. Single run: `baselines/patchmix_cl/main.py --config <json[,json]> --tag <tag> [--cv_folds 3 --cv_fold k | --selection fixed --report_epochs E] [--sc_mode dynamic|static --sc_limit_freq_low 50 --sc_limit_freq_high 2000 --sc_limit_freq_diff 20]`.
 - Freeze/export: `baselines/patchmix_cl/export_probs.py <run_dir> [--ckpt report_epoch_<E>.pth]` -> softmax, embeddings, `model.sha256`.
 - Phase 0 tools (kept for `report.md`, not extended): encoder ladder `scripts/run_ladder.sh <enc>`, `python -m src.auscult_trust ...`, feature cache `python -m src.features configs/extract_<enc>.yaml`, shift study `src/shift_study.py`, legacy v4 stack `python -m src.legacy.*`.
 - CPU-heavy extraction: prefix `OMP_NUM_THREADS=4 OPENBLAS_NUM_THREADS=4`.
 
 ## Code map
 Run from repo root, imports are `src.*`.
-- Stage 1: `baselines/patchmix_cl/` (patched copy of Patch-Mix CL): `main.py` (selection cv/test/fixed, `--cv_folds`, variant flags), `util/icbhi_dataset.py` (P1 SC on the waveform, P2, P7), `util/stage1.py` (per-device metrics, folds, `a1_coefficients`, `pick_epochs`, `cv_epoch`), `stage1_summary.py` (screen ranking, final table, paired CIs, expected-max optimism), `export_probs.py`. Variant configs: `configs/stage1_variants/`.
-- Stage 2: `src/shift/correction.py` (A1 SC, A2 ISA, random bin gain), `src/conformal/conformal.py` (V1, V5 in patients, V4-oracle; V2/V3/V4 kept, not core), `src/eval/shift.py` (coverage deficit, prior-matched coverage, set stats, binomial CI), `src/eval/metrics.py` (Sp/Se/HS/macro-F1 per device), `src/data/kauh.py` (loader, ordered filter pairs, `rotation_partitions`, `windows`), `src/data/splits.py` (`device_holdout_official`, `calibration_eval_splits`).
+- Stage 1: `baselines/patchmix_cl/` (patched copy of Patch-Mix CL): `main.py` (selection cv/test/fixed, `--cv_folds`, variant flags, `--sc_mode` and limits), `util/icbhi_dataset.py` (P1 SC on the waveform, P2, P7), `util/stage1.py` (per-device metrics, folds, `a1_coefficients` with `sc_mode`, `pick_epochs`, `cv_epoch`), `stage1_summary.py` (screen ranking, final table, paired CIs, expected-max optimism), `export_probs.py`. Variant configs: `configs/stage1_variants/`.
+- Stage 2: `src/shift/correction.py` (A1 SC with `limit_coefficients`, A2 ISA, random bin gain), `src/conformal/conformal.py` (V1, V5 in patients, V4-oracle; V2/V3/V4 kept, not core), `src/eval/shift.py` (coverage deficit, prior-matched coverage, set stats, binomial CI), `src/eval/metrics.py` (Sp/Se/HS/macro-F1 per device), `src/data/kauh.py` (loader, ordered filter pairs, `rotation_partitions`, `windows`), `src/data/splits.py` (`device_holdout_official`, `calibration_eval_splits`).
 - Phase 0 only: `src/encoders/`, `src/features.py`, `src/auscult_trust/` (ladder), `src/features_handcrafted.py`, decodability/MMD in `src/eval/shift.py`, `src/legacy/`.
 - Docstrings: Google style.
 
@@ -67,7 +84,7 @@ Run from repo root, imports are `src.*`.
 ## Experiment rules
 - >= 5 seeds for trained arms, same seeds across arms (paired). Report mean +- SD. A gain smaller than seed SD is not a result.
 - Report Sp, Se, Score, HS per device and pooled; coverage, |coverage - nominal|, set size, singleton and empty-set rate; flip rate and TV distance for paired-device data. Compare coverage with the binomial CI of nominal for the actual test size.
-- Patient-level bootstrap for CIs (1,000), paired across SC/no-SC on the same resampled patients. Never cycle-level. Phantom: clip bootstrap.
+- Patient-level bootstrap for CIs (1,000), paired across SC/no-SC on the same resampled patients. Never cycle-level. Phantom: bootstrap by source patient.
 - Log config, seed, data hash, checkpoint hash, s_ref hash for every run.
 - Tune on grouped CV over training patients. Never on test. Test-selected numbers only in the labelled literature column.
 - Negative results are kept and reported.
@@ -80,16 +97,17 @@ Run from repo root, imports are `src.*`.
 - Do not modify `data/raw/` or committed split files.
 - Do not invent dataset statistics, citations, or results. Mark unknowns as TODO.
 - Claims in docs use tags: [Fact], [Interpretation], [Hypothesis], [Assumption], [Pending].
-- Code comments and docs in English.
+- Code comments and repo docs in English. Vietnamese reports: natural academic Vietnamese, English technical terms kept verbatim; proposal-only (no Phase 0 results); figures as Python charts, workflows as mermaid; summary report uses no IDs and refers to sections as "mục ...".
 
 ## TODO (v9, in dependency order)
-1. ~~Register: choose clip vs common band and the TTA-EQ seed list, then date, append and commit~~ — done (`docs/prereg-v9-amendment.md`, 07/10/2026; `sc_mode` decided by CV, not by hand). Still open: recount ICBHI cycles per device from filenames ([8] and [14] disagree on Litt3200/LittC2SE labels).
-2. SC safety: done — `sc_mode` (`dynamic` clip, `static` band) in `util/stage1.py:a1_coefficients` / `limit_coefficients` and `src/shift/correction.py:limit_coefficients`, unit tested (`tests/test_correction.py`). Still open: save s_ref, per-device coefficients and the screened `sc_mode` with every P1 run; add `--sc_mode` to the Stage-1 screen so both values are run per SC arm before picking one (`stage1_summary.py`, TODO 3).
-3. Stage 1 screen + final for P0, P1, P1P3 (`P1P3_sc_gain.json`), P4. Needed first: `stage1_summary.py screen` auto-adds P8 (from the P0 folds) and keeps only top 3 + P0, so P8 can push P4 or an SC arm out. Add a v9 mode: no P8, finalists = every screened arm, write `auscult_trust` = better mean CV Score of P1 / P1P3 (tie: P1) to `stage1_screen.json`.
+0. Update `docs/research-proposal-v9-en.md` dates (R7, §7) to the Timeline above. Decide the 10/10 P1P3 fallback (keep, or amend before the first screen run).
+1. Recount ICBHI cycles per device from filenames ([8] and [14] disagree on Litt3200/LittC2SE labels; [46] Tab. 1 sums to 7,511).
+2. Save s_ref, per-device coefficients and the screened `sc_mode` with every P1 run; run both `sc_mode` values per SC arm at screening (`sc_mode` itself is done and unit tested in `tests/test_correction.py`).
+3. Stage 1 screen + final for P0, P1, P1P3 (`P1P3_sc_gain.json`), P4. Needed first: `stage1_summary.py screen` auto-adds P8 (from the P0 folds) and keeps only top 3 + P0, so P8 can push P4 or an SC arm out. Add a v9 mode: no P8, finalists = every screened arm, `sc_mode` chosen per SC arm, write `auscult_trust` = better mean CV Score of P1 / P1P3 (tie: P1) to `stage1_screen.json`. Also: in CV, s_ref is computed including validation-fold patients (small leak; fix or document).
 4. External-audio inference for the frozen Patch-Mix model: KAUH 8 s windows and phantom clips -> softmax npz, with optional SC from saved s_ref + target spectrum from unlabelled clips (`--sc_n` to cap the number of target recordings, F4).
 5. Paired invariance metrics in `src/eval/shift.py`: flip rate, TV distance, set change rate, patient-paired bootstrap.
 6. Screening view: window -> recording aggregation (mean, max), recording-level labels for ICBHI and KAUH, 2-class conformal, triage counts.
 7. LODO split over all recordings (`device_holdout_all` in `src/data/splits.py` and a `--holdout_device` path in `baselines/patchmix_cl`): a patient with any held-out-device recording leaves training and calibration; calibration carve-out 20% stratified by device. H2 statistic: prior-matched |Δ|, two-level bootstrap with recalibration, null gate from 200 exchangeable re-splits.
 8. KAUH B2 with the frozen model: calibrate on the other 4 rotation groups (current `rotation_partitions` gives a single group as `cal`, about 22 patients: add a variant), test target filter of the held-out group.
 9. A2 at test time on fbank for the frozen model (per-mel-bin mean/SD of target mapped to training statistics). TTA-EQ at test time: reuse `random_bin_gain` (P3) to draw K views, average softmax, store per-view probs for the disagreement score; same ensemble for calibration and test. LODO secondary split matching [46] (`device_holdout_all(..., drop_multi_device=True)`, pooled-Littmann fold).
-10. Phantom capture and analysis scripts (sweep ratio, clip-half gain, ceiling, explained fraction) once hardware is fixed.
+10. Phantom: order materials in October; capture and analysis scripts (sweep ratio, clip-half gain, ceiling, explained fraction) once hardware is fixed.
