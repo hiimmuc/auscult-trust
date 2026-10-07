@@ -11,6 +11,7 @@
 #   bash scripts/run.sh final              retrain every arm on all training patients at its chosen epoch and score on
 #                                          the test set: seeds 0-9 for baseline and AuscultTrust, 0-4 for the others
 #   bash scripts/run.sh report             final table and non-inferiority check -> outputs/train/RUN_ID/final.md
+#   RUN_ID=<id> PARALLEL=3 bash scripts/run.sh resume   after a crash or reboot: runs the same jobs again, skipping finished units
 #   bash scripts/run.sh reproduce [cell ...]   published protocol for comparison with the papers: official split, 5 seeds
 #                                          (0-4), the epoch with the best test Score is kept (optimistic, as in the papers);
 #                                          a cell is arm files joined by '+', e.g. baseline, baseline+patchmix,
@@ -27,7 +28,9 @@ PY=${PY:-.venv-train/bin/python}
 [[ "$PY" == *venv-dass* ]] && export LD_LIBRARY_PATH=/usr/local/cuda-13.0/lib64:$HOME/miniconda3/envs/cuda128/lib:${LD_LIBRARY_PATH:-}  # DASS kernel runtime libraries (CUDA 13.0 or the conda 12.8 build)
 CONF=experiments/train
 FOLDS=${FOLDS:-3}
-JOBS=$(mktemp)
+mkdir -p logs/$RUN_ID
+JOBS=logs/$RUN_ID/jobs-${1:-all}.txt  # kept on disk: `resume` runs every jobs-*.txt of this RUN_ID again
+[ "$1" = resume ] || : > "$JOBS"
 SC_ARMS="sc sc_gain"
 mode=$1; shift
 echo "run: $RUN_ID  (continue or resume this campaign with RUN_ID=$RUN_ID)"
@@ -41,7 +44,7 @@ train() {  # train <cell> <extra args...>; cell parts joined by '+' map to exper
 }
 
 run_queued() {  # in PARALLEL mode: run the collected jobs concurrently
-  [ -n "$PARALLEL" ] && $PY scripts/sweep.py "$JOBS" --workers "$PARALLEL" --mem-gb "${MEM_GB:-8}"
+  [ -n "$PARALLEL" ] && $PY scripts/sweep.py "$JOBS" --workers "$PARALLEL" --mem-gb "${MEM_GB:-8}" --ram-gb "${RAM_GB:-6}"
 }
 
 case $mode in
@@ -81,6 +84,9 @@ PYEOF
       done
     done
     run_queued ;;
+  resume)  # run the jobs of every earlier parallel invocation of this RUN_ID again; finished units are skipped
+    cat logs/$RUN_ID/jobs-*.txt | grep -v '^$' | awk '!seen[$0]++' > logs/$RUN_ID/jobs-resume.txt
+    JOBS=logs/$RUN_ID/jobs-resume.txt; PARALLEL=${PARALLEL:-3}; run_queued ;;
   report) $PY -m src.training.patchmix_cl.summary final --run "$RUN_ID" ;;
-  *) echo "usage: bash scripts/run.sh screen [arm ...] | summary | final | report | reproduce [cell ...]  (details in the file header)"; exit 1 ;;
+  *) echo "usage: bash scripts/run.sh screen [arm ...] | summary | final | report | reproduce [cell ...] | resume  (details in the file header)"; exit 1 ;;
 esac

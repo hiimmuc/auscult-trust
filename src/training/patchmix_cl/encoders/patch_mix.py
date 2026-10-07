@@ -1,4 +1,5 @@
 """Patch-Mix for any token-based encoder, with the semantics of the reference AST implementation (time_domain=False)."""
+
 import numpy as np
 import torch
 
@@ -17,7 +18,7 @@ def mix_patches(tokens, target, mix_beta):
     lam = np.random.beta(mix_beta, mix_beta) if mix_beta > 0 else 1
     batch, num_patch, _ = tokens.shape
     index = torch.randperm(batch).to(tokens.device)
-    num_mask = int(num_patch * (1. - lam))
+    num_mask = int(num_patch * (1.0 - lam))
     mask = torch.randperm(num_patch)[:num_mask].to(tokens.device)
     tokens = tokens.clone()
     tokens[:, mask, :] = tokens[index][:, mask, :]

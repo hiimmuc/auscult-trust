@@ -97,15 +97,18 @@ def _htsat_frontend():
         top_db=None,
         freeze_parameters=True,
     )
-    return spec.eval(), mel.eval()
+    device = "cuda" if torch.cuda.is_available() else "cpu"
+    return spec.eval().to(device), mel.eval().to(device)
 
 
 def preprocess_htsat(wave):
     """(1, N) 16 kHz waveform -> (time, 64, 1) log-mel as the HTS-AT authors compute it (32 kHz, hop 320)."""
     spec, mel = _htsat_frontend()
     with torch.no_grad():
-        out = mel(spec(AF.resample(wave, 16000, 32000)))  # (1, 1, time, 64)
-    return out[0, 0].numpy()[..., None].astype(np.float32)
+        out = mel(
+            spec(AF.resample(wave.to(next(spec.parameters()).device), 16000, 32000))
+        )  # (1, 1, time, 64)
+    return out[0, 0].cpu().numpy()[..., None].astype(np.float32)
 
 
 def preprocess_opera_ct(wave):

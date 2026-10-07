@@ -7,6 +7,7 @@ from collections import defaultdict
 
 import numpy as np
 import torch
+from src.paths import DATA
 from src.processing.correction import (
     apply_spectrum_correction,
     mean_spectrum,
@@ -21,6 +22,10 @@ from torchvision import transforms
 from .augment import SpecAugment, random_bin_gain_image
 from .cycles import individual_cycles, read_annotations
 from .encoders import get_encoder
+
+CACHE = (
+    DATA / "cache" / "train_images"
+)  # one array per encoder and split, shared by all jobs and seeds
 
 
 class ICBHIDataset(Dataset):
@@ -47,20 +52,29 @@ class ICBHIDataset(Dataset):
         self.filenames = [f for f in stems if official.get(f) == self.split]
         annotations = read_annotations(wav_dir)
 
-        audio, self.labels, self.devices, patients = [], [], [], []
-        for f in self.filenames:
-            for wave, label in individual_cycles(annotations[f], wav_dir, f, args):
-                audio.append(wave)
-                self.labels.append(label)
-                self.devices.append(DEVICES.index(f.split("_")[-1]))
-                patients.append(f.split("_")[0])
-        self.patients = np.array(patients)
-        self.sc = self._spectrum_correct(audio, sc_reference) if args.spectrum_correction else None
-        if self.sc:
-            audio = self.sc.pop("audio")
-
         self.encoder = get_encoder(args.encoder)
-        self.images = [self.encoder.preprocess(a) for a in audio]
+        cached = None if args.spectrum_correction else self._load_cache()
+        if cached:
+            self.images, self.labels, self.devices, self.patients = cached
+            self.sc = None
+        else:
+            audio, labels, devices, patients = [], [], [], []
+            for f in self.filenames:
+                for wave, label in individual_cycles(annotations[f], wav_dir, f, args):
+                    audio.append(wave)
+                    labels.append(label)
+                    devices.append(DEVICES.index(f.split("_")[-1]))
+                    patients.append(f.split("_")[0])
+            self.labels, self.devices, self.patients = labels, devices, np.array(patients)
+            self.sc = (
+                self._spectrum_correct(audio, sc_reference) if args.spectrum_correction else None
+            )
+            if self.sc:
+                audio = self.sc.pop("audio")
+            if args.spectrum_correction:
+                self.images = [self.encoder.preprocess(a) for a in audio]
+            else:
+                self.images = self._build_cache(audio)
         assert self.images[0].shape == (*self.encoder.image_shape, 1), self.images[0].shape
         if print_flag:
             counts = np.bincount(self.labels, minlength=args.n_cls)
@@ -74,6 +88,52 @@ class ICBHIDataset(Dataset):
                     ),
                 )
             )
+
+    def _cache_paths(self):
+        a = self.args
+        stem = "{}_{}_{}cls_{}s_{}_{}hz_{}mel".format(
+            "ast" if a.encoder == "dass" else a.encoder,  # DASS reads the same fbank as AST
+            self.split,
+            a.n_cls,
+            a.desired_length,
+            a.pad_types,
+            a.sample_rate,
+            a.n_mels,
+        )
+        return CACHE / (stem + ".npy"), CACHE / (stem + ".meta.npz")
+
+    def _load_cache(self):
+        """Spectrograms of this encoder and split memory-mapped from disk (shared by every job), or None."""
+        images, meta = self._cache_paths()
+        if not (images.exists() and meta.exists()):
+            return None
+        m = np.load(meta)
+        return (
+            np.load(images, mmap_mode="r"),
+            m["labels"].tolist(),
+            m["devices"].tolist(),
+            m["patients"],
+        )
+
+    def _build_cache(self, audio):
+        """Write the spectrogram of every cycle straight into a .npy file (no second copy in RAM), return it memory-mapped."""
+        images, meta = self._cache_paths()
+        images.parent.mkdir(parents=True, exist_ok=True)
+        tmp, tmp_meta = (
+            p.with_name("{}.{}.tmp{}".format(p.stem, os.getpid(), p.suffix))
+            for p in (images, meta)
+        )
+        out = np.lib.format.open_memmap(
+            tmp, mode="w+", dtype=np.float32, shape=(len(audio), *self.encoder.image_shape, 1)
+        )
+        for i, a in enumerate(audio):
+            out[i] = self.encoder.preprocess(a)
+        out.flush()
+        del out
+        np.savez(tmp_meta, labels=self.labels, devices=self.devices, patients=self.patients)
+        tmp_meta.replace(meta)
+        tmp.replace(images)  # the image file last: its presence means both files are complete
+        return np.load(images, mmap_mode="r")
 
     def _spectrum_correct(self, audio, sc_reference):
         """SC of every cycle. Returns dict `device_spectra`, `reference` (s_ref), `coefficients`, corrected `audio`."""
@@ -106,7 +166,7 @@ class ICBHIDataset(Dataset):
         }
 
     def __getitem__(self, index):
-        image = self.images[index]
+        image = np.array(self.images[index])  # a copy: the cached array is read-only
         if self.train_flag and self.args.random_gain_db > 0:  # P3
             image = random_bin_gain_image(
                 image,

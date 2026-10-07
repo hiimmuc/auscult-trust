@@ -92,8 +92,11 @@ def individual_cycles(annotations, data_folder, filename, args):
 def generate_fbank(audio, sample_rate, n_mels=128):
     """Kaldi fbank of AST, normalised; shape (time, n_mels, 1) numpy."""
     assert sample_rate == 16000, "input audio sampling rate must be 16kHz"
+    device = (
+        "cuda" if torch.cuda.is_available() else "cpu"
+    )  # the same maths on the GPU, much faster than 4000 cycles on the CPU
     fbank = torchaudio.compliance.kaldi.fbank(
-        audio,
+        audio.to(device),
         htk_compat=True,
         sample_frequency=sample_rate,
         use_energy=False,
@@ -102,4 +105,4 @@ def generate_fbank(audio, sample_rate, n_mels=128):
         dither=0.0,
         frame_shift=10,
     )
-    return ((fbank - FBANK_MEAN) / (FBANK_STD * 2)).unsqueeze(-1).numpy()
+    return ((fbank - FBANK_MEAN) / (FBANK_STD * 2)).unsqueeze(-1).cpu().numpy()
