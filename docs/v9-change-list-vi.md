@@ -85,20 +85,22 @@ Ngày 07/10/2026. Nguồn chuẩn: `docs/research-proposal-v9-en.md` (repo) và 
 
 ## 4. Repo
 
-**Đã làm (chưa commit; anh quyết định commit):**
+**Đã làm, đã commit:**
 - `CLAUDE.md`: viết lại cho v9.
 - `docs/research-proposal-v9-en.md`.
-- `docs/prereg-v9-amendment-draft.md`: điền ngày, nối vào cuối `prereg-v8.md`, rồi commit.
+- `docs/prereg-v9-amendment.md` (đổi tên từ `-draft`): đã ghi ngày 07/10/2026, đã nối vào cuối `prereg-v8.md`, đã commit.
 - `configs/stage1_variants/P1P3_sc_gain.json`.
+- `src/shift/correction.py` + `util/stage1.py`: thêm `sc_mode` (`dynamic` = clip ±20 dB, `static` = dải chung 50–2.000 Hz, không sửa ngoài dải), có unit test (`tests/test_correction.py`). CLI: `--sc_mode`, `--sc_limit_freq_low/high/diff` trong `main.py`.
 
-**Không đụng:** 5 file đang sửa dở của anh.
+**Không đụng:** `export_probs.py`, `main.py` (chỉ thêm 3 dòng arg parser mới, không sửa logic cũ), `util/stage1.py` (chỉ thêm tham số mới vào `a1_coefficients`, không đổi behavior mặc định), `tests/test_stage1.py`, `stage1_summary.py`, `scripts/run_stage1.sh`, 2 config P4 — của anh.
+
+**Đã quyết (không còn open):**
+- **SC bound = `sc_mode`.** Không chọn tay: chạy cả `dynamic` và `static` ở sàng lọc CV cho mỗi arm SC (cùng luật như chọn P1 vs P1P3), giữ mean CV Score cao hơn, hòa → `dynamic`.
+- **TTA-EQ seed = 1000–1007** (lệch khỏi seed train/gate 0–9, tránh trùng seed RNG toàn cục).
 
 **Phải sửa trước khi sàng lọc:**
 
-1. **SC chưa giới hạn hệ số.**
-   - Tôi đo trên nhiễu tổng hợp: thiết bị băng 4 kHz so với thiết bị toàn dải cho gain +65 đến +70 dB trên 2,2 kHz.
-   - ICBHI có 90 bản ghi 4 kHz; KAUH nhiều khả năng toàn bộ là 4 kHz.
-   - Chọn một trong hai: giới hạn ±20 dB, hoặc dải chung 50–2.000 Hz. Ghi lựa chọn vào prereg.
+1. ~~SC chưa giới hạn hệ số~~ — xong (`sc_mode`, trên).
 2. **s_ref chưa được lưu cùng checkpoint.** Stage 2 cần nó.
 3. **`stage1_summary.py screen` tự thêm P8 và chỉ giữ top 3 + P0,** nên có thể loại mất P4 hoặc một arm SC. Cần thêm chế độ v9 (TODO 3).
 4. **Trong CV, s_ref được tính cả trên bệnh nhân của fold validation.** Lỗi nhỏ: sửa hoặc ghi chú.
@@ -109,7 +111,8 @@ Ngày 07/10/2026. Nguồn chuẩn: `docs/research-proposal-v9-en.md` (repo) và 
 
 | Ngày | Việc | GPU-h |
 |---|---|---|
-| 07–08/10 | Chọn clip hoặc dải chung, và danh sách seed cho TTA-EQ; sửa SC + lưu s_ref + test; sửa `stage1_summary`; đăng ký prereg | 0 |
+| 07/10 | ~~Chọn clip/dải chung, seed TTA-EQ~~ — xong (chạy cả 2 sc_mode, chọn bằng CV; seed 1000–1007); đăng ký prereg | 0 |
+| 08–09/10 | Lưu s_ref cùng checkpoint; sửa `stage1_summary` (chế độ v9, bỏ auto-P8) | 0 |
 | 08–10/10 | Sàng lọc P0, P1, P1P3, P4 × 3 fold | ≈ 12 |
 | 10–12/10 | Refit 4 arm × seed 0–4 | ≈ 20 |
 | 12–13/10 | Đóng băng, export; E0; KAUH-A (đối chứng dương, P0 so với AuscultTrust) | < 1 |
@@ -147,7 +150,7 @@ Không thiết kế trung thực nào bảo đảm mọi giả thuyết đúng. 
 
 ### 7.2 Nhánh TTA-EQ (trong F5, không phải giả thuyết)
 
-- **Định nghĩa:** trung bình softmax qua K = 8 view; mỗi view qua một gain trơn ngẫu nhiên theo bin, lấy từ phân phối của P3 (6 dB SD), danh sách seed cố định.
+- **Định nghĩa:** trung bình softmax qua K = 8 view; mỗi view qua một gain trơn ngẫu nhiên theo bin, lấy từ phân phối của P3 (6 dB SD), seed cố định 1000–1007.
 - **Vai trò:** khởi động lạnh. Không cần thông tin thiết bị, chạy được từ bản ghi đầu tiên. SC thì cần biết ranh giới thiết bị và vài bản ghi không nhãn.
 - **Chạy:** đơn lẻ và kết hợp với SC (SC + TTA-EQ), trên P0 và AuscultTrust, ở LODO, KAUH và phổi giả. Chỉ cần suy luận.
 - **Conformal:** điểm hiệu chuẩn tính bằng cùng ensemble K view.

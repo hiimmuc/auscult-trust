@@ -2,7 +2,7 @@
 
 **Registered title (fixed):** *Nghiên cứu giải pháp cải thiện độ tin cậy của mô hình phân loại âm thanh phổi dưới sự dịch chuyển thiết bị bằng hiệu chỉnh phổ và dự đoán Conformal cho hỗ trợ sàng lọc bệnh đường hô hấp*
 
-> Proposal v9, 07/10/2026 (revised the same day: [46] read, TTA-EQ comparator added). KHKT 2026–2027, THPT chuyên Chu Văn An. Replaces v8 (decision log: Appendix C).
+> Proposal v9, 07/10/2026 (revised the same day: [46] read, TTA-EQ comparator added; prereg amendment registered, B2/B8 decided). KHKT 2026–2027, THPT chuyên Chu Văn An. Replaces v8 (decision log: Appendix C).
 > Tags: **[Fact]** cited and checked, or measured in our repo · **[Interpretation]** reasoned from facts · **[Hypothesis]** testable, not shown · **[Assumption]** planning choice, to confirm · **[Pending]** blocked on hardware.
 > Repo facts: `auscult-trust` `report.md` (Phase 0, to 05/10/2026). Open items: *[to verify]*.
 
@@ -207,7 +207,7 @@ flowchart TD
 **SC front end (P1).**
 - STFT magnitude per bin; n_fft 1024, hop 512, 16 kHz.
 - c_d = s_ref / s̄_d. s_ref is the arithmetic mean of the training-device mean spectra [3]. The device comes from the file name.
-- Coefficients are clipped to ±20 dB [Assumption, registered], because of the band-limit blow-up in §1. The alternative is a common 50–2,000 Hz band; decide before screening.
+- Coefficients are bounded by `sc_mode` [Fact: implemented, `src/shift/correction.py:limit_coefficients`, mirrored in `util/stage1.py:a1_coefficients`]: `dynamic` clips every bin to ±20 dB (the band-limit blow-up in §1); `static` leaves a common 50–2,000 Hz band unclipped and zeroes the correction outside it. Not hand-picked: both run at CV screening for every SC arm (same rule as P1 vs P1P3), higher mean CV Score wins, tie → `dynamic` (App. B2).
 - Stage 1 estimates the test-device spectra from the unlabelled official-test clips (transductive, as in [3]). s_ref and the coefficients are saved with the checkpoint.
 
 **Arms.**
@@ -348,7 +348,7 @@ All comparisons are paired, on the same recordings.
 | A0 | None | — | Baseline |
 | A1 | SC | Domain boundary (device known), unlabelled target recordings | Proposed |
 | A2 | Input-statistics adaptation | Domain boundary, unlabelled target recordings | TTA arm (F5) |
-| TTA-EQ | Mean softmax over K = 8 views, each passed through a random smooth per-bin gain drawn from the P3 distribution (6 dB SD), fixed seed list | Nothing: works on one recording from an unknown device | Cold-start arm (F5) |
+| TTA-EQ | Mean softmax over K = 8 views, each passed through a random smooth per-bin gain drawn from the P3 distribution (6 dB SD), fixed seeds 1000–1007 | Nothing: works on one recording from an unknown device | Cold-start arm (F5) |
 | V1 | Split conformal [17] | Calibration patients | Primary |
 | V5 | k-shot recalibration, k ∈ {5, 10} target patients | Target labels | Fallback and upper bound (F5) |
 | V4-oracle, prior-matched | True target class mix | Evaluation only | H2 statistic; class-mix vs device split (F2) |
@@ -358,7 +358,7 @@ All comparisons are paired, on the same recordings.
 - **What it cannot do.** It does not remove the new device's own response: random gains applied to a shifted input stay shifted. Expected effect: smoother decisions and fewer flips, not a coverage guarantee [Hypothesis].
 - **Conformal.** The calibration scores are computed with the same K-view ensemble as the test scores, so exchangeability is kept on the source.
 - **Shift score.** View disagreement (mean TV distance of each view from the ensemble) is reported as a label-free shift score: its rank correlation with |Δ| across conditions (exploratory).
-- **Settings.** K, the gain distribution and the seed list are fixed before any Stage-2 result is seen. K ∈ {1, 4, 8, 16} is run only as a cost curve.
+- **Settings.** K = 8, the gain distribution (P3, 6 dB SD) and the seed list (1000–1007) are fixed before any Stage-2 result is seen. K ∈ {1, 4, 8, 16} is run only as a cost curve.
 - **Rejected variant.** Consensus over several resampling rates (e.g. 4, 8, 16 kHz). Resampling only low-passes the input, so in-band device differences (Bell 20–200 Hz vs Diaphragm 100–500 Hz emphasis [31]) remain in every view, and the views are strongly correlated. It is a no-op on 4 kHz data such as KAUH. Its one benefit, removing the bandwidth cue, is obtained once and consistently by the common-band option (App. B2).
 
 Moved out of the core (their Phase 0 results stay in the report): Mondrian V2, weighted V3, BBSE V4, Tent, IR augmentation.
@@ -390,7 +390,7 @@ Uncertainty:
 | R3 | LODO coverage error is class mix | High | Prior-matched Δ is the H2 statistic; V4-oracle split (F2) |
 | R4 | Target mean spectrum carries disease content; a device-mean removal already failed on AKGC417L in [46] (Sp 11.49) | High | F4 class-mix sensitivity; band smoothing of coefficients; coefficients from all recordings of the device, not background only |
 | R8 | SC loses to the stochastic arms (P1P3, P4, TTA-EQ) | Med | Reported as a finding. H2 tests SC against the baseline, not against the best arm; the title commits to SC, not to SC winning |
-| R5 | Bandwidth mismatch breaks SC | High until fixed | Clip ±20 dB or common band; unit test before screening |
+| R5 | Bandwidth mismatch breaks SC | High until fixed | `sc_mode` (dynamic clip or static common band), both screened by CV; unit tested |
 | R6 | < 3 transducers by 30/11/2026 | High | Low-cost transducers (§5.6). Otherwise H1 and H3 are reported as planned, and C2 rests on LODO |
 | R7 | Stage 1 overruns before 17/10 | Med | P1 fallback for AuscultTrust; gate G seeds 5–9 after the school round |
 
@@ -563,13 +563,13 @@ URL: https://arxiv.org/abs/2604.24096
 | # | Decision | Default |
 |---|---|---|
 | B1 | Transducer list for the phantom | ≥ 3 distinct; low-cost options allowed |
-| B2 | SC band handling | Clip ±20 dB; alternative: common 50–2,000 Hz band (decide before screening) |
+| B2 | SC bound: `sc_mode` | Decided by CV, not by hand: both `dynamic` (±20 dB clip, default) and `static` (common 50–2,000 Hz band, no-op outside) are run per SC arm at screening; keep the higher mean CV Score, tie → `dynamic` (`limit_coefficients`, §5.2) |
 | B3 | Non-inferiority margin for G | −1.5 points, 10 seeds |
 | B4 | LODO calibration fraction | 20% of remaining patients, stratified by device |
 | B5 | Window aggregation for the screening view | Mean; max as sensitivity |
 | B6 | Optional LODO arms | AST-CE, SG-SCL if compute allows |
 | B7 | Expert contact | Dr. Nguyễn Thị Kim Trúc, co-author of [11] |
-| B8 | TTA-EQ settings | K = 8; gain distribution = P3 (6 dB SD, smooth across bins); fixed seed list. Registered before Stage 2 |
+| B8 | TTA-EQ settings | K = 8; gain distribution = P3 (6 dB SD, smooth across bins); fixed seeds 1000–1007 (offset from the training/gate seeds 0–9) |
 
 ## Appendix C. Decision Log: v8 → v9
 
