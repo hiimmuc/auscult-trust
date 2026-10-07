@@ -29,3 +29,25 @@ Done and smoke-tested (1 epoch, screening fold): AST, HTS-AT (fine-tune), OPERA-
 - DASS: needs the DASS selective-scan CUDA kernel built with CUDA 12.8 (nvcc here is 13.0) and the v0.2 checkpoints; Lung-SRAD code in `repos/Lung-SRAD`.
 - HTS-AT / CLAP / OPERA-CT: checkpoints in `data/models/{htsat,opera}`; Swin-style windows need a Patch-Mix adaptation (not in the reference code).
 - HeAR: ViT-L, weights not downloaded (gated Hugging Face model, token needed).
+
+## Config check against the papers in docs/papers (2026-10-07)
+
+Read from the PDFs (Patch-Mix CL 2305.14032, SG-SCL 2312.09603, Lung-SRAD 2606.11922, OPERA 2406.16148) and the reference scripts.
+
+| Item | Papers | Ours (`experiments/train/base.yaml`) | Verdict |
+|---|---|---|---|
+| Split, input | official 60/40, 8 s cycles, 16 kHz, 128-mel fbank (798 frames) | same | match |
+| Optimiser | Adam, lr 5e-5, cosine, batch 8 (Lung-SRAD DASS: 16), 50 epochs | same; DASS uses batch 16 | match |
+| Weight decay | 1e-6 (reference scripts) | 1e-6 | match |
+| Moving average | coefficient 0.5 on all learnable parameters | `ma_beta` 0.5 on encoder, head, projector | match |
+| SpecAugment | max mask 160 frames, 48 bins, mean fill, no time warp | same | match |
+| Patch-Mix CL | beta 1.0, tau 0.06, alpha 1.0 (SG-SCL tau 0.06; Lung-SRAD tau 0.2) | same; DASS tau 0.2 | match |
+| Loss | weighted cross-entropy only when no mixing is used | unweighted (every arm mixes) | match for mixing arms; a plain CE arm would need class weights (option removed) |
+| Seeds | five seeds, no cross-validation (SG-SCL: "a fixed set of five seeds"; Lung-SRAD scripts use 1-5, Patch-Mix script shows seed 1) | seeds 0-4 | five seeds match; the exact numbers are not stated, ours are 0-4 |
+| Reported epoch | best on test (optimistic) | best on test and last epoch | both reported |
+| Frozen encoder | not in these papers; OPERA linear probe: one linear layer, lr 1e-4, L2 1e-5, 5 runs | head + projector trained, lr 1e-3, batch 8, 50 epochs, Patch-Mix on the frozen tokens | our design, not a paper protocol |
+| HTS-AT, OPERA-CT, CLAP, HeAR with Patch-Mix | no paper does this | same recipe as AST | our adaptation |
+| DASS | Lung-SRAD uses a dual time/frequency Patch-Mix CL with Gaussian blur | plain DASS with the 2-D Patch-Mix, no blur | deliberate, to compare with the other encoders |
+
+Changed after this check: `encoder_dass.yaml` now sets batch size 16 and tau 0.2 as in Lung-SRAD.
+Reproduction anchor already met: AST + Patch-Mix, 4 seeds, best-on-test Score 59.69 ± 0.51 against 59.46 ± 0.78 in the Patch-Mix CL ablation.

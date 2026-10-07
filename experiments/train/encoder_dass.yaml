@@ -1,2 +1,5 @@
 # Encoder: dass (needs PY=.venv-dass/bin/python, see scripts/build_dass_env.sh).
+# Settings of the Lung-SRAD paper: batch size 16 (others 8), contrastive temperature 0.2 (others 0.06).
 encoder: dass
+batch_size: 16
+temperature: 0.2
