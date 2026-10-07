@@ -65,6 +65,13 @@ def build_parser():
                         help='P8: worst_device selects by the minimum per-device validation Score')
     parser.add_argument('--a1_input', action='store_true', help='P1: A1 spectrum correction on the waveform, device from file name')
     parser.add_argument('--a1_reference', type=str, default='arithmetic', choices=['arithmetic', 'geometric'])
+    parser.add_argument('--sc_mode', type=str, default='dynamic', choices=['dynamic', 'static'],
+                         help='A1 coefficient bound (prereg App. B2): "dynamic" clips every bin to '
+                              '+-sc_limit_freq_diff dB; "static" leaves [sc_limit_freq_low, sc_limit_freq_high] Hz '
+                              'unclipped and zeroes the correction outside it')
+    parser.add_argument('--sc_limit_freq_low', type=float, default=50.0, help='Hz, "static" sc_mode only')
+    parser.add_argument('--sc_limit_freq_high', type=float, default=2000.0, help='Hz, "static" sc_mode only')
+    parser.add_argument('--sc_limit_freq_diff', type=float, default=20.0, help='dB, "dynamic" sc_mode only')
     parser.add_argument('--bin_norm', action='store_true', help='P2: per-device, per-mel-bin standardisation')
     parser.add_argument('--rand_bin_gain', type=float, default=0.0, help='P3: SD (dB) of the random per-bin gain augmentation')
     parser.add_argument('--freq_mixstyle', type=float, default=0.0, help='P4: Freq-MixStyle probability per batch')

@@ -205,16 +205,29 @@ def device_mean_spectra(waves_by_device, n_fft=1024, hop=512):
     return {d: ms(w, n_fft, hop) for d, w in waves_by_device.items() if len(w)}
 
 
-def a1_coefficients(device_spectra, reference_spectra=None, reference='arithmetic'):
+def a1_coefficients(device_spectra, reference_spectra=None, reference='arithmetic', sc_mode='dynamic',
+                     limit_freq_low=50.0, limit_freq_high=2000.0, limit_freq_diff=20.0, sr=16000, n_fft=1024):
     """P1 coefficients c = s_ref / s_device per device in `device_spectra`.
 
     The reference comes from `reference_spectra` (the training devices; default `device_spectra` itself). Train clips use
     their own (source) device spectra, test clips their own (target) spectra, both against the same train reference.
+
+    `sc_mode`, `limit_freq_low`, `limit_freq_high`, `limit_freq_diff`, `sr`, `n_fft`: registered SC bound
+    (prereg App. B2), matching `src.shift.correction.limit_coefficients`. "dynamic" clips every bin to
+    +-`limit_freq_diff` dB; "static" leaves the [`limit_freq_low`, `limit_freq_high`] Hz band unclipped and
+    zeroes the correction (coefficient = 1) outside it.
     """
     assert reference in ('arithmetic', 'geometric'), reference
+    assert sc_mode in ('dynamic', 'static'), sc_mode
     stack = np.array(list((reference_spectra or device_spectra).values()))
     s_ref = stack.mean(0) if reference == 'arithmetic' else np.exp(np.log(np.maximum(stack, 1e-8)).mean(0))
-    return {d: s_ref / np.maximum(s, 1e-8) for d, s in device_spectra.items()}
+    raw = {d: s_ref / np.maximum(s, 1e-8) for d, s in device_spectra.items()}
+    if sc_mode == 'dynamic':
+        return {d: 10 ** (np.clip(20 * np.log10(np.maximum(c, 1e-8)), -limit_freq_diff, limit_freq_diff) / 20)
+                for d, c in raw.items()}
+    freqs = np.fft.rfftfreq(n_fft, 1 / sr)
+    band = (freqs >= limit_freq_low) & (freqs <= limit_freq_high)
+    return {d: np.where(band, c, 1.0) for d, c in raw.items()}
 
 
 def device_bin_norm(images, device_ids, ref_stats=None):

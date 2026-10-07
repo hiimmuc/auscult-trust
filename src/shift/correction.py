@@ -29,22 +29,51 @@ def mean_spectrum(waves, n_fft=1024, hop=512):
     return np.mean([np.abs(_stft(w, n_fft, hop)).mean(1) for w in waves], axis=0)
 
 
-def spectrum_coefficients(device_spectra, source_devices=None, reference="arithmetic"):
+def limit_coefficients(coef, sc_mode="dynamic", limit_freq_low=50.0, limit_freq_high=2000.0,
+                        limit_freq_diff=20.0, sr=16000, n_fft=1024):
+    """Bound a raw A1 coefficient curve, registered as the choice between two SC variants (prereg App. B2).
+
+    Args:
+        coef: (bins,) raw coefficient, one STFT bin per entry (`np.fft.rfftfreq(n_fft, 1 / sr)` spacing).
+        sc_mode: "dynamic" clips every bin's gain to +-`limit_freq_diff` dB (bounds the coefficient everywhere,
+            including bins with near-zero reference or device energy). "static" instead zeroes the correction
+            (coefficient = 1, no-op) outside [`limit_freq_low`, `limit_freq_high`] Hz and leaves bins inside the
+            band unclipped.
+        limit_freq_low, limit_freq_high: Band edges in Hz, used only by "static".
+        limit_freq_diff: Clip in dB, used only by "dynamic".
+        sr, n_fft: Needed to map bins to Hz for "static".
+
+    Returns:
+        (bins,) bounded coefficient.
+    """
+    assert sc_mode in ("dynamic", "static"), sc_mode
+    if sc_mode == "dynamic":
+        return 10 ** (np.clip(20 * np.log10(np.maximum(coef, 1e-8)), -limit_freq_diff, limit_freq_diff) / 20)
+    freqs = np.fft.rfftfreq(n_fft, 1 / sr)
+    band = (freqs >= limit_freq_low) & (freqs <= limit_freq_high)
+    return np.where(band, coef, 1.0)
+
+
+def spectrum_coefficients(device_spectra, source_devices=None, reference="arithmetic", sc_mode="dynamic",
+                           limit_freq_low=50.0, limit_freq_high=2000.0, limit_freq_diff=20.0, sr=16000, n_fft=1024):
     """A1 coefficients c_k = s_ref / s_k per bin, with s_ref the mean of the source devices' spectra.
 
     Args:
         device_spectra: Dict device -> mean spectrum from `mean_spectrum`.
         source_devices: Devices that define the reference. Default: all.
         reference: "arithmetic" mean of device spectra (Nguyen & Pernkopf [3]) or "geometric" mean (Kosmider [1]).
+        sc_mode, limit_freq_low, limit_freq_high, limit_freq_diff, sr, n_fft: see `limit_coefficients`.
 
     Returns:
-        Dict device -> (bins,) coefficients. Calibration clips use their own (source) coefficients and test clips
-        the target's, so the domains are corrected separately.
+        Dict device -> (bins,) coefficients, bounded by `limit_coefficients`. Calibration clips use their own
+        (source) coefficients and test clips the target's, so the domains are corrected separately.
     """
     assert reference in ("arithmetic", "geometric"), reference
     stack = np.array([device_spectra[d] for d in (source_devices or device_spectra)])
     ref = stack.mean(0) if reference == "arithmetic" else np.exp(np.log(np.maximum(stack, 1e-8)).mean(0))
-    return {d: ref / np.maximum(s, 1e-8) for d, s in device_spectra.items()}
+    raw = {d: ref / np.maximum(s, 1e-8) for d, s in device_spectra.items()}
+    return {d: limit_coefficients(c, sc_mode, limit_freq_low, limit_freq_high, limit_freq_diff, sr, n_fft)
+            for d, c in raw.items()}
 
 
 def apply_spectrum_correction(wave, coef, n_fft=1024, hop=512):
