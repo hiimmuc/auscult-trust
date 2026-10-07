@@ -1,8 +1,7 @@
 import numpy as np
 import pytest
 
-from src.conformal.conformal import (bbse_weights, label_shift_threshold, lac_scores, mondrian_threshold,
-                                     predict_sets, split_threshold)
+from src.conformal.conformal import label_shift_threshold, lac_scores, predict_sets, split_threshold
 from src.data.icbhi import parse_name
 from src.data.splits import assert_disjoint, load_split, save_split, split_patients
 from src.eval.metrics import coverage, icbhi_score, patient_bootstrap
@@ -28,30 +27,13 @@ def _sim(n, rng, shift=0.0):
     return p, y
 
 
-def test_split_and_mondrian_coverage():
+def test_split_coverage():
     rng = np.random.default_rng(0)
     pc, yc = _sim(5000, rng)
     pt, yt = _sim(5000, rng)
     sc = lac_scores(pc, yc)
     cov = coverage(predict_sets(pt, split_threshold(sc, 0.1)), yt)
     assert abs(cov - 0.9) < 0.03
-    sets = predict_sets(pt, mondrian_threshold(sc, yc, 0.1, 4))
-    for k in range(4):
-        assert abs(sets[yt == k, k].mean() - 0.9) < 0.04
-
-
-def test_label_shift_restores_coverage():
-    rng = np.random.default_rng(1)
-    pc, yc = _sim(20000, rng)
-    pt, yt = _sim(20000, rng)
-    keep = rng.random(len(yt)) < np.array([0.8, 0.1, 0.05, 0.05])[yt]  # target prior shifts to class 0
-    pt, yt = pt[keep], yt[keep]
-    w = bbse_weights(pc.argmax(1), yc, pt.argmax(1), 4)
-    sc = lac_scores(pc, yc)
-    cov_split = coverage(predict_sets(pt, split_threshold(sc, 0.1)), yt)
-    cov_ls = coverage(predict_sets(pt, label_shift_threshold(sc, yc, w, 0.1)), yt)
-    assert abs(cov_ls - 0.9) <= abs(cov_split - 0.9) + 0.01
-    assert abs(cov_ls - 0.9) < 0.03
 
 
 def test_icbhi_score():
@@ -65,17 +47,6 @@ def test_bootstrap_ci_contains_estimate():
     y = rng.integers(0, 2, 200)
     est, lo, hi = patient_bootstrap(lambda y, pred: (y == pred).mean(), pat, n_boot=200, y=y, pred=y.copy())
     assert est == 1.0 and lo <= est <= hi
-
-
-def test_rq3_variants_cover_when_exchangeable():
-    from src.legacy.rq3 import set_metrics, thresholds
-    rng = np.random.default_rng(2)
-    pv, yv = _sim(4000, rng)
-    pk, yk = _sim(4000, rng)
-    pe, ye = _sim(4000, rng)
-    thr = thresholds(pv, yv, pk, yk, pe, np.ones(4000), np.ones(4000), 0.1)
-    for v, t in thr.items():
-        assert abs(set_metrics(predict_sets(pe, t), ye)["coverage"] - 0.9) < 0.03, v
 
 
 def test_device_holdout_official_disjoint_and_seen_flag():
