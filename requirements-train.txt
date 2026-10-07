@@ -1,7 +1,8 @@
-# Stage 1 training environment (AST needs timm == 0.4.5, so a separate env, Python 3.10):
+# Training environment (AST needs timm == 0.4.5, so a separate env, Python 3.10):
 #   uv venv .venv-train --python 3.10 && uv pip install --python .venv-train/bin/python -r requirements-train.txt
 # Install torch / torchvision / torchaudio with the cu128 build first (see requirements.txt).
 timm==0.4.5
+wget  # imported by the reference AST module
 numpy
 scipy
 pandas

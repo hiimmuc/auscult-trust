@@ -1,17 +1,17 @@
-"""Stage 1 summary (proposal v9, `docs/prereg-v8.md` + v9 amendment): CV screening table and final table with gate G.
+"""Cross-validation screening table and final table of a training campaign.
 
-Reads one campaign, `outputs/stage1/<run_id>/<cell>/<unit>/stage1_report.json` (default run: `latest`):
-    cell `P0_baseline`, `P1_a1_input`, `P1_a1_input+sc_static`, ...   units `cv<k>` (screening) or `seed<s>` (final refit)
+Reads one campaign, `outputs/train/<run_id>/<cell>/<unit>/report.json` (default run: `latest`):
+    cell `baseline`, `sc`, `sc+sc_static`, ...   units `cv<k>` (screening fold) or `seed<s>` (final refit)
 
     python -m src.training.patchmix_cl.summary screen [--run RUN_ID] [--folds 3]
-        -> screening table; writes <run>/stage1_screen.json (CV epoch and sc_mode per arm, `auscult_trust`, final plan)
+        -> screening table; writes <run>/screen.json (CV epoch and sc_mode per arm, selected `auscult_trust` arm, plan)
     python -m src.training.patchmix_cl.summary final [--run RUN_ID] [--boot 1000]
-        -> final table (primary = registered CV epoch; literature column = best epoch on test, labelled optimistic),
-           paired differences against P0 and gate G (AuscultTrust vs P0, 95% t-interval lower bound > -1.5 points);
-           writes <run>/stage1_final.md
+        -> final table (primary = epoch chosen by CV; extra column = best epoch on test, optimistic), paired differences
+           against the baseline, and the non-inferiority check of the selected arm against the baseline
+           (95% t-interval lower bound of the Score difference above -1.5 points); writes <run>/final.md
 
-SC arms are screened with both `sc_mode` values (`<arm>` = dynamic, `<arm>+sc_static` = static); the higher mean CV Score
-is kept, ties go to dynamic. AuscultTrust = the better of P1 / P1+P3 by mean CV Score (tie: P1).
+Spectrum-correction (SC) arms are screened with both `sc_mode` values (`<arm>` = dynamic, `<arm>+sc_static` = static); the
+higher mean CV Score is kept, ties go to dynamic. AuscultTrust = the better of `sc` / `sc_gain` by mean CV Score (tie: `sc`).
 """
 import argparse
 import json
@@ -24,9 +24,9 @@ from src.paths import OUTPUTS
 from .config import EXP
 from .reporting import cv_epoch, mean_cv_curve, per_device_report
 
-BASE, SC_ARMS = 'P0_baseline', ('P1_a1_input', 'P1P3_sc_gain')
+BASE, SC_ARMS = 'baseline', ('sc', 'sc_gain')
 STATIC = '+sc_static'
-GATE_MARGIN = -1.5  # points; about half the published AST-FT to Patch-Mix CL gap
+NON_INFERIORITY_MARGIN = -1.5  # Score points; about half the published gap between plain AST fine-tuning and Patch-Mix CL
 BENCHMARK_SEEDS = range(5)
 
 
@@ -37,7 +37,7 @@ def run_dir(run):
 def load_units(root, unit_pattern):
     """{(cell, index): report dict} of finished units whose name matches `unit_pattern` (one group: the index)."""
     out = {}
-    for f in root.glob('*/*/stage1_report.json'):
+    for f in root.glob('*/*/report.json'):
         m = re.fullmatch(unit_pattern, f.parent.name)
         if m:
             out[(f.parent.parent.name, int(m.group(1)))] = json.loads(f.read_text())
@@ -67,7 +67,7 @@ def screen(a):
         r['sc_mode'] = r['sc_mode'] if arm in SC_ARMS else None
     ranking = sorted(arms, key=lambda x: -arms[x]['cv_score'])
     sc = [x for x in SC_ARMS if x in arms]
-    trust = max(sc, key=lambda x: (arms[x]['cv_score'], x == SC_ARMS[0])) if sc else None  # tie: P1
+    trust = max(sc, key=lambda x: (arms[x]['cv_score'], x == SC_ARMS[0])) if sc else None  # tie: sc
     print('| rank | arm | cell | sc_mode | CV epoch | mean CV Score | fold Scores |')
     print('|---|---|---|---|---|---|---|')
     for i, x in enumerate(ranking, 1):
@@ -76,8 +76,8 @@ def screen(a):
                                                               ', '.join('{:.1f}'.format(s) for s in r['fold_scores'])))
     if missing:
         print('\nnot finished (all {} folds needed): {}'.format(a.folds, ', '.join(missing)))
-    (root / 'stage1_screen.json').write_text(json.dumps({'arms': arms, 'ranking': ranking, 'auscult_trust': trust}, indent=1))
-    print('\nAuscultTrust = {} (better mean CV Score of P1 / P1+P3, tie: P1)'.format(trust))
+    (root / 'screen.json').write_text(json.dumps({'arms': arms, 'ranking': ranking, 'auscult_trust': trust}, indent=1))
+    print('\nAuscultTrust = {} (better mean CV Score of sc / sc_gain, tie: sc)'.format(trust))
 
 
 def _score_counts(y, pred, patients):
@@ -131,13 +131,13 @@ def _collect(root, runs, arms):
 
 def final(a):
     root = run_dir(a.run)
-    scr = json.loads((root / 'stage1_screen.json').read_text())
+    scr = json.loads((root / 'screen.json').read_text())
     res = _collect(root, load_units(root, r'seed(\d+)'), scr['arms'])
     trust = scr['auscult_trust']
-    L = ['## Stage 1 final (official 60/40 split, 4-class, refit on all training patients)\n',
-         'Primary = epoch registered by 3-fold CV screening (no test selection), seeds 0-4 (benchmark report). Literature '
-         'column = best epoch on test, as in Patch-Mix CL / SG-SCL: **optimistic, for comparison only**.\n',
-         '| arm | cell | CV epoch | seeds | Sp | Se | Score | HS | macro-F1 | 2-cls Score | literature: best-on-test Score |',
+    L = ['## Final results (official 60/40 split, 4-class, refit on all training patients)\n',
+         'Primary = epoch chosen by 3-fold CV screening (no test selection), seeds 0-4. The last column is the best epoch on test, as '
+         'in the Patch-Mix CL and SG-SCL papers: **optimistic, for comparison only**.\n',
+         '| arm | cell | CV epoch | seeds | Sp | Se | Score | HS | macro-F1 | 2-cls Score | best-on-test Score (optimistic) |',
          '|---|---|---|---|---|---|---|---|---|---|---|']
     for arm, r in res.items():
         per = {s: p for s, p in r['per'].items() if s in BENCHMARK_SEEDS}
@@ -156,10 +156,10 @@ def final(a):
         L.append('| {} | {} |'.format(arm, ' | '.join(cells)))
 
     if BASE in res:
-        L += ['\n### Paired difference against P0 (same seeds)\n',
+        L += ['\n### Paired difference against the baseline (same seeds)\n',
               '| arm | seeds | ΔScore mean | 95% t-CI (paired seeds) | 95% patient bootstrap CI |', '|---|---|---|---|---|']
         base, rng = res[BASE]['per'], np.random.default_rng(0)
-        gate = None
+        check = None
         for arm, r in res.items():
             if arm == BASE:
                 continue
@@ -173,21 +173,21 @@ def final(a):
             q = np.percentile(diff, [2.5, 97.5])
             L.append('| {} | {} | {:+.2f} | [{:.2f}, {:.2f}] | [{:.2f}, {:.2f}] |'.format(arm, len(seeds), m, lo, hi, *q))
             if arm == trust:
-                gate = (len(seeds), m, lo)
-        if gate:
-            n, m, lo = gate
-            verdict = 'pass' if np.isfinite(lo) and lo > GATE_MARGIN else 'FAIL (Stage 2 uses P0 + test-time SC)'
-            L.append('\nGate G ({} vs P0, {} seeds): ΔScore {:+.2f}, lower bound {:.2f} vs margin {:.1f} -> **{}**.'.format(
-                trust, n, m, lo, GATE_MARGIN, verdict))
+                check = (len(seeds), m, lo)
+        if check:
+            n, m, lo = check
+            verdict = 'pass' if np.isfinite(lo) and lo > NON_INFERIORITY_MARGIN else 'FAIL (use the baseline weights with test-time SC)'
+            L.append('\nNon-inferiority ({} vs baseline, {} seeds): ΔScore {:+.2f}, lower bound {:.2f} vs margin {:.1f} -> **{}**.'.format(
+                trust, n, m, lo, NON_INFERIORITY_MARGIN, verdict))
     txt = '\n'.join(L)
     print(txt)
-    (root / 'stage1_final.md').write_text(txt + '\n')
+    (root / 'final.md').write_text(txt + '\n')
 
 
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('mode', choices=['screen', 'final'])
-    ap.add_argument('--run', default='latest', help='run_id under outputs/stage1/')
+    ap.add_argument('--run', default='latest', help='run_id under outputs/train/')
     ap.add_argument('--folds', type=int, default=3)
     ap.add_argument('--boot', type=int, default=1000)
     a = ap.parse_args()

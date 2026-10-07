@@ -1,4 +1,4 @@
-"""Split-conformal layer (proposal v9): V1 split, V5 k-shot (in patients), V4-oracle label shift.
+"""Split-conformal layer: plain split, k-shot recalibration (k patients), oracle label shift.
 
 Score is LAC: s(x, y) = 1 - p(y | x). A prediction set is {y : s(x, y) <= threshold}.
 Thresholds broadcast to (n, K): scalar (split) or (K,) per candidate label (label shift).

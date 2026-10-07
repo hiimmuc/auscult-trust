@@ -27,7 +27,7 @@ One question: does spectrum correction (SC) let a benchmark-level lung-sound cla
 ### Stage 1 (model)
 
 - Official 60/40 split, 4-class primary, 2-class view of the same predictions, Sp/Se/Score/HS per device and pooled, 5 seeds (0-4, same in every arm).
-- Arms: P0 Patch-Mix CL; P1 = P0 + SC (`--a1_input`); P1+P3 = SC + random per-bin gain (6 dB SD); P4 Freq-MixStyle p = 0.5 (competitor). AuscultTrust = P1 or P1+P3 by mean 3-fold CV Score (tie: P1). v8 variants P2, P6, P7, P8, P9 are not candidates; report them in an appendix if run.
+- Arms: P0 Patch-Mix CL; P1 = P0 + SC (`--spectrum_correction`); P1+P3 = SC + random per-bin gain (6 dB SD); P4 Freq-MixStyle p = 0.5 (competitor). AuscultTrust = P1 or P1+P3 by mean 3-fold CV Score (tie: P1). v8 variants P2, P6, P7, P8, P9 are not candidates; report them in an appendix if run.
 - SC: STFT n_fft 1024, hop 512, 16 kHz; reference = arithmetic mean of training-device mean spectra; `sc_mode` (`--sc_mode`, `src/processing/correction.py:limit_coefficients`): `dynamic` (default) clips every bin to +-20 dB (4 kHz devices have no energy above 2 kHz); `static` leaves 50-2000 Hz unclipped, no-op outside. Not a reported ablation: at CV screening run both, keep the higher mean CV Score per SC arm, tie -> `dynamic`. Device from file name; target-device spectrum from unlabelled clips only.
 - Primary result: refit all four arms at their CV epoch (`--selection fixed`), seeds 0-4, test once; seeds 5-9 for P0 and AuscultTrust (gate G). Literature column: best epoch on test, labelled optimistic. Stage-1 SC estimates test-device spectra from unlabelled official-test clips (transductive, as in [3]).
 - Hand-off to Stage 2: frozen checkpoint + SHA-256, saved s_ref and coefficients, exported softmax (`export_probs.py`).
@@ -43,24 +43,24 @@ One question: does spectrum correction (SC) let a benchmark-level lung-sound cla
 
 ## Commands
 
-Two envs: analysis/tests `.venv` (`uv venv .venv && uv pip install -r requirements.txt`) and training `.venv-train` (Python 3.10, `timm==0.4.5`, `requirements-train.txt`). Details: `docs/SETUP.md`, `docs/QUICKSTART.md`.
+Two envs: analysis/tests `.venv` and training `.venv-train` (Python 3.10, `timm==0.4.5`). Data: `bash scripts/download_data.sh`, `python scripts/prepare_data.py`. Details: `docs/SETUP.md`, `docs/QUICKSTART.md`.
 
-- Tests: `uv run --no-project --python .venv/bin/python python -m pytest -q tests` (single: append `tests/test_stage1.py::test_summary_counts_match_metrics`).
-- Stage 1 (v9 core), one campaign = one `RUN_ID`: `bash scripts/run_stage1.sh screen`, `summary`, `final`, `report` (see the script header). Resumable: same `RUN_ID` skips finished units and resumes interrupted ones from `last.pth`. Single unit: `PYTHONPATH=. .venv-train/bin/python -m src.training.patchmix_cl.main --config experiments/stage1/base.yaml,experiments/stage1/<arm>.yaml [--cv_folds 3 --cv_fold k | --selection fixed --report_epochs E] --seed S`.
+- Tests: `uv run --no-project --python .venv/bin/python python -m pytest -q tests` (single: append `tests/test_training.py::test_summary_counts_match_metrics`).
+- Training campaign (one `RUN_ID`): `bash scripts/run.sh screen`, `summary`, `final`, `report` (file header explains each). Same `RUN_ID` skips finished units and resumes interrupted ones from `last.pth`. One unit: `PYTHONPATH=. .venv-train/bin/python -m src.training.patchmix_cl.main --config experiments/train/base.yaml,experiments/train/<arm>.yaml [--cv_folds 3 --cv_fold k | --selection fixed --report_epochs E] --seed S`.
 - Freeze/export: `python -m src.training.patchmix_cl.export_probs <outputs unit dir> --ckpt report_epoch_<E>.pth` -> softmax, embeddings, `export/model.sha256`.
-- Phase 0 tools (encoder ladder, shift study, legacy v4 stack, feature cache) are in `../archive/auscult-trust-phase0` (original layout: `git checkout pre-restructure`); not extended.
+- Earlier-phase tools (encoder ladder, shift study, legacy stacks, feature cache) are in `../archive/auscult-trust-phase0` (original layout: `git checkout pre-restructure`); not extended.
 - CPU-heavy extraction: prefix `OMP_NUM_THREADS=4 OPENBLAS_NUM_THREADS=4`.
 
 ## Code map
 
 Run from repo root, imports are `src.*` (`pyproject.toml` sets `pythonpath`).
 
-- `src/paths.py` (REPO, DATA = `$AT_DATA` or `../data`, OUTPUTS, CHECKPOINTS), `src/runs.py` (run directories `outputs|checkpoints/<exp>/<run_id>/<cell>/<unit>/`, `meta.json`, `sha256_file`, `twin_dir`).
+- `src/paths.py` (REPO, DATA = `AT_DATA` or `../data`, REPOS = `AT_REPOS` or `../repos`, OUTPUTS, CHECKPOINTS), `src/runs.py` (run directories `outputs|checkpoints/<exp>/<run_id>/<cell>/<unit>/`, `meta.json`, `sha256_file`, `twin_dir`).
 - `src/processing/`: `icbhi.py` (cycle table, `DEVICES`), `kauh.py` (loader, ordered filter pairs, `rotation_partitions`, `windows`), `audio.py`, `splits.py` (`device_holdout_official`, `calibration_eval_splits`, `patient_val_split`, `patient_folds`, `cv_split`), `correction.py` (SC: `spectrum_coefficients`, `reference_spectrum`, `limit_coefficients`; A2 `isa_match`; `random_bin_gain`).
-- `src/training/patchmix_cl/` (patched Patch-Mix CL, AST only): `config.py` (CLI + YAML), `dataset.py` (cycles, SC on the waveform, loaders), `cycles.py`, `augment.py` (SpecAugment, P3, P4), `modeling.py`, `engine.py`, `optim.py`, `losses.py`, `models/` (AST, projector), `main.py`, `reporting.py` (per-device percent report, `pick_epochs`, `cv_epoch`), `summary.py` (screen/final tables, gate G), `export_probs.py`.
-- `src/evaluation/`: `metrics.py` (Sp/Se/HS/macro-F1 per device, `by_device`), `shift.py` (coverage deficit, prior-matched coverage, set stats, binomial CI), `conformal.py` (LAC, V1 split, V5 k-shot in patients, V4-oracle), `export.py` (Stage 2 reader of the softmax export).
-- `experiments/stage1/`: `base.yaml` + arm files (`P0_baseline`, `P1_a1_input`, `P1P3_sc_gain`, `P4_freq_mixstyle`, override `sc_static`).
-- Docstrings: Google style.
+- `src/training/patchmix_cl/`: `upstream.py` (AST, projector, Patch-Mix loss loaded from `../repos/patch-mix_contrastive_learning`, plus fused attention and weight path), `config.py` (CLI + YAML), `dataset.py` (cycles, SC on the waveform, loaders), `cycles.py`, `augment.py` (SpecAugment, random gain, Freq-MixStyle), `modeling.py`, `engine.py`, `optim.py`, `main.py`, `reporting.py` (per-device percent report, `pick_epochs`, `cv_epoch`), `summary.py` (screen/final tables, non-inferiority check), `export_probs.py`.
+- `src/evaluation/`: `metrics.py` (Sp/Se/HS/macro-F1 per device, `by_device`), `shift.py` (coverage deficit, prior-matched coverage, set stats, binomial CI), `conformal.py` (LAC, split, k-shot in patients, oracle label shift), `export.py` (reader of the softmax export).
+- `experiments/train/`: `base.yaml` + arm files (`baseline`, `sc`, `sc_gain`, `freq_mixstyle`, override `sc_static`).
+- Docstrings: Google style. Code, comments, scripts and configs are self-contained: no references to documents, versions, sections or stage numbers; plain names.
 
 ## Data tiers (hard rules)
 
@@ -87,8 +87,8 @@ Run from repo root, imports are `src.*` (`pyproject.toml` sets `pythonpath`).
 
 ## Working conventions
 
-- `../repos/*` is read-only reference. Never edit, build, or write results there. Patched copies go under `src/training/`.
-- Results: `outputs|checkpoints/<exp>/<run_id>/<cell>/<unit>/`; `<exp>` = experiment (`stage1`), `<cell>` = variant (config stems joined by `+`, no `base`), `<unit>` = `cv<k>` or `seed<s>`, `run_id` = `YYYYMMDD-HHMMSS[_$RUN_TAG]` or a `RUN_ID` set to resume one campaign. Never write elsewhere, never reuse a unit with another config.
+- `../repos/*` is read-only reference. Never edit, build, or write results there. Reuse them by path (`src/training/patchmix_cl/upstream.py`), never vendor a copy.
+- Results: `outputs|checkpoints/<exp>/<run_id>/<cell>/<unit>/`; `<exp>` = experiment (`train`), `<cell>` = variant (config stems joined by `+`, no `base`), `<unit>` = `cv<k>` or `seed<s>`, `run_id` = `YYYYMMDD-HHMMSS[_$RUN_TAG]` or a `RUN_ID` set to resume one campaign. Never write elsewhere, never reuse a unit with another config.
 - Frozen Phase 0 code lives in `../archive`; the wrapper holds `../data`, `../repos`, `../docs`.
 - Install a missing package before reaching for a workaround.
 - Simplest change that works. No speculative abstractions.
@@ -100,8 +100,8 @@ Run from repo root, imports are `src.*` (`pyproject.toml` sets `pythonpath`).
 ## TODO (v9, in dependency order)
 
 1. ~~Register: choose clip vs common band and the TTA-EQ seed list, then date, append and commit~~ — done (`docs/prereg-v9-amendment.md`, 07/10/2026; `sc_mode` decided by CV, not by hand). Still open: recount ICBHI cycles per device from filenames ([8] and [14] disagree on Litt3200/LittC2SE labels).
-2. ~~SC safety~~ — done: `sc_mode` bound in `src/processing/correction.py`, `sc_state.npz` (s_ref, per-device spectra and coefficients, `sc_mode`) and `s_ref_sha256` saved with every SC run, `run_stage1.sh screen` runs both `sc_mode` values per SC arm.
-3. ~~Stage 1 v9 summary~~ — done (`summary.py`: no P8, finalists = every arm, `auscult_trust`, gate G). Still to run: Stage 1 screen + final for P0, P1, P1P3, P4 (`bash scripts/run_stage1.sh`).
+2. ~~SC safety~~ — done: `sc_mode` bound in `src/processing/correction.py`, `sc_state.npz` (s_ref, per-device spectra and coefficients, `sc_mode`) and `s_ref_sha256` saved with every SC run, `run.sh screen` runs both `sc_mode` values per SC arm.
+3. ~~Stage 1 v9 summary~~ — done (`summary.py`: no P8, finalists = every arm, `auscult_trust`, gate G). Still to run: Stage 1 screen + final for P0, P1, P1P3, P4 (`bash scripts/run.sh`).
 4. External-audio inference for the frozen Patch-Mix model: KAUH 8 s windows and phantom clips -> softmax npz, with optional SC from saved s_ref + target spectrum from unlabelled clips (`--sc_n` to cap the number of target recordings, F4).
 5. Paired invariance metrics in `src/evaluation/shift.py`: flip rate, TV distance, set change rate, patient-paired bootstrap.
 6. Screening view: window -> recording aggregation (mean, max), recording-level labels for ICBHI and KAUH, 2-class conformal, triage counts.

@@ -1,6 +1,6 @@
-"""Stage 2 entry for a frozen full model: read the softmax export of `baselines/patchmix_cl/export_probs.py` and run E1.
+"""Conformal coverage on a held-out device from the softmax export of `src/training/patchmix_cl/export_probs.py`.
 
-E1 (device held out): calibration and evaluation patients come from the official test patients of the other devices,
+Device held out: calibration and evaluation patients come from the official test patients of the other devices,
 split 20 times (stratified by device); the held-out device's test cycles are the shifted target. Patients recorded on the
 held-out device and another one are dropped from the other devices, so patients stay disjoint.
 """

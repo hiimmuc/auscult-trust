@@ -1,4 +1,4 @@
-# Patch-Mix CL recipe (AST, AudioSet + ImageNet init, moving average) shared by every Stage 1 arm.
+# Patch-Mix CL recipe (AST, AudioSet + ImageNet init, moving average) shared by every arm.
 n_cls: 4
 epochs: 50
 batch_size: 8

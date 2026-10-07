@@ -1,9 +1,9 @@
-"""Stage 1 training: Patch-Mix CL on ICBHI with optional device-shift variants.
+"""Train the lung-sound classifier: Patch-Mix CL on ICBHI with optional device-shift variants.
 
-    python -m src.training.patchmix_cl.main --config experiments/stage1/base.yaml,experiments/stage1/P1_a1_input.yaml \
+    python -m src.training.patchmix_cl.main --config experiments/train/base.yaml,experiments/train/sc.yaml \
         --cv_folds 3 --cv_fold 0 --seed 0
 
-Writes `outputs/<exp>/<run_id>/<cell>/<unit>/` (train_args.json, stage1_report.json, test_preds.npz, sc_state.npz) and
+Writes `outputs/<exp>/<run_id>/<cell>/<unit>/` (train_args.json, report.json, test_preds.npz, sc_state.npz) and
 `checkpoints/<exp>/<run_id>/<cell>/<unit>/` (last.pth while running; report_epoch_<E>.pth for a fixed refit, best.pth for a
 cv/test-selected full run, nothing for a screening fold).
 A finished unit is skipped; an interrupted one resumes from `last.pth` when the same RUN_ID is set.
@@ -67,7 +67,7 @@ def history_json(history):
 def main():
     args = parse_args()
     out_dir, ckpt_dir = (runs.unit_dir(args.exp, args.cell, args.unit, kind) for kind in ('outputs', 'checkpoints'))
-    if (out_dir / 'stage1_report.json').exists():
+    if (out_dir / 'report.json').exists():
         print('done: {}'.format(out_dir))
         return
     runs.write_meta(args.exp, {'config_files': args.config_files})
@@ -137,7 +137,7 @@ def main():
     if args.selection == 'fixed':
         by_epoch = {h['epoch']: h for h in history}
         picked['fixed'] = {str(e): by_epoch[e] for e in args.report_epoch_list}
-    report = {'cell': args.cell, 'unit': args.unit, 'selection': args.selection, 'sc_mode': args.sc_mode if args.a1_input else None,
+    report = {'cell': args.cell, 'unit': args.unit, 'selection': args.selection, 'sc_mode': args.sc_mode if args.spectrum_correction else None,
               's_ref_sha256': s_ref_sha, **picked, 'history': history_json(history)}
     if test_preds:  # per-epoch test predictions for paired, patient-level bootstrap CIs offline
         ep = sorted(test_preds)
@@ -154,7 +154,7 @@ def main():
         model.load_state_dict(best_model[0]), classifier.load_state_dict(best_model[1])
         save_model(model, optimizer, args, args.epochs, ckpt_dir / 'best.pth', classifier)
     last.unlink()  # resume state; the final weights are the report_epoch/best files
-    (out_dir / 'stage1_report.json').write_text(json.dumps(report, indent=1))  # written last: marks the unit as done
+    (out_dir / 'report.json').write_text(json.dumps(report, indent=1))  # written last: marks the unit as done
 
 
 if __name__ == '__main__':

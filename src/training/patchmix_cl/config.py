@@ -1,6 +1,6 @@
-"""Command line and YAML config of a Stage 1 run (Patch-Mix CL recipe plus the v9 variants P1/P3/P4).
+"""Command line and YAML config of a training run (Patch-Mix CL recipe plus the device-shift variants).
 
-`--config a.yaml,b.yaml` loads files in order, later files override earlier ones (`experiments/stage1/base.yaml`
+`--config a.yaml,b.yaml` loads files in order, later files override earlier ones (`experiments/train/base.yaml`
 plus one arm file); the command line wins over both. Unknown YAML keys are an error.
 """
 import argparse
@@ -12,12 +12,12 @@ import yaml
 from src.paths import DATA
 from src.processing.icbhi import CLASSES
 
-EXP = 'stage1'
+EXP = 'train'
 
 
 def build_parser():
-    p = argparse.ArgumentParser('Stage 1: Patch-Mix CL with optional device-shift variants')
-    p.add_argument('--config', type=str, default=None, help='YAML file(s), comma-separated (experiments/stage1/*.yaml)')
+    p = argparse.ArgumentParser('Train Patch-Mix CL with optional device-shift variants')
+    p.add_argument('--config', type=str, default=None, help='YAML file(s), comma-separated (experiments/train/*.yaml)')
     p.add_argument('--exp', type=str, default=EXP, help='experiment name: outputs/<exp>/<run_id>/<cell>/<unit>/')
     p.add_argument('--cell', type=str, default=None, help='variant name; default: config stems joined by "+", without "base"')
     p.add_argument('--unit', type=str, default=None, help='fit name; default: cv<fold> when screening, else seed<seed>')
@@ -37,15 +37,15 @@ def build_parser():
                    help='selection=fixed: comma list of epochs chosen by CV screening; each is saved as report_epoch_<E>.pth')
 
     # device-shift variants
-    p.add_argument('--a1_input', action='store_true', help='P1: spectrum correction (SC) on the waveform, device from file name')
-    p.add_argument('--a1_reference', type=str, default='arithmetic', choices=['arithmetic', 'geometric'])
+    p.add_argument('--spectrum_correction', action='store_true', help='P1: spectrum correction (SC) on the waveform, device from file name')
+    p.add_argument('--sc_reference', type=str, default='arithmetic', choices=['arithmetic', 'geometric'])
     p.add_argument('--sc_mode', type=str, default='dynamic', choices=['dynamic', 'static'],
-                   help='SC coefficient bound (prereg App. B2): "dynamic" clips every bin to +-sc_limit_freq_diff dB; '
+                   help='SC coefficient bound (chosen by CV score): "dynamic" clips every bin to +-sc_limit_freq_diff dB; '
                         '"static" leaves [sc_limit_freq_low, sc_limit_freq_high] Hz unclipped and zeroes the correction outside')
     p.add_argument('--sc_limit_freq_low', type=float, default=50.0, help='Hz, "static" only')
     p.add_argument('--sc_limit_freq_high', type=float, default=2000.0, help='Hz, "static" only')
     p.add_argument('--sc_limit_freq_diff', type=float, default=20.0, help='dB, "dynamic" only')
-    p.add_argument('--rand_bin_gain', type=float, default=0.0, help='P3: SD (dB) of the random per-bin gain augmentation')
+    p.add_argument('--random_gain_db', type=float, default=0.0, help='P3: SD (dB) of the random per-bin gain augmentation')
     p.add_argument('--freq_mixstyle', type=float, default=0.0, help='P4: Freq-MixStyle probability per batch')
 
     # optimisation

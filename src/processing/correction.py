@@ -1,7 +1,7 @@
-"""Gain-based device corrections (proposal v9).
+"""Gain-based device corrections.
 
 A1  spectrum correction (SC) on STFT magnitude, per device, needs the device id [Kosmider 2020; Nguyen & Pernkopf 2022]
-A2  ISA: per-mel-bin moment matching of log-mel on unlabelled target clips (comparator F5)
+A2  ISA: per-mel-bin moment matching of log-mel on unlabelled target clips
 P3  random smooth per-mel-bin gain in dB, a train-time augmentation and the TTA-EQ view generator
 """
 import numpy as np
@@ -28,7 +28,7 @@ def mean_spectrum(waves, n_fft=1024, hop=512):
 
 def limit_coefficients(coef, sc_mode="dynamic", limit_freq_low=50.0, limit_freq_high=2000.0,
                         limit_freq_diff=20.0, sr=16000, n_fft=1024):
-    """Bound a raw A1 coefficient curve, registered as the choice between two SC variants (prereg App. B2).
+    """Bound a raw A1 coefficient curve; two variants are compared by CV score.
 
     Args:
         coef: (bins,) raw coefficient, one STFT bin per entry (`np.fft.rfftfreq(n_fft, 1 / sr)` spacing).
@@ -52,7 +52,7 @@ def limit_coefficients(coef, sc_mode="dynamic", limit_freq_low=50.0, limit_freq_
 
 
 def reference_spectrum(spectra, reference="arithmetic"):
-    """Reference spectrum s_ref: "arithmetic" mean of device spectra (Nguyen & Pernkopf [3]) or "geometric" mean (Kosmider [1])."""
+    """Reference spectrum s_ref: "arithmetic" mean of device spectra (Nguyen & Pernkopf) or "geometric" mean (Kosmider)."""
     assert reference in ("arithmetic", "geometric"), reference
     stack = np.array(list(spectra.values()))
     return stack.mean(0) if reference == "arithmetic" else np.exp(np.log(np.maximum(stack, 1e-8)).mean(0))
@@ -68,7 +68,7 @@ def spectrum_coefficients(device_spectra, source_devices=None, reference="arithm
         source_devices: Devices that define the reference. Default: all.
         reference_spectra: Dict device -> spectrum defining the reference instead (target devices against the
             training reference). Overrides `source_devices`.
-        reference: "arithmetic" mean of device spectra (Nguyen & Pernkopf [3]) or "geometric" mean (Kosmider [1]).
+        reference: "arithmetic" mean of device spectra (Nguyen & Pernkopf) or "geometric" mean (Kosmider).
         sc_mode, limit_freq_low, limit_freq_high, limit_freq_diff, sr, n_fft: see `limit_coefficients`.
 
     Returns:

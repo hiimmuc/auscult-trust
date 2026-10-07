@@ -52,7 +52,7 @@ def file_table(root):
 
 
 def partitions(df, n=5, fracs=(0.6, 0.2, 0.2)):
-    """`n` random patient-disjoint train/calibration/test splits (E2 protocol of proposals A+B and H).
+    """`n` random patient-disjoint train/calibration/test splits.
 
     Args:
         df: `file_table` output.

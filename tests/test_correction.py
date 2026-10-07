@@ -45,7 +45,7 @@ def test_spectrum_reference_arithmetic_vs_geometric():
 
 
 def test_dynamic_sc_mode_clips_a_4khz_device_against_a_16khz_reference():
-    # A 4 kHz-band device has ~0 energy above 2 kHz; the raw ratio there blows up (the +-65 dB fact in CLAUDE.md).
+    # A 4 kHz-band device has ~0 energy above 2 kHz; the raw ratio there blows up.
     n_fft, sr = 1024, 16000
     freqs = np.fft.rfftfreq(n_fft, 1 / sr)
     s_ref = np.full_like(freqs, 1.0)

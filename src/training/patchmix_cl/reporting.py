@@ -1,4 +1,4 @@
-"""Stage 1 reporting: per-device metrics in percent, epoch selection and the CV epoch rule."""
+"""Training reports: per-device metrics in percent, epoch selection and the CV epoch rule."""
 import numpy as np
 
 from src.evaluation.metrics import by_device

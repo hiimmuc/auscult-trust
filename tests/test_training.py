@@ -80,41 +80,41 @@ def test_summary_counts_match_metrics():
 
 def test_summary_screen_and_final_end_to_end(tmp_path, monkeypatch, capsys):
     monkeypatch.setattr(summary, "OUTPUTS", tmp_path)
-    root = tmp_path / "stage1" / "run1"
+    root = tmp_path / "train" / "run1"
 
     def write(cell, unit, report, preds=None):
         d = root / cell / unit
         d.mkdir(parents=True)
-        (d / "stage1_report.json").write_text(json.dumps(report))
+        (d / "report.json").write_text(json.dumps(report))
         if preds:
             np.savez(d / "test_preds.npz", **preds)
         return d
 
-    curves = {"P0_baseline": [50, 58, 57], "P1_a1_input": [52, 60, 59], "P1_a1_input+sc_static": [52, 59, 58],
-              "P1P3_sc_gain": [51, 55, 61], "P1P3_sc_gain+sc_static": [51, 56, 62], "P4_freq_mixstyle": [50, 57, 56]}
+    curves = {"baseline": [50, 58, 57], "sc": [52, 60, 59], "sc+sc_static": [52, 59, 58],
+              "sc_gain": [51, 55, 61], "sc_gain+sc_static": [51, 56, 62], "freq_mixstyle": [50, 57, 56]}
     for cell, c in curves.items():
         for k in range(3):
             write(cell, f"cv{k}", {"history": [{"epoch": e + 1, "val_score": s + k, "test_score": None} for e, s in enumerate(c)]})
     summary.screen(type("A", (), {"run": "run1", "folds": 3})())
-    scr = json.loads((root / "stage1_screen.json").read_text())
-    assert scr["arms"]["P1_a1_input"]["sc_mode"] == "dynamic" and scr["arms"]["P1_a1_input"]["epoch"] == 2  # static is lower
-    assert scr["arms"]["P1P3_sc_gain"]["sc_mode"] == "static" and scr["arms"]["P1P3_sc_gain"]["cell"] == "P1P3_sc_gain+sc_static"
-    assert scr["arms"]["P0_baseline"]["sc_mode"] is None and scr["ranking"][0] == "P1P3_sc_gain"
-    assert scr["auscult_trust"] == "P1P3_sc_gain"  # 62 + 1 > 60 + 1
+    scr = json.loads((root / "screen.json").read_text())
+    assert scr["arms"]["sc"]["sc_mode"] == "dynamic" and scr["arms"]["sc"]["epoch"] == 2  # static is lower
+    assert scr["arms"]["sc_gain"]["sc_mode"] == "static" and scr["arms"]["sc_gain"]["cell"] == "sc_gain+sc_static"
+    assert scr["arms"]["baseline"]["sc_mode"] is None and scr["ranking"][0] == "sc_gain"
+    assert scr["auscult_trust"] == "sc_gain"  # 62 + 1 > 60 + 1
 
     rng = np.random.default_rng(1)
     y = rng.integers(0, 4, 400)
     pats = np.repeat(np.arange(40), 10).astype(str)
     devices = np.where(np.arange(400) < 200, 0, 3)
-    plan = [("P0_baseline", 2, 0.5, 10), ("P1P3_sc_gain+sc_static", 3, 0.8, 10), ("P1_a1_input", 2, 0.6, 5), ("P4_freq_mixstyle", 2, 0.5, 5)]
+    plan = [("baseline", 2, 0.5, 10), ("sc_gain+sc_static", 3, 0.8, 10), ("sc", 2, 0.6, 5), ("freq_mixstyle", 2, 0.5, 5)]
     for cell, ep, acc, n_seeds in plan:
         for s in range(n_seeds):
             preds = np.stack([np.where(rng.random(400) < acc, y, rng.integers(0, 4, 400)) for _ in range(3)]).astype(np.int8)
             rep = lambda e: per_device_report(y, preds[e - 1], devices)
             write(cell, f"seed{s}", {"fixed": {str(ep): {"epoch": ep, "test": rep(ep)}}, "test_best_optimistic": {"epoch": 3, "test": rep(3)}},
                   {"epochs": np.array([1, 2, 3]), "preds": preds, "labels": y, "device": devices, "patient": pats})
-    scr["arms"]["P4_freq_mixstyle"]["epoch"] = 2
-    (root / "stage1_screen.json").write_text(json.dumps(scr))
+    scr["arms"]["freq_mixstyle"]["epoch"] = 2
+    (root / "screen.json").write_text(json.dumps(scr))
     summary.final(type("A", (), {"run": "run1", "boot": 200})())
-    out = (root / "stage1_final.md").read_text()
-    assert "P1P3_sc_gain (AuscultTrust)" in out and "Gate G (P1P3_sc_gain vs P0, 10 seeds)" in out and "**pass**" in out
+    out = (root / "final.md").read_text()
+    assert "sc_gain (AuscultTrust)" in out and "Non-inferiority (sc_gain vs baseline, 10 seeds)" in out and "**pass**" in out

@@ -1,4 +1,4 @@
-"""Coverage and set-size metrics under device shift (proposal v9, H2): Delta = (1 - alpha) - coverage."""
+"""Coverage and set-size metrics on a new device: Delta = (1 - alpha) - coverage."""
 import numpy as np
 
 

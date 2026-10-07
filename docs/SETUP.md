@@ -1,12 +1,13 @@
 # Setup
 
-Directory layout: the repo `auscult-trust/` sits inside a wrapper directory with `data/` (or `$AT_DATA`), `repos/`, `archive/`.
+The repo `auscult-trust/` sits inside a wrapper directory with `data/` (or the folder in `AT_DATA`), `repos/` (or `AT_REPOS`) and `archive/`.
 
-1. Analysis env (tests, Stage 2): `uv venv .venv && uv pip install -r requirements.txt` (torch cu128 line in that file).
-2. Training env (Stage 1): AST needs `timm==0.4.5`, so a second env on Python 3.10:
+1. Data and reference code: `bash scripts/download_data.sh`, then `python scripts/prepare_data.py`.
+   Sources: ICBHI from the official site (https://bhichallenge.med.auth.gr/sites/default/files/ICBHI_final_database/ICBHI_final_database.zip),
+   the Harvard Dataverse mirror (https://dataverse.harvard.edu/dataset.xhtml?persistentId=doi:10.7910/DVN/HT6PKI) or Kaggle; KAUH from Mendeley Data
+   (https://data.mendeley.com/datasets/jwyy9np4gv/3); AST weights from the AST authors; the Patch-Mix CL repository from GitHub.
+2. Analysis env (tests, evaluation): `uv venv .venv && uv pip install -r requirements.txt` (the torch line in that file selects the CUDA 12.8 build).
+3. Training env: the reference AST code needs `timm==0.4.5`, so a second env on Python 3.10:
    `uv venv .venv-train --python 3.10 && uv pip install --python .venv-train/bin/python -r requirements-train.txt`.
-3. Data under `../data` (`data/README.md`): `raw/icbhi`, `raw/kauh`, `processed/patchmix_icbhi` (`audio_test_data/` symlinks to the
-   ICBHI wav and txt files, `official_split.txt`), `models/ast/audioset_10_10_0.4593.pth` (AST AudioSet weights, mAP 0.4593).
-4. Legacy artefacts from before the restructure: `python scripts/migrate_legacy_layout.py` (dry run), then `--apply`.
 
 Tests: `uv run --no-project --python .venv/bin/python python -m pytest -q tests`.

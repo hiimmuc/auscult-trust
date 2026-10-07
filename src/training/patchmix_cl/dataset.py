@@ -1,4 +1,4 @@
-"""ICBHI cycle dataset (official 60/40 split) and the Stage 1 data loaders."""
+"""ICBHI cycle dataset (official 60/40 split) and the training data loaders."""
 import copy
 import os
 import random
@@ -21,7 +21,7 @@ IMG_TIME, IMG_MEL = 798, 128  # fbank of an 8 s cycle
 class ICBHIDataset(Dataset):
     """Cycles of the official train or test split. Items: (fbank image, label, device id).
 
-    With `args.a1_input` the waveform of every cycle goes through spectrum correction (SC) before the STFT: train
+    With `args.spectrum_correction` the waveform of every cycle goes through spectrum correction (SC) before the STFT: train
     clips use their own (source) device spectra, test clips their own (target) spectra, both against the train
     reference (`sc_reference` = `device_spectra` of the train dataset). The SC state is kept in `self.sc`.
     """
@@ -43,7 +43,7 @@ class ICBHIDataset(Dataset):
                 self.devices.append(DEVICES.index(f.split('_')[-1]))
                 patients.append(f.split('_')[0])
         self.patients = np.array(patients)
-        self.sc = self._spectrum_correct(audio, sc_reference) if args.a1_input else None
+        self.sc = self._spectrum_correct(audio, sc_reference) if args.spectrum_correction else None
         if self.sc:
             audio = self.sc.pop('audio')
 
@@ -62,18 +62,18 @@ class ICBHIDataset(Dataset):
         spectra = {d: mean_spectrum(w) for d, w in by_dev.items()}
         ref_spectra = spectra if self.train_flag else sc_reference
         a = self.args
-        coef = spectrum_coefficients(spectra, reference=a.a1_reference, sc_mode=a.sc_mode, limit_freq_low=a.sc_limit_freq_low,
+        coef = spectrum_coefficients(spectra, reference=a.sc_reference, sc_mode=a.sc_mode, limit_freq_low=a.sc_limit_freq_low,
                                      limit_freq_high=a.sc_limit_freq_high, limit_freq_diff=a.sc_limit_freq_diff,
                                      reference_spectra=ref_spectra)
         corrected = [torch.from_numpy(apply_spectrum_correction(w.numpy()[0], coef[d]).astype(np.float32))[None]
                      for w, d in zip(audio, self.devices)]
-        return {'device_spectra': spectra, 'reference': reference_spectrum(ref_spectra, a.a1_reference),
+        return {'device_spectra': spectra, 'reference': reference_spectrum(ref_spectra, a.sc_reference),
                 'coefficients': coef, 'audio': corrected}
 
     def __getitem__(self, index):
         image = self.images[index]
-        if self.train_flag and self.args.rand_bin_gain > 0:  # P3
-            image = random_bin_gain_image(image, self.args.rand_bin_gain, np.random.default_rng(random.getrandbits(32)))
+        if self.train_flag and self.args.random_gain_db > 0:  # P3
+            image = random_bin_gain_image(image, self.args.random_gain_db, np.random.default_rng(random.getrandbits(32)))
         if self.transform is not None:
             image = self.transform(image)
         return image, self.labels[index], self.devices[index]

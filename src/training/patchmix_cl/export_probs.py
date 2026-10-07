@@ -1,11 +1,11 @@
-"""Stage 1 -> Stage 2 bridge: freeze a trained run and export softmax + embeddings for the conformal pipeline.
+"""Freeze a trained run and export softmax + embeddings for the conformal evaluation.
 
 Writes `<unit outputs dir>/export/<split>.npz` for the official test set and, when the run had one, the held-out
 validation patients (`probs` (n, K), `emb` (n, 768), `labels`, `device` (ids of `src.processing.icbhi.DEVICES`),
-`patient`), and `export/model.sha256` with the hash of the weight file, so every Stage 2 number is tied to one frozen
+`patient`), and `export/model.sha256` with the hash of the weight file, so every downstream number is tied to one frozen
 checkpoint. The weights are not modified.
 
-    python -m src.training.patchmix_cl.export_probs outputs/stage1/<run_id>/<cell>/<unit> --ckpt report_epoch_<E>.pth
+    python -m src.training.patchmix_cl.export_probs outputs/train/<run_id>/<cell>/<unit> --ckpt report_epoch_<E>.pth
 """
 import argparse
 import json

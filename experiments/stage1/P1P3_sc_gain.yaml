@@ -1,3 +1,0 @@
-# P1+P3: SC plus random per-bin gain (6 dB SD) at train time.
-a1_input: true
-rand_bin_gain: 6.0

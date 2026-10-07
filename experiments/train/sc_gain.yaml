@@ -1,0 +1,3 @@
+# SC plus random per-bin gain (6 dB SD) at train time.
+spectrum_correction: true
+random_gain_db: 6.0

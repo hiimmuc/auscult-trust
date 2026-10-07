@@ -1,2 +1,0 @@
-# Override: static SC bound (50-2000 Hz unclipped, no-op outside). Combine after an SC arm: P1_a1_input.yaml,sc_static.yaml.
-sc_mode: static
