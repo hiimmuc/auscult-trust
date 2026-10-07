@@ -16,6 +16,8 @@
 #                                          a cell is arm files joined by '+', e.g. baseline, baseline+patchmix,
 #                                          baseline+freeze_encoder, sc_gain (default: baseline)
 #
+# PARALLEL=N runs N jobs at the same time on the GPU (scripts/sweep.py: a job starts only when MEM_GB of GPU memory is free,
+# default 8). Without it the jobs run one after the other.
 # Environment variables: PY (python of the training env, default .venv-train/bin/python), RUN_ID (default: timestamp),
 # FOLDS (default 3), EXTRA_ARGS (appended to every training call).
 cd "$(dirname "$0")/.." || exit 1
@@ -24,6 +26,7 @@ export PYTHONPATH=. PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
 PY=${PY:-.venv-train/bin/python}
 CONF=experiments/train
 FOLDS=${FOLDS:-3}
+JOBS=$(mktemp)
 SC_ARMS="sc sc_gain"
 mode=$1; shift
 echo "run: $RUN_ID  (continue or resume this campaign with RUN_ID=$RUN_ID)"
@@ -32,7 +35,12 @@ train() {  # train <cell> <extra args...>; cell parts joined by '+' map to exper
   local cell=$1; shift
   local cfg=$CONF/base.yaml
   for part in ${cell//+/ }; do cfg=$cfg,$CONF/$part.yaml; done
-  $PY -m src.training.patchmix_cl.main --config "$cfg" --cell "$cell" $EXTRA_ARGS "$@" || echo "FAILED: $cell $*"
+  local cmd="$PY -m src.training.patchmix_cl.main --config $cfg --cell $cell $EXTRA_ARGS $*"
+  if [ -n "$PARALLEL" ]; then echo "$cmd" >> "$JOBS"; else $cmd || echo "FAILED: $cell $*"; fi
+}
+
+run_queued() {  # in PARALLEL mode: run the collected jobs concurrently
+  [ -n "$PARALLEL" ] && $PY scripts/sweep.py "$JOBS" --workers "$PARALLEL" --mem-gb "${MEM_GB:-8}"
 }
 
 case $mode in
@@ -46,7 +54,8 @@ case $mode in
           train "$cell" --cv_folds "$FOLDS" --cv_fold "$k" --seed "$k"
         done
       done
-    done ;;
+    done
+    run_queued ;;
   summary) $PY -m src.training.patchmix_cl.summary screen --run "$RUN_ID" --folds "$FOLDS" ;;
   final)
     plan=outputs/train/$RUN_ID/final_plan.txt  # one line per arm: <cell> <epoch> <seed list>
@@ -62,13 +71,15 @@ PYEOF
       for s in ${seeds//,/ }; do
         train "$cell" --selection fixed --report_epochs "$epoch" --seed "$s"
       done
-    done < $plan ;;
+    done < $plan
+    run_queued ;;
   reproduce)
     for cell in ${@:-baseline}; do
       for s in 0 1 2 3 4; do
         train "$cell" --selection test --seed "$s"
       done
-    done ;;
+    done
+    run_queued ;;
   report) $PY -m src.training.patchmix_cl.summary final --run "$RUN_ID" ;;
   *) echo "usage: bash scripts/run.sh screen [arm ...] | summary | final | report | reproduce [cell ...]  (details in the file header)"; exit 1 ;;
 esac
