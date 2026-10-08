@@ -19,6 +19,7 @@
 #
 # PARALLEL=N runs N jobs at the same time on the GPU (scripts/sweep.py: a job starts only when MEM_GB of GPU memory is free,
 # default 8). Without it the jobs run one after the other.
+# DRY=1 only writes the job list (logs/RUN_ID/jobs-<step>.txt), e.g. to split it between machines.
 # Environment variables: PY (python of the training env, default .venv-train/bin/python; .venv-dass/bin/python for DASS), RUN_ID (default: timestamp),
 # FOLDS (default 3), EXTRA_ARGS (appended to every training call).
 cd "$(dirname "$0")/.." || exit 1
@@ -44,6 +45,7 @@ train() {  # train <cell> <extra args...>; cell parts joined by '+' map to exper
 }
 
 run_queued() {  # in PARALLEL mode: run the collected jobs concurrently
+  [ -n "$DRY" ] && { echo "DRY: job list written to $JOBS ($(wc -l < "$JOBS") jobs), nothing started"; return; }
   [ -n "$PARALLEL" ] && $PY scripts/sweep.py "$JOBS" --workers "$PARALLEL" --mem-gb "${MEM_GB:-8}" --ram-gb "${RAM_GB:-6}"
 }
 
