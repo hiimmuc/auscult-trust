@@ -70,15 +70,18 @@ def save_sc_state(out_dir, train_dataset, test_dataset, args):
 
 def history_json(history):
     score = lambda r: None if r is None else r["all"]["score"]
+    sse = lambda r: None if r is None else {k: r["all"][k] for k in ("sp", "se", "score", "hs")}
     return [
         {
             "epoch": h["epoch"],
             "val_score": score(h["val"]),
             "test_score": score(h["test"]),
+            "val": sse(h["val"]),
+            "test": sse(h["test"]),
             "val_devices": (
                 None
                 if h["val"] is None
-                else {k: v["score"] for k, v in h["val"].items() if k != "all"}
+                else {k: {m: v[m] for m in ("sp", "se", "score", "hs")} for k, v in h["val"].items() if k != "all"}
             ),
         }
         for h in history

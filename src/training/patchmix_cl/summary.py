@@ -63,6 +63,7 @@ def screen(a):
             "epoch": ep,
             "cv_score": float(mean_cv_curve(curves)[ep - 1]),
             "fold_scores": [float(x[ep - 1]) for x in curves],
+            **{k: float(np.mean([f["history"][ep - 1]["val"][k] for f in folds])) for k in ("sp", "se", "hs")},
             "sc_mode": "static" if c.endswith(STATIC) else "dynamic",
         }
     arms = {}
@@ -82,18 +83,21 @@ def screen(a):
     trust = (
         max(sc, key=lambda x: (arms[x]["cv_score"], x == SC_ARMS[0])) if sc else None
     )  # tie: sc
-    print("| rank | arm | cell | sc_mode | CV epoch | mean CV Score | fold Scores |")
-    print("|---|---|---|---|---|---|---|")
+    print("| rank | arm | cell | sc_mode | CV epoch | Sp | Se | mean CV Score | HS | fold Scores |")
+    print("|---|---|---|---|---|---|---|---|---|---|")
     for i, x in enumerate(ranking, 1):
         r = arms[x]
         print(
-            "| {} | {} | {} | {} | {} | {:.2f} | {} |".format(
+            "| {} | {} | {} | {} | {} | {:.1f} | {:.1f} | {:.2f} | {:.1f} | {} |".format(
                 i,
                 x,
                 r["cell"],
                 r["sc_mode"] or "-",
                 r["epoch"],
+                r["sp"],
+                r["se"],
                 r["cv_score"],
+                r["hs"],
                 ", ".join("{:.1f}".format(s) for s in r["fold_scores"]),
             )
         )

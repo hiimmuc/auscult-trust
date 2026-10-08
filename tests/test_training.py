@@ -94,7 +94,7 @@ def test_summary_screen_and_final_end_to_end(tmp_path, monkeypatch, capsys):
               "sc_gain": [51, 55, 61], "sc_gain+sc_static": [51, 56, 62], "freq_mixstyle": [50, 57, 56]}
     for cell, c in curves.items():
         for k in range(3):
-            write(cell, f"cv{k}", {"history": [{"epoch": e + 1, "val_score": s + k, "test_score": None} for e, s in enumerate(c)]})
+            write(cell, f"cv{k}", {"history": [{"epoch": e + 1, "val_score": s + k, "test_score": None, "val": {"sp": 70.0, "se": 40.0, "score": s + k, "hs": 50.0}} for e, s in enumerate(c)]})
     summary.screen(type("A", (), {"run": "run1", "folds": 3})())
     scr = json.loads((root / "screen.json").read_text())
     assert scr["arms"]["sc"]["sc_mode"] == "dynamic" and scr["arms"]["sc"]["epoch"] == 2  # static is lower
