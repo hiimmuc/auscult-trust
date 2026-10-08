@@ -6,7 +6,7 @@
 `--workers` jobs run, the GPU has at least `--mem-gb` GB free and the machine has at least `--ram-gb` GB of available RAM
 (other users of the machine are respected, nothing is killed). Each job gets `--threads` math threads and `--num-workers`
 loader workers so that parallel jobs do not oversubscribe the CPU. A job that dies from lack of memory (CUDA "out of memory"
-or the kernel's kill, exit 137) is queued again, up to 3 tries.
+or the kernel's kill, exit 137) is queued again, up to `--retries` times.
 Resume: run the same command again with the same RUN_ID. Units with a report.json are skipped here without starting
 anything; an interrupted unit continues from its last.pth. One log per job: logs/<RUN_ID><SWEEP_TAG>/<n>.log.
 """
@@ -56,6 +56,7 @@ def main():
     ap.add_argument("--mem-gb", type=float, default=8.0, help="GPU memory one job needs")
     ap.add_argument("--ram-gb", type=float, default=6.0, help="available RAM a new job needs (about 2 with the spectrogram cache)")
     ap.add_argument("--ramp", type=int, default=90, help="seconds a new job needs to reach its memory use; the next one starts after")
+    ap.add_argument("--retries", type=int, default=8, help="tries after a memory failure; a full GPU can crash several starts in a row")
     ap.add_argument("--poll", type=int, default=20)
     ap.add_argument("--threads", type=int, default=3, help="math threads per job (OMP/MKL); jobs share the CPU")
     ap.add_argument("--num-workers", type=int, default=4, help="data loader workers per job")
@@ -75,7 +76,7 @@ def main():
             running.remove(job)
             log = (log_dir / f"{i}.log").read_text(errors="ignore")
             if proc.returncode != 0:
-                if ("out of memory" in log or proc.returncode in (137, -9)) and tries < 3:
+                if ("out of memory" in log or proc.returncode in (137, -9)) and tries < a.retries:
                     queue.append((i, cmd, tries + 1))
                     print(f"job {i}: out of memory (exit {proc.returncode}), queued again", flush=True)
                 else:
