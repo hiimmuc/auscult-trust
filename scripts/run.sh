@@ -12,6 +12,7 @@
 #                                          the test set: seeds 0-9 for baseline and AuscultTrust, 0-4 for the others
 #   bash scripts/run.sh report             final table and non-inferiority check -> outputs/train/RUN_ID/final.md
 #   RUN_ID=<id> PARALLEL=3 bash scripts/run.sh resume   after a crash or reboot: runs the same jobs again, skipping finished units
+#   SCREEN_RUN=<id> bash scripts/run.sh lodo   leave-one-device-out, 4 devices x 3 arms x 5 seeds, epochs of the screening run SCREEN_RUN
 #   bash scripts/run.sh reproduce [cell ...]   published protocol for comparison with the papers: official split, 5 seeds
 #                                          (0-4), the epoch with the best test Score is kept (optimistic, as in the papers);
 #                                          a cell is arm files joined by '+', e.g. baseline, baseline+patchmix,
@@ -78,6 +79,21 @@ PYEOF
         train "$cell" --selection fixed --report_epochs "$epoch" --seed "$s"
       done
     done < $plan
+    run_queued ;;
+  lodo)  # leave-one-device-out, seeds 0-4: baseline, Freq-MixStyle and the AuscultTrust arm at their screening epochs
+    for dev in meditron littc2se litt3200 akgc417l; do
+      while read cell epoch; do
+        for s in 0 1 2 3 4; do
+          train "$cell+lodo_$dev" --selection fixed --report_epochs "$epoch" --seed "$s"
+        done
+      done < <($PY - "${SCREEN_RUN:-$RUN_ID}" <<'PYEOF'
+import json, sys
+s = json.load(open('outputs/train/{}/screen.json'.format(sys.argv[1])))
+for arm in ('baseline', 'freq_mixstyle', s['auscult_trust']):
+    print(s['arms'][arm]['cell'], s['arms'][arm]['epoch'])
+PYEOF
+)
+    done
     run_queued ;;
   reproduce)
     for cell in ${@:-baseline}; do
