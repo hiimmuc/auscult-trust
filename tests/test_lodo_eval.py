@@ -20,7 +20,7 @@ def _write_unit(root, cell, seed, shift, rng):
     tp, ty, tpat = probs(500, 2.0 - shift)  # a shifted device is predicted less sharply
     np.savez(d / "cal_preds.npz", epochs=np.array([2]), probs=cp[None], labels=cy, device=cy * 0, patient=cpat)
     np.savez(d / "test_preds.npz", epochs=np.array([1, 2]), probs=np.stack([tp, tp]), labels=ty, device=ty * 0, patient=tpat)
-    (d / "report.json").write_text(json.dumps({"fixed": {"2": {"test": {"all": {"score": 55.0}}}}}))
+    (d / "report.json").write_text(json.dumps({"fixed": {"2": {"test": {"all": {"sp": 60.0, "se": 50.0, "score": 55.0, "hs": 54.5}}}}}))
 
 
 def test_lodo_pipeline_prefers_the_arm_with_less_shift(tmp_path):

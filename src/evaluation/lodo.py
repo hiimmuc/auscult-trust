@@ -115,7 +115,7 @@ def fold_table(units, arms, alpha=ALPHA):
                     "arm": arm,
                     "seeds": len(us),
                     "n_test": int(len(next(iter(us.values()))["test_y"])),
-                    "score": float(np.mean([u["score"]["score"] for u in us.values()])),
+                    **{k: float(np.mean([u["score"][k] for u in us.values()])) for k in ("sp", "se", "score", "hs")},
                     "coverage": float(np.mean([c["coverage"] for c in cs])),
                     "delta": float(np.mean([c["delta"] for c in cs])),
                     "abs_delta": float(np.mean([abs(c["delta"]) for c in cs])),
@@ -171,10 +171,10 @@ def h2_statistic(units, base, arm, folds, alpha=ALPHA, n_boot=1000, seed=0):
 
 
 def markdown(rows, gate, stats, base):
-    L = ["| Held-out device | Arm | Seeds | Test cycles | Score | Coverage | Delta (prior-matched) | Set size | Singleton | Empty |", "|---|---|---|---|---|---|---|---|---|---|"]
+    L = ["| Held-out device | Arm | Seeds | Test cycles | Sp | Se | Score | HS | Coverage | Delta (prior-matched) | Set size | Singleton | Empty |", "|---|---|---|---|---|---|---|---|---|---|---|---|---|"]
     for r in rows:
         L.append(
-            "| {device} | {arm} | {seeds} | {n_test} | {score:.1f} | {coverage:.3f} | {delta:+.3f} | {size:.2f} | {singleton:.2f} | {empty:.3f} |".format(**r)
+            "| {device} | {arm} | {seeds} | {n_test} | {sp:.1f} | {se:.1f} | {score:.1f} | {hs:.1f} | {coverage:.3f} | {delta:+.3f} | {size:.2f} | {singleton:.2f} | {empty:.3f} |".format(**r)
         )
     L += ["", "Null gate (baseline |Delta| vs 95th percentile of |Delta| under exchangeable re-splits of calibration patients):", ""]
     L += ["| Device | baseline abs Delta | null p95 | tested |", "|---|---|---|---|"]
