@@ -52,7 +52,7 @@ def main():
     vars(args).update(json.load(open(out_unit / "train_args.json")))
     args.num_workers = a.num_workers
 
-    _, val_loader, test_loader, _, _ = build_loaders(args)
+    _, val_loader, test_loader, _, _, _, _ = build_loaders(args)
     model, classifier, _, _, _ = build_model(args)
     ckpt = ckpt_unit / a.ckpt
     ck = torch.load(ckpt, map_location="cpu", weights_only=False)

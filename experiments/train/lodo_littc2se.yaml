@@ -1,0 +1,2 @@
+# Leave-one-device-out: test = every cycle recorded on LittC2SE (see --holdout_device).
+holdout_device: LittC2SE

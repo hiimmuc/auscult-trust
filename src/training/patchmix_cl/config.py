@@ -10,7 +10,7 @@ from pathlib import Path
 
 import yaml
 from src.paths import DATA
-from src.processing.icbhi import CLASSES
+from src.processing.icbhi import CLASSES, DEVICES
 
 from .encoders import NAMES, get_encoder
 
@@ -164,6 +164,20 @@ def build_parser():
         help="backbone; opera_ct, clap and hear are frozen-only",
     )
     p.add_argument(
+        "--holdout_device",
+        type=str,
+        default=None,
+        choices=DEVICES,
+        help="leave-one-device-out: test = every cycle of this device, calibration and training "
+        "patients from the other devices (needs --selection fixed)",
+    )
+    p.add_argument(
+        "--lodo_cal_frac",
+        type=float,
+        default=0.2,
+        help="share of each source device's patients used for calibration (leave-one-device-out)",
+    )
+    p.add_argument(
         "--freeze_encoder",
         action="store_true",
         help="train only the classifier and projector, not the pretrained encoder",
@@ -227,6 +241,10 @@ def parse_args(argv=None):
     assert (
         args.freeze_encoder or not get_encoder(args.encoder).frozen_only
     ), "{} is only trained with a frozen encoder (add freeze_encoder.yaml)".format(args.encoder)
+    if args.holdout_device:
+        assert (
+            args.selection == "fixed" and args.cv_folds == 0
+        ), "--holdout_device needs --selection fixed (epoch frozen from screening) and no --cv_folds"
     args.lr_decay_epochs = [int(e) for e in args.lr_decay_epochs.split(",")]
     args.cls_list = CLASSES if args.n_cls == 4 else ["normal", "abnormal"]
     if args.warm:

@@ -103,7 +103,9 @@ def main():
     cudnn.deterministic = True
     cudnn.benchmark = True
 
-    train_loader, val_loader, test_loader, train_dataset, test_dataset = build_loaders(args)
+    train_loader, val_loader, test_loader, train_dataset, test_dataset, cal_loader, cal_cycles = (
+        build_loaders(args)
+    )
     model, classifier, projector, criterion, optimizer = build_model(args)
     scaler = torch.cuda.amp.GradScaler()
     s_ref_sha = (
@@ -111,6 +113,7 @@ def main():
     )
 
     start_epoch, best_key, best_model, history, test_preds = 1, -1.0, None, [], {}
+    cal_preds = {}  # leave-one-device-out: calibration-patient predictions at the report epochs
     last = ckpt_dir / "last.pth"
     if last.is_file():  # full resume (written every epoch); RNG state is not restored
         ck = torch.load(last, map_location="cpu", weights_only=False)
@@ -119,6 +122,7 @@ def main():
         scaler.load_state_dict(ck["scaler"])
         start_epoch, best_model, best_key = ck["epoch"] + 1, ck["best_model"], ck["best_key"]
         history, test_preds = ck["history"], ck["test_preds"]
+        cal_preds = ck.get("cal_preds", {})
         print("=> resumed '{}' after epoch {}".format(last, ck["epoch"]))
 
     screening = args.cv_folds > 0  # selection never sees test data while screening
@@ -177,6 +181,9 @@ def main():
                 for m in (model, classifier)
             ]
             print("Best ckpt is modified with key = {:.2f} when Epoch = {}".format(key, epoch))
+        if cal_loader is not None and epoch in args.report_epoch_list:
+            _, c_preds, c_probs, _, _ = evaluate(cal_loader, model, classifier, args)
+            cal_preds[epoch] = (c_preds.astype(np.int8), c_probs.astype(np.float16))
         if args.selection == "fixed" and epoch in args.report_epoch_list:
             save_model(
                 model, args, epoch, ckpt_dir / "report_epoch_{}.pth".format(epoch), classifier
@@ -193,6 +200,7 @@ def main():
                 "best_key": best_key,
                 "history": history,
                 "test_preds": test_preds,
+                "cal_preds": cal_preds,
                 "epoch": epoch,
             },
             str(last) + ".tmp",
@@ -200,6 +208,8 @@ def main():
         (ckpt_dir / "last.pth.tmp").replace(
             last
         )  # atomic: a crash mid-save keeps the previous epoch
+        if cal_loader is not None and epoch >= max(args.report_epoch_list):
+            break  # same weights as the full schedule at this epoch; later epochs are not needed
 
     picked = pick_epochs(history)
     if args.selection == "fixed":
@@ -224,6 +234,16 @@ def main():
             labels=np.asarray(test_dataset.labels),
             device=np.asarray(test_dataset.devices),
             patient=np.asarray(test_dataset.patients),
+        )
+    if cal_preds:  # leave-one-device-out: calibration set of the conformal analysis
+        ep = sorted(cal_preds)
+        np.savez_compressed(
+            out_dir / "cal_preds.npz",
+            epochs=np.array(ep),
+            probs=np.stack([cal_preds[e][1] for e in ep]),
+            labels=np.asarray(cal_cycles.labels),
+            device=np.asarray(cal_cycles.devices),
+            patient=np.asarray(cal_cycles.patients),
         )
     for name in ("last", "cv_selected", "test_best_optimistic"):
         if name in picked and picked[name]["test"] is not None:

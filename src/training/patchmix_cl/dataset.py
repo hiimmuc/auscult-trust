@@ -15,7 +15,7 @@ from src.processing.correction import (
     spectrum_coefficients,
 )
 from src.processing.icbhi import DEVICES
-from src.processing.splits import cv_split, patient_val_split
+from src.processing.splits import cv_split, lodo_split, patient_val_split
 from torch.utils.data import DataLoader, Dataset, Subset
 from torchvision import transforms
 
@@ -38,7 +38,8 @@ class ICBHIDataset(Dataset):
 
     def __init__(self, train_flag, transform, args, sc_reference=None, print_flag=True):
         self.train_flag, self.transform, self.args = train_flag, transform, args
-        self.split = "train" if train_flag else "test"
+        lodo = bool(args.holdout_device)  # leave-one-device-out: one dataset over all cycles, split by index later
+        self.split = "all" if lodo else "train" if train_flag else "test"
         wav_dir = os.path.join(args.data_folder, "audio_test_data")
         official = dict(
             line.strip().split("\t")
@@ -49,7 +50,14 @@ class ICBHIDataset(Dataset):
         stems = sorted(
             {f.split(".")[0] for f in os.listdir(wav_dir) if f.endswith((".wav", ".txt"))}
         )
-        self.filenames = [f for f in stems if official.get(f) == self.split]
+        if lodo:  # drop the patients that the official split puts on both sides
+            sides = defaultdict(set)
+            for f in stems:
+                sides[f.split("_")[0]].add(official.get(f))
+            self.dropped = {p for p, s in sides.items() if len(s) > 1 or None in s}
+            self.filenames = [f for f in stems if f.split("_")[0] not in self.dropped]
+        else:
+            self.filenames = [f for f in stems if official.get(f) == self.split]
         annotations = read_annotations(wav_dir)
 
         self.encoder = get_encoder(args.encoder)
@@ -57,6 +65,7 @@ class ICBHIDataset(Dataset):
         if cached:
             self.images, self.labels, self.devices, self.patients = cached
             self.sc = None
+            self._lodo_indices()
         else:
             audio, labels, devices, patients = [], [], [], []
             for f in self.filenames:
@@ -66,6 +75,7 @@ class ICBHIDataset(Dataset):
                     devices.append(DEVICES.index(f.split("_")[-1]))
                     patients.append(f.split("_")[0])
             self.labels, self.devices, self.patients = labels, devices, np.array(patients)
+            self._lodo_indices()
             self.sc = (
                 self._spectrum_correct(audio, sc_reference) if args.spectrum_correction else None
             )
@@ -87,6 +97,18 @@ class ICBHIDataset(Dataset):
                         for c, n in zip(args.cls_list, counts)
                     ),
                 )
+            )
+
+    def _lodo_indices(self):
+        """In leave-one-device-out mode, the (train, calibration, test) cycle indices of this run's seed."""
+        self.lodo = None
+        if self.args.holdout_device:
+            self.lodo = lodo_split(
+                self.patients,
+                np.asarray(self.devices),
+                DEVICES.index(self.args.holdout_device),
+                self.args.lodo_cal_frac,
+                self.args.seed,
             )
 
     def _cache_paths(self):
@@ -131,11 +153,17 @@ class ICBHIDataset(Dataset):
 
     def _spectrum_correct(self, audio, sc_reference):
         """SC of every cycle. Returns dict `device_spectra`, `reference` (s_ref), `coefficients`, corrected `audio`."""
+        used = None if self.lodo is None else set(np.concatenate(self.lodo).tolist())
         by_dev = defaultdict(list)
-        for a, d in zip(audio, self.devices):
-            by_dev[d].append(a.numpy()[0])
+        for i, (a, d) in enumerate(zip(audio, self.devices)):
+            if used is None or i in used:  # LODO: only cycles that are in train, calibration or test
+                by_dev[d].append(a.numpy()[0])
         spectra = {d: mean_spectrum(w) for d, w in by_dev.items()}
-        ref_spectra = spectra if self.train_flag else sc_reference
+        if self.lodo is not None:  # reference = mean of the source devices; the held-out device is corrected towards it
+            held = DEVICES.index(self.args.holdout_device)
+            ref_spectra = {d: s for d, s in spectra.items() if d != held}
+        else:
+            ref_spectra = spectra if self.train_flag else sc_reference
         a = self.args
         coef = spectrum_coefficients(
             spectra,
@@ -176,12 +204,65 @@ class ICBHIDataset(Dataset):
         return len(self.labels)
 
 
-def build_loaders(args):
-    """Train, validation (None for a fixed refit) and test loaders.
+class _Cycles:
+    """Labels, devices, patients and SC state of a subset of cycles (what the report and export code reads)."""
+
+    def __init__(self, ds, idx):
+        self.labels = [ds.labels[i] for i in idx]
+        self.devices = [ds.devices[i] for i in idx]
+        self.patients = ds.patients[idx]
+        self.sc = ds.sc
+
+
+def _lodo_loaders(args):
+    """Leave-one-device-out loaders: training patients, calibration patients (evaluated at the report epochs) and the
+    held-out device as test set.
 
     Returns:
-        Tuple (train_loader, val_loader, test_loader, train_dataset, test_dataset).
+        Tuple (train_loader, None, test_loader, dataset, test cycles, calibration loader, calibration cycles).
     """
+    train_tf = transforms.Compose([transforms.ToTensor(), SpecAugment()])
+    eval_tf = transforms.ToTensor()
+    ds = ICBHIDataset(True, train_tf, args)
+    tr_idx, ca_idx, te_idx = ds.lodo
+    eval_ds = copy.copy(ds)
+    eval_ds.transform, eval_ds.train_flag = eval_tf, False
+    print(
+        "LODO {}: patients train/cal/test {}/{}/{}, cycles {}/{}/{}, dropped (both official sides) {}".format(
+            args.holdout_device,
+            *(len(set(ds.patients[i])) for i in (tr_idx, ca_idx, te_idx)),
+            len(tr_idx),
+            len(ca_idx),
+            len(te_idx),
+            sorted(ds.dropped),
+        )
+    )
+
+    def make(d, **kw):
+        return DataLoader(
+            d, batch_size=args.batch_size, num_workers=args.num_workers, pin_memory=True, **kw
+        )
+
+    return (
+        make(Subset(ds, tr_idx), shuffle=True, drop_last=True),
+        None,
+        make(Subset(eval_ds, te_idx), shuffle=False),
+        ds,
+        _Cycles(ds, te_idx),
+        make(Subset(eval_ds, ca_idx), shuffle=False),
+        _Cycles(ds, ca_idx),
+    )
+
+
+def build_loaders(args):
+    """Train, validation (None for a fixed refit) and test loaders, plus calibration loader and cycles (leave-one-device-out only).
+
+    Returns:
+        Tuple (train_loader, val_loader, test_loader, train_dataset, test_dataset, calibration_loader, calibration_cycles);
+        the last two are None unless `args.holdout_device` is set.
+    """
+    if args.holdout_device:
+        return _lodo_loaders(args)
     train_tf = transforms.Compose([transforms.ToTensor(), SpecAugment()])
     eval_tf = transforms.ToTensor()
     train_dataset = ICBHIDataset(True, train_tf, args)
@@ -221,4 +302,12 @@ def build_loaders(args):
     val_loader = (
         make(val_set, shuffle=False) if args.selection == "cv" else None
     )  # fixed refit: val patients are in the training set
-    return train_loader, val_loader, make(test_dataset, shuffle=False), train_dataset, test_dataset
+    return (
+        train_loader,
+        val_loader,
+        make(test_dataset, shuffle=False),
+        train_dataset,
+        test_dataset,
+        None,
+        None,
+    )

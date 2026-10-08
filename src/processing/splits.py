@@ -248,3 +248,42 @@ def cv_split(patients, devices, n_folds, fold):
     assign = patient_folds(patients, devices, n_folds)
     is_val = np.array([assign[p] == fold for p in np.asarray(patients).tolist()])
     return np.flatnonzero(~is_val), np.flatnonzero(is_val)
+
+
+def lodo_split(patients, devices, held, cal_frac=0.2, seed=0, drop=()):
+    """Leave-one-device-out split over all cycles (the official train/test side is ignored).
+
+    Test = every cycle recorded on the held-out device. A patient with any recording on the held-out device leaves
+    training and calibration (their held-out-device cycles stay in test). Of the remaining patients, `cal_frac` of each
+    device's patients (by the patient's main device, at least one if the device has two or more) form the calibration
+    set; the rest train. Patients in `drop` are excluded everywhere.
+
+    Args:
+        patients: (n,) patient id per cycle.
+        devices: (n,) device id per cycle.
+        held: Device id to hold out.
+        cal_frac: Fraction of each source device's patients used for calibration.
+        seed: Run seed; changes which patients are calibration patients.
+        drop: Patient ids to exclude (e.g. patients on both sides of the official split).
+
+    Returns:
+        Tuple (train_idx, cal_idx, test_idx) of cycle indices, disjoint by patient.
+    """
+    patients, devices = np.asarray(patients), np.asarray(devices)
+    keep = ~np.isin(patients, list(drop))
+    held_mask = (devices == held) & keep
+    shared = set(patients[held_mask].tolist())
+    src = keep & (devices != held) & ~np.isin(patients, list(shared))
+    main = {}
+    for p in sorted(set(patients[src].tolist())):
+        vals, counts = np.unique(devices[src & (patients == p)], return_counts=True)
+        main[p] = int(vals[np.argmax(counts)])
+    rng = np.random.default_rng(20_000 + seed)
+    cal = set()
+    for d in sorted(set(main.values())):
+        ids = [p for p in sorted(main) if main[p] == d]
+        rng.shuffle(ids)
+        if len(ids) > 1:
+            cal.update(ids[: max(1, int(round(cal_frac * len(ids))))])
+    is_cal = np.isin(patients, list(cal))
+    return np.flatnonzero(src & ~is_cal), np.flatnonzero(src & is_cal), np.flatnonzero(held_mask)
