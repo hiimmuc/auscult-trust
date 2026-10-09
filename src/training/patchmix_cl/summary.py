@@ -201,24 +201,23 @@ def final(a):
     )
 
     devs = ["Meditron", "Litt3200", "AKGC417L"]
-    L += [
-        "\n### Per device (primary epoch, seeds 0-4), Score mean ± SD\n",
-        "| arm | " + " | ".join(devs) + " |",
-        "|---|" + "---|" * len(devs),
-    ]
-    for arm, r in res.items():
-        cells = [
-            _ms(
-                [
-                    p["test"][d]["score"]
-                    for s, p in r["per"].items()
-                    if s in BENCHMARK_SEEDS and d in p["test"]
-                ]
-                or [np.nan]
-            )
-            for d in devs
-        ]
-        L.append("| {} | {} |".format(arm, " | ".join(cells)))
+    L += ["\n### Per device (primary epoch, seeds 0-4), mean ± SD\n"]
+    for metric, title in (("sp", "Sp"), ("se", "Se"), ("score", "Score"), ("hs", "HS")):
+        L += ["**{}**\n".format(title), "| arm | " + " | ".join(devs) + " |", "|---|" + "---|" * len(devs)]
+        for arm, r in res.items():
+            cells = [
+                _ms(
+                    [
+                        p["test"][d][metric]
+                        for s, p in r["per"].items()
+                        if s in BENCHMARK_SEEDS and d in p["test"]
+                    ]
+                    or [np.nan]
+                )
+                for d in devs
+            ]
+            L.append("| {} | {} |".format(arm, " | ".join(cells)))
+        L.append("")
 
     if BASE in res:
         L += [

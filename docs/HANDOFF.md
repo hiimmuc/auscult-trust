@@ -18,7 +18,7 @@ Read this first when resuming. Everything below is verified at the time stated; 
 ## What is running (schedulers survive the session; children are independent)
 
 | Campaign | RUN_ID | Where | Job list | Log |
-|---|---|---|---|---|
+| --- | --- | --- | --- | --- |
 | Final refit, seeds 0-4, 4 arms (baseline epoch 2, freq_mixstyle 3, sc+sc_static 14, sc_gain 2), 20 runs | `screen-ast` | local 10 jobs, remote 10 jobs | `logs/screen-ast/jobs-final-local4.txt`, remote `jobs-final-remote-main.txt` | `logs/screen-ast-final-local7.log`, remote `logs/screen-ast-final-remote8.log` |
 | LODO, AST, 4 devices x {baseline, freq_mixstyle, sc+sc_static} x seeds 0-4, 60 runs (stop at the report epoch) | `lodo-ast` | local 20, remote 40 | `logs/lodo-ast/jobs-local.txt`, `jobs-remote.txt` | `logs/lodo-local.log`, remote `logs/lodo-remote.log` |
 | Final refit extra seeds 5-9 (baseline, sc+sc_static) for gate G | `screen-ast` | remote only | `logs/screen-ast/jobs-final-remote-late.txt` | starts automatically when the remote LODO scheduler exits (`/tmp/late.sh` waiter) |
