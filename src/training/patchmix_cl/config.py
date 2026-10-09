@@ -72,6 +72,12 @@ def build_parser():
         "--cv_fold", type=int, default=0, help="screening: index of the validation fold"
     )
     p.add_argument(
+        "--stop_epoch",
+        type=int,
+        default=0,
+        help="stop after this epoch (0: run all --epochs); the schedule is unchanged, so the weights equal the full run's",
+    )
+    p.add_argument(
         "--report_epochs",
         type=str,
         default="",

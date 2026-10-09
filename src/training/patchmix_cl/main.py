@@ -213,6 +213,8 @@ def main():
         )  # atomic: a crash mid-save keeps the previous epoch
         if cal_loader is not None and epoch >= max(args.report_epoch_list):
             break  # same weights as the full schedule at this epoch; later epochs are not needed
+        if args.stop_epoch and epoch >= args.stop_epoch:
+            break
 
     picked = pick_epochs(history)
     if args.selection == "fixed":
