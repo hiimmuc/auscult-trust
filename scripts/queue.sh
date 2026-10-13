@@ -21,7 +21,7 @@ for stage in "$@"; do
     if grep -qx "$c" logs/campaigns/smoke_failed.txt 2>/dev/null; then echo "skip $stage: smoke failed for $c"; continue 2; fi
   done
   case $stage in
-    wait:*) while pgrep -f "${stage#wait:}" > /dev/null; do sleep 120; done ;;
+    wait:*) while pgrep -af "${stage#wait:}" | grep -v "queue.sh" | grep -q .; do sleep 120; done ;;  # other queues name the pattern too
     smoke)
       bash scripts/campaigns.sh smoke; : > logs/campaigns/smoke_failed.txt
       while read -r cmd; do
