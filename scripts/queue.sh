@@ -1,7 +1,7 @@
 #!/bin/bash
 # Run campaigns one after the other on this machine (each a scripts/sweep.py over logs/campaigns/<name>.txt).
 #   nohup bash scripts/queue.sh wait:<pattern> smoke c4_screen c4_gate c4_final c2_ast c2_dass c3 c5 c6 > logs/queue.log 2>&1 &
-# wait:<pattern>   wait until no process matches the pattern (e.g. an earlier scheduler)
+# wait:<pattern>   wait until no process matches the pattern (e.g. an earlier scheduler); waitpid:<pid> waits for a process
 # smoke            1-epoch run of every new cell; logs memory, loss_cons and agreement; a failed cell is listed in
 #                  logs/campaigns/smoke_failed.txt and its campaigns are skipped
 # c4_gate          5-fold screen summary of screen-ast-cv5 and the registered stop rule of sc_cons; c4_final runs only if it passes
@@ -21,6 +21,7 @@ for stage in "$@"; do
     if grep -qx "$c" logs/campaigns/smoke_failed.txt 2>/dev/null; then echo "skip $stage: smoke failed for $c"; continue 2; fi
   done
   case $stage in
+    waitpid:*) while kill -0 "${stage#waitpid:}" 2>/dev/null; do sleep 120; done ;;
     wait:*) while pgrep -af "${stage#wait:}" | grep -v "queue.sh" | grep -q .; do sleep 120; done ;;  # other queues name the pattern too
     smoke)
       bash scripts/campaigns.sh smoke; : > logs/campaigns/smoke_failed.txt
