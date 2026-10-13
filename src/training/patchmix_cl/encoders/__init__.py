@@ -21,9 +21,9 @@ class EncoderSpec:
 
 
 def _ast():
-    from ..cycles import FBANK_STD, IMG_MEL, IMG_TIME, generate_fbank
+    from ..cycles import DB_PER_NAT, FBANK_STD, IMG_MEL, IMG_TIME, generate_fbank
     from ..upstream import build_ast
-    return EncoderSpec('ast', (IMG_TIME, IMG_MEL), 1 / (2 * FBANK_STD), False, lambda w: generate_fbank(w, 16000, n_mels=IMG_MEL),
+    return EncoderSpec('ast', (IMG_TIME, IMG_MEL), 1 / (2 * FBANK_STD * DB_PER_NAT), False, lambda w: generate_fbank(w, 16000, n_mels=IMG_MEL),
                        lambda a: build_ast(input_fdim=IMG_TIME, input_tdim=IMG_MEL, label_dim=a.n_cls, imagenet_pretrain=a.from_sl_official,
                                            audioset_pretrain=a.audioset_pretrained, mix_beta=a.mix_beta))
 

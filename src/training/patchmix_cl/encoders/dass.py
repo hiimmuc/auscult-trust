@@ -16,7 +16,7 @@ from functools import lru_cache
 import torch.nn as nn
 from src.paths import DATA, REPOS
 
-from ..cycles import FBANK_STD, IMG_MEL, IMG_TIME, generate_fbank
+from ..cycles import DB_PER_NAT, FBANK_STD, IMG_MEL, IMG_TIME, generate_fbank
 
 LUNG_SRAD = REPOS / "Lung-SRAD" / "models_DASS"
 WEIGHTS_ROOT = DATA / "models" / "dass"  # holds pretrained_models/DASS_medium_v2.pth
@@ -80,4 +80,4 @@ def preprocess_dass(wave):
 
 
 # ponytail: the per-cycle std varies a little around FBANK_STD, so the dB scale of the random gain is approximate for DASS
-IMAGE_SHAPE, DB_SCALE = (IMG_TIME, IMG_MEL), 1 / (2 * FBANK_STD)
+IMAGE_SHAPE, DB_SCALE = (IMG_TIME, IMG_MEL), 1 / (2 * FBANK_STD * DB_PER_NAT)
