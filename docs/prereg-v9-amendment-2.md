@@ -32,7 +32,7 @@ Same calibration and test cycles as the trained unit; weights unchanged (checkpo
 
 H2 statistics are reported for each cell against `baseline`. The epoch-matched D (`--base baseline_e14 --arms sc+sc_static`) is a sensitivity analysis.
 
-**Target-sample sweep (F4).** AuscultTrust weights. The held-out coefficient is estimated from N held-out patients, N in {1, 2, 3, 5, 10, all but 5}, capped at (held-out patients - 5); the model is evaluated on the other held-out patients, next to the full-estimate model on the same patients. R = 50 draws per N and seed (one draw for "all but 5"). Reported: |Δ|, Score, RMS dB distance of the coefficient to the full estimate.
+**Target-sample sweep (F4).** AuscultTrust weights. The held-out coefficient is estimated from N held-out patients, N in {1, 2, 3, 5, 10, all but 5}, capped at (held-out patients - 5); the model is evaluated on the other held-out patients, next to the full-estimate model on the same patients. R = 50 draws per N and seed (one draw for "all but 5") on the Litt3200 fold; R = 10 on the other three folds (cost: every draw re-runs the model on the evaluation patients; fixed on 14/10 before any F4 run). Reported: |Δ|, Score, RMS dB distance of the coefficient to the full estimate.
 
 **Inductive SC on the official split (A5).** AuscultTrust refit seeds 0-4 exported with `--sc_test_profile source` (each test device uses its training-clip coefficient). Score reported next to the registered transductive number.
 

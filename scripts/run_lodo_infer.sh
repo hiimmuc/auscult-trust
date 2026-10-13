@@ -12,6 +12,8 @@ $PY -m src.evaluation.lodo_ttsc outputs/train/$RUN/baseline+lodo_*/seed? --run $
   --arm baseline_a2:none:a2 --arm baseline_ttsc_a2:target:static:a2 --arm baseline_tta8:none:tta8
 $PY -m src.evaluation.lodo_ttsc outputs/train/$RUN/$SC_CELL+lodo_*/seed? --run $RUN \
   --arm sc_plain:all --arm sc_a2:all:a2 --arm sc_tta8:all:tta8
-[ -n "$TARGET_N" ] && $PY -m src.evaluation.lodo_ttsc outputs/train/$RUN/$SC_CELL+lodo_*/seed? --run $RUN \
-  --target_n "$TARGET_N" --target_rep "${TARGET_REP:-50}"
+# target-sample sweep: R = 50 draws on Litt3200, 10 on the other folds (docs/prereg-v9-amendment-2.md)
+$PY -m src.evaluation.lodo_ttsc outputs/train/$RUN/$SC_CELL+lodo_litt3200/seed? --run $RUN --target_n 1,2,3,5,10,all --target_rep 50
+$PY -m src.evaluation.lodo_ttsc outputs/train/$RUN/$SC_CELL+lodo_{meditron,littc2se,akgc417l}/seed? --run $RUN \
+  --target_n 1,2,3,5,10,all --target_rep 10
 echo LODO_INFER_DONE
