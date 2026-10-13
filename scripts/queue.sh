@@ -60,6 +60,13 @@ for stage in "$@"; do
         [ -f $u/export${prof:+_$prof}/model.sha256 ] && continue
         $PY -m src.training.patchmix_cl.export_probs $u --ckpt report_epoch_$ep.pth ${prof:+--sc_test_profile $prof}
       done ;;
+    screen:*)  # screen:<condition>:<cell>:<epoch>[:sc]  ICBHI official-test windows for the screening view
+      IFS=: read -r _ cond cell ep mode <<< "$stage"
+      for s in 0 1 2 3 4; do
+        o=outputs/screening/$cond/seed$s.npz; [ -f $o ] && continue
+        [ -f checkpoints/train/screen-ast/$cell/seed$s/report_epoch_$ep.pth ] || { echo "no checkpoint $cell seed$s"; continue; }
+        $PY -m src.evaluation.screening infer outputs/train/screen-ast/$cell/seed$s --ckpt report_epoch_$ep.pth --out $o ${mode:+--sc}
+      done ;;
     c4_screen) sweep c4_screen $WORKERS 7 ;;
     c4_gate)
       [ -f outputs/train/screen-ast-cv5/screen_before_c4.json ] || cp outputs/train/screen-ast-cv5/screen.json outputs/train/screen-ast-cv5/screen_before_c4.json
