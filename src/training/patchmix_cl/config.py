@@ -172,6 +172,7 @@ def build_parser():
     p.add_argument("--sample_rate", type=int, default=16000)
     p.add_argument("--desired_length", type=int, default=8, help="seconds per cycle after cut/pad")
     p.add_argument("--n_mels", type=int, default=128)
+    p.add_argument("--spec_augment", type=int, default=1, help="1: SpecAugment on training images; 0: off")
     p.add_argument("--pad_types", type=str, default="repeat", choices=["zero", "repeat"])
 
     # model (AST) and loss
@@ -217,10 +218,13 @@ def build_parser():
         "--method",
         type=str,
         default="patchmix_cl",
-        choices=["ce", "patchmix", "patchmix_cl"],
-        help="ce: plain cross-entropy; patchmix: Patch-Mix augmentation; patchmix_cl: Patch-Mix + contrastive loss",
+        choices=["ce", "patchmix", "patchmix_cl", "ce_pafa"],
+        help="ce: plain cross-entropy; patchmix: Patch-Mix augmentation; patchmix_cl: Patch-Mix + contrastive loss; "
+        "ce_pafa: cross-entropy + PAFA patient losses (PCSL, GPAL) on the projector output",
     )
     p.add_argument("--proj_dim", type=int, default=768)
+    p.add_argument("--lambda_pcsl", type=float, default=5.0, help="ce_pafa: weight of the patient cohesion-separation loss")
+    p.add_argument("--lambda_gpal", type=float, default=0.005, help="ce_pafa: weight of the global patient alignment loss")
     p.add_argument("--temperature", type=float, default=0.06)
     p.add_argument("--alpha", type=float, default=1.0, help="weight of the contrastive loss")
     p.add_argument("--negative_pair", type=str, default="all", choices=["all", "diff_label"])

@@ -1,0 +1,7 @@
+# BEATs anchor in the protocol of the PAFA scripts (beats_ce.sh): cross-entropy, batch 32, 100 epochs, 5 s cycles,
+# no SpecAugment; lr 5e-5, weight decay 1e-6, cosine, moving average 0.5 come from base.yaml. Combine after encoder_beats.yaml.
+method: ce
+batch_size: 32
+epochs: 100
+desired_length: 5
+spec_augment: 0

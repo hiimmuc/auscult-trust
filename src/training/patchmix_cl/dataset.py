@@ -21,7 +21,7 @@ from torchvision import transforms
 
 from .augment import SpecAugment, random_bin_gain_image
 from .cycles import individual_cycles, read_annotations
-from .encoders import get_encoder
+from .encoders import get_encoder, image_shape
 
 CACHE = (
     DATA / "cache" / "train_images"
@@ -29,7 +29,7 @@ CACHE = (
 
 
 class ICBHIDataset(Dataset):
-    """Cycles of the official train or test split. Items: (fbank image, label, device id).
+    """Cycles of the official train or test split. Items: (fbank image, label, device id, patient id as int).
 
     With `args.spectrum_correction` the waveform of every cycle goes through spectrum correction (SC) before the STFT: train
     clips use their own (source) device spectra, test clips their own (target) spectra, both against the train
@@ -89,7 +89,7 @@ class ICBHIDataset(Dataset):
                 self.images = [self.encoder.preprocess(a) for a in audio]
             else:
                 self.images = self._build_cache(audio)
-        assert self.images[0].shape == (*self.encoder.image_shape, 1), self.images[0].shape
+        assert self.images[0].shape == (*image_shape(self.encoder, self.args), 1), self.images[0].shape
         if print_flag:
             counts = np.bincount(self.labels, minlength=args.n_cls)
             print(
@@ -144,7 +144,7 @@ class ICBHIDataset(Dataset):
             for p in (images, meta)
         )
         out = np.lib.format.open_memmap(
-            tmp, mode="w+", dtype=np.float32, shape=(len(audio), *self.encoder.image_shape, 1)
+            tmp, mode="w+", dtype=np.float32, shape=(len(audio), *image_shape(self.encoder, self.args), 1)
         )
         for i, a in enumerate(audio):
             out[i] = self.encoder.preprocess(a)
@@ -215,7 +215,7 @@ class ICBHIDataset(Dataset):
             )
         if self.transform is not None:
             image = self.transform(image)
-        return image, self.labels[index], self.devices[index]
+        return image, self.labels[index], self.devices[index], int(self.patients[index])
 
     def __len__(self):
         return len(self.labels)
@@ -238,7 +238,7 @@ def _lodo_loaders(args):
     Returns:
         Tuple (train_loader, None, test_loader, dataset, test cycles, calibration loader, calibration cycles).
     """
-    train_tf = transforms.Compose([transforms.ToTensor(), SpecAugment()])
+    train_tf = transforms.Compose([transforms.ToTensor()] + ([SpecAugment()] if args.spec_augment else []))
     eval_tf = transforms.ToTensor()
     ds = ICBHIDataset(True, train_tf, args)
     tr_idx, ca_idx, te_idx = ds.lodo
@@ -280,7 +280,7 @@ def build_loaders(args):
     """
     if args.holdout_device:
         return _lodo_loaders(args)
-    train_tf = transforms.Compose([transforms.ToTensor(), SpecAugment()])
+    train_tf = transforms.Compose([transforms.ToTensor()] + ([SpecAugment()] if args.spec_augment else []))
     eval_tf = transforms.ToTensor()
     train_dataset = ICBHIDataset(True, train_tf, args)
     test_dataset = ICBHIDataset(

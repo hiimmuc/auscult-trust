@@ -29,7 +29,7 @@ def train_epoch(loader, model, classifier, projector, criterion, optimizer, epoc
     cons_w = args.consistency_weight * min(1.0, epoch / max(args.consistency_ramp, 1))
     db_scale = get_encoder(args.encoder).db_scale
     end = time.time()
-    for idx, (images, labels, _) in enumerate(loader):
+    for idx, (images, labels, _, patients) in enumerate(loader):
         if (
             args.ma_update
         ):  # state before the step, for the moving average (a frozen encoder does not change)
@@ -45,7 +45,15 @@ def train_epoch(loader, model, classifier, projector, criterion, optimizer, epoc
         warmup_learning_rate(args, epoch, idx, len(loader), optimizer)
 
         with torch.cuda.amp.autocast():
-            if args.method == "patchmix":
+            if args.method == "ce_pafa":  # cross-entropy plus the patient-aware feature alignment loss on the projector
+                with _encoder_context(args):
+                    features = model(images)
+                output = classifier(features)
+                loss = criterion[0](output, labels) + criterion[1](
+                    projector(features).float(), patients.cuda(non_blocking=True), lambda_pcsl=args.lambda_pcsl,
+                    lambda_gpal=args.lambda_gpal,
+                )
+            elif args.method == "patchmix":
                 with _encoder_context(args):
                     mix_images, labels_a, labels_b, lam, _ = model(
                         images, y=labels, patch_mix=True, time_domain=args.time_domain
@@ -121,7 +129,7 @@ def evaluate(loader, model, classifier, args):
     """
     model.eval(), classifier.eval()
     preds, probs, ys, devs = [], [], [], []
-    for images, labels, devices in loader:
+    for images, labels, devices, _ in loader:
         with torch.cuda.amp.autocast():
             output = classifier(model(images.cuda(non_blocking=True)))
         preds.append(output.argmax(1).cpu().numpy())

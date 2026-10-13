@@ -4,7 +4,7 @@ An encoder module takes a batch of its spectrogram images (B, 1, time, freq) and
 `patch_mix=True` the tuple (features, labels a, labels b, lambda, partner index), like the reference AST. It also has
 `final_feat_dim` and `mlp_head` (a fresh classification head).
 
-AST, DASS and HTS-AT are trained in both modes (full fine-tuning, frozen encoder); OPERA-CT, CLAP and HeAR only frozen.
+AST, BEATs, DASS and HTS-AT are trained in both modes (full fine-tuning, frozen encoder); OPERA-CT, CLAP and HeAR only frozen.
 """
 from dataclasses import dataclass
 from typing import Callable, Optional, Tuple
@@ -13,7 +13,7 @@ from typing import Callable, Optional, Tuple
 @dataclass(frozen=True)
 class EncoderSpec:
     name: str
-    image_shape: Tuple[int, int]  # (time, freq) of the spectrogram image of one 8 s cycle
+    image_shape: Tuple[Optional[int], int]  # (time, freq) of the image of one 8 s cycle; time None = Kaldi frames of the cycle length
     db_scale: Optional[float]  # image units per dB of the log-mel; None where the image is not a log-mel
     frozen_only: bool
     preprocess: Callable  # (1, N) 16 kHz waveform tensor -> (time, freq, 1) float32 array
@@ -53,8 +53,20 @@ def _dass():
     return EncoderSpec('dass', IMAGE_SHAPE, DB_SCALE, False, preprocess_dass, build_dass)
 
 
-_FACTORIES = {'ast': _ast, 'dass': _dass, 'htsat': _htsat, 'opera_ct': _opera_ct, 'clap': _clap, 'hear': _hear}
+def _beats():
+    from .beats import DB_SCALE, build_beats, preprocess_beats
+    return EncoderSpec('beats', (None, 128), DB_SCALE, False, preprocess_beats, build_beats)
+
+
+_FACTORIES = {'ast': _ast, 'beats': _beats, 'dass': _dass, 'htsat': _htsat, 'opera_ct': _opera_ct, 'clap': _clap, 'hear': _hear}
 NAMES = list(_FACTORIES)
+
+
+def image_shape(spec, args):
+    """(time, freq) of one cycle image; a None time axis is the number of 25 ms / 10 ms Kaldi frames of the cycle."""
+    if spec.image_shape[0] is not None:
+        return spec.image_shape
+    return 1 + (args.desired_length * args.sample_rate - 400) // 160, spec.image_shape[1]
 
 
 def get_encoder(name):

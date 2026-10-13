@@ -69,7 +69,7 @@ def layer_features(name, model, x):
 
 def extract(name, model, loader):
     feats, ys = {}, []
-    for x, y, _ in loader:
+    for x, y, *_ in loader:
         with torch.autocast("cuda", dtype=torch.float16):
             res = layer_features(name, model, x.cuda(non_blocking=True))
         for layer, mean, mx in res:

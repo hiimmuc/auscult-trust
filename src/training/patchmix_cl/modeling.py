@@ -7,7 +7,7 @@ import torch.nn as nn
 
 from .encoders import get_encoder
 from .optim import set_optimizer
-from .upstream import PatchMixConLoss, PatchMixLoss, Projector
+from .upstream import PAFALoss, PafaProjectionHead, PatchMixConLoss, PatchMixLoss, Projector
 
 
 def build_model(args):
@@ -17,16 +17,19 @@ def build_model(args):
     args.proj_dim = (
         model.final_feat_dim
     )  # the contrastive target is the raw feature, so both must have its size
-    projector = (
-        Projector(model.final_feat_dim, args.proj_dim)
-        if args.method == "patchmix_cl"
-        else nn.Identity()
-    )
+    if args.method == "patchmix_cl":
+        projector = Projector(model.final_feat_dim, args.proj_dim)
+    elif args.method == "ce_pafa":  # PAFA AST setting: LayerNorm MLP head, 768 -> 768 -> 768
+        projector = PafaProjectionHead(model.final_feat_dim, None, model.final_feat_dim, attention=False, norm_type="ln")
+    else:
+        projector = nn.Identity()
     criterion = [nn.CrossEntropyLoss().cuda()]
     if args.method == "patchmix":
         criterion.append(PatchMixLoss(criterion=criterion[0]).cuda())
     if args.method == "patchmix_cl":
         criterion.append(PatchMixConLoss(temperature=args.temperature).cuda())
+    if args.method == "ce_pafa":
+        criterion.append(PAFALoss().cuda())
     if torch.cuda.device_count() > 1:
         model = nn.DataParallel(model)
     model.cuda(), classifier.cuda(), projector.cuda()

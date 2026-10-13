@@ -21,7 +21,11 @@ WEIGHTS_ROOT = (
 
 
 def _load(name, relpath):
-    spec = importlib.util.spec_from_file_location(name, REFERENCE / relpath)
+    return _load_from(REFERENCE, name, relpath)
+
+
+def _load_from(root, name, relpath):
+    spec = importlib.util.spec_from_file_location(name, root / relpath)
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
@@ -54,6 +58,8 @@ _ast = _load("patchmix_reference_ast", "models/ast.py")
 Projector = _load("patchmix_reference_projector", "models/projector.py").Projector
 PatchMixLoss = _load("patchmix_reference_mix_loss", "method/patchmix.py").PatchMixLoss
 PatchMixConLoss = _load("patchmix_reference_loss", "method/patchmix_cl.py").PatchMixConLoss
+_pafa = _load_from(REPOS / "PAFA", "pafa_reference_loss", "method/pafa.py")  # PAFA (patient-aware feature alignment)
+PAFALoss, PafaProjectionHead = _pafa.PAFALoss, _pafa.ProjectionHead
 
 
 def build_ast(**kwargs):

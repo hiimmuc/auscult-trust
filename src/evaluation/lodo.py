@@ -38,6 +38,7 @@ def load_unit(unit_dir):
         "cal_p": cal["probs"][0].astype(np.float32),
         "cal_y": cal["labels"],
         "cal_pat": cal["patient"],
+        "cal_dev": cal["device"],
         "test_p": test["probs"][i].astype(np.float32),
         "test_y": test["labels"],
         "test_pat": test["patient"],
@@ -57,6 +58,21 @@ def coverage(cal_p, cal_y, test_p, test_y, alpha=ALPHA):
     hit = sets[np.arange(len(test_y)), test_y]
     return {
         "coverage": float(hit.mean()),
+        "delta": float((1 - alpha) - prior_matched_coverage(sets, test_y, prior)),
+        **set_stats(sets),
+    }
+
+
+def robust_coverage(cal_p, cal_y, cal_dev, test_p, test_y, alpha=ALPHA, min_n=30):
+    """Device-robust split conformal: threshold = max over source devices (>= `min_n` calibration cycles) of the per-device
+    LAC quantile. Returns the same keys as `coverage`."""
+    scores = lac_scores(cal_p, cal_y)
+    devs = [d for d in np.unique(cal_dev) if (cal_dev == d).sum() >= min_n]
+    thr = max(split_threshold(scores[cal_dev == d], alpha) for d in devs) if devs else split_threshold(scores, alpha)
+    sets = predict_sets(test_p, thr)
+    prior = np.bincount(cal_y, minlength=cal_p.shape[1]) / len(cal_y)
+    return {
+        "coverage": float(sets[np.arange(len(test_y)), test_y].mean()),
         "delta": float((1 - alpha) - prior_matched_coverage(sets, test_y, prior)),
         **set_stats(sets),
     }
@@ -109,6 +125,7 @@ def fold_table(units, arms, alpha=ALPHA):
             if not us:
                 continue
             cs = [coverage(u["cal_p"], u["cal_y"], u["test_p"], u["test_y"], alpha) for u in us.values()]
+            rs = [robust_coverage(u["cal_p"], u["cal_y"], u["cal_dev"], u["test_p"], u["test_y"], alpha) for u in us.values()]
             rows.append(
                 {
                     "device": dev,
@@ -122,6 +139,9 @@ def fold_table(units, arms, alpha=ALPHA):
                     "size": float(np.mean([c["size"] for c in cs])),
                     "singleton": float(np.mean([c["singleton"] for c in cs])),
                     "empty": float(np.mean([c["empty"] for c in cs])),
+                    "robust_coverage": float(np.mean([c["coverage"] for c in rs])),
+                    "robust_delta": float(np.mean([c["delta"] for c in rs])),
+                    "robust_size": float(np.mean([c["size"] for c in rs])),
                 }
             )
     return rows
@@ -171,10 +191,10 @@ def h2_statistic(units, base, arm, folds, alpha=ALPHA, n_boot=1000, seed=0):
 
 
 def markdown(rows, gate, stats, base):
-    L = ["| Held-out device | Arm | Seeds | Test cycles | Sp | Se | Score | HS | Coverage | Delta (prior-matched) | Set size | Singleton | Empty |", "|---|---|---|---|---|---|---|---|---|---|---|---|---|"]
+    L = ["| Held-out device | Arm | Seeds | Test cycles | Sp | Se | Score | HS | Coverage | Delta (prior-matched) | Set size | Singleton | Empty | q_robust coverage | q_robust Delta | q_robust set size |", "|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|"]
     for r in rows:
         L.append(
-            "| {device} | {arm} | {seeds} | {n_test} | {sp:.1f} | {se:.1f} | {score:.1f} | {hs:.1f} | {coverage:.3f} | {delta:+.3f} | {size:.2f} | {singleton:.2f} | {empty:.3f} |".format(**r)
+            "| {device} | {arm} | {seeds} | {n_test} | {sp:.1f} | {se:.1f} | {score:.1f} | {hs:.1f} | {coverage:.3f} | {delta:+.3f} | {size:.2f} | {singleton:.2f} | {empty:.3f} | {robust_coverage:.3f} | {robust_delta:+.3f} | {robust_size:.2f} |".format(**r)
         )
     L += ["", "Null gate (baseline |Delta| vs 95th percentile of |Delta| under exchangeable re-splits of calibration patients):", ""]
     L += ["| Device | baseline abs Delta | null p95 | tested |", "|---|---|---|---|"]
@@ -193,6 +213,7 @@ def main():
     ap.add_argument("--arms", nargs="+", default=["sc+sc_static", "freq_mixstyle"])
     ap.add_argument("--seeds", type=int, nargs="+", default=[0, 1, 2, 3, 4])
     ap.add_argument("--boot", type=int, default=1000)
+    ap.add_argument("--out", default="lodo_summary", help="file stem of the tables in the run directory")
     a = ap.parse_args()
     root = Path("outputs/train") / a.run
     units = collect(root, [a.base] + a.arms, DEVICES, a.seeds)
@@ -206,8 +227,8 @@ def main():
         no_akg = [d for d in both if d != "AKGC417L"]  # class-mix dominated fold, reported separately
         stats[arm + " (without AKGC417L)"] = h2_statistic(units, a.base, arm, no_akg, n_boot=a.boot)
     md = markdown(rows, gate, stats, a.base)
-    (root / "lodo_summary.md").write_text(md)
-    (root / "lodo_summary.json").write_text(json.dumps({"rows": rows, "gate": gate, "h2": stats}, indent=1))
+    (root / (a.out + ".md")).write_text(md)
+    (root / (a.out + ".json")).write_text(json.dumps({"rows": rows, "gate": gate, "h2": stats}, indent=1))
     print(md)
 
 

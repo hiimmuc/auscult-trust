@@ -1,0 +1,8 @@
+# AST + PAFA (cross-entropy plus patient cohesion-separation and global patient alignment losses), settings of the PAFA
+# ast_pafa.sh script: batch 32, lr 5e-5, 50 epochs, lambda_pcsl 5.0, lambda_gpal 0.005, LayerNorm projection 768 -> 768,
+# no SpecAugment. Kept from our pipeline: 8 s cycles (PAFA uses 5 s) so that the LODO rows compare like with like.
+method: ce_pafa
+batch_size: 32
+lambda_pcsl: 5.0
+lambda_gpal: 0.005
+spec_augment: 0
