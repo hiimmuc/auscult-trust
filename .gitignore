@@ -20,3 +20,4 @@ data/*
 # local
 .env
 .DS_Store
+CODE_COMMIT
