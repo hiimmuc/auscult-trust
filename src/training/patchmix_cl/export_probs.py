@@ -46,13 +46,21 @@ def main():
         help="weight file in the unit checkpoints dir (fixed refit: report_epoch_<E>.pth)",
     )
     ap.add_argument("--num_workers", type=int, default=4)
+    ap.add_argument(
+        "--sc_test_profile",
+        choices=["target", "source"],
+        default=None,
+        help="override for SC runs: source = each test device uses its training coefficient (inductive); output in export_source/",
+    )
     a = ap.parse_args()
     out_unit, ckpt_unit = Path(a.unit_dir), runs.twin_dir(a.unit_dir, "checkpoints")
     args = build_parser().parse_args([])
     vars(args).update(json.load(open(out_unit / "train_args.json")))
     args.num_workers = a.num_workers
+    if a.sc_test_profile:
+        args.sc_test_profile = a.sc_test_profile
 
-    _, val_loader, test_loader, _, _, _, _ = build_loaders(args)
+    _, val_loader, test_loader, train_ds, test_ds, _, _ = build_loaders(args)
     model, classifier, _, _, _ = build_model(args)
     ckpt = ckpt_unit / a.ckpt
     ck = torch.load(ckpt, map_location="cpu", weights_only=False)
@@ -62,7 +70,7 @@ def main():
         model.load_state_dict(ck["model"])
     classifier.load_state_dict(ck["classifier"])
 
-    out = out_unit / "export"
+    out = out_unit / ("export_source" if a.sc_test_profile == "source" else "export")
     out.mkdir(exist_ok=True)
     loaders = [("test", test_loader, np.asarray(test_loader.dataset.patients))]
     if val_loader is not None:  # a fixed refit trains on every training patient: no held-out val
@@ -83,6 +91,9 @@ def main():
             P.shape,
             "pooled Score {:.2f}".format(per_device_report(Y, P.argmax(1), D)["all"]["score"]),
         )
+    if test_ds.sc is not None:  # coefficients actually applied to the test clips
+        np.savez_compressed(out / "test_coefficients.npz", **{"coefficients_{}".format(d): c for d, c in test_ds.sc["coefficients"].items()},
+                            **{"train_coefficients_{}".format(d): c for d, c in train_ds.sc["coefficients"].items()})
     (out / "model.sha256").write_text("{}  {}\n".format(runs.sha256_file(ckpt), ckpt.name))
 
 

@@ -53,6 +53,13 @@ for stage in "$@"; do
         esac
         $PY -m src.evaluation.kauh_infer $u --ckpt report_epoch_$ep.pth --out $o $extra
       done ;;
+    export:*)  # export:<cell>:<epoch>[:source]  softmax export of refit seeds 0-4 (source: inductive SC test coefficients)
+      IFS=: read -r _ cell ep prof <<< "$stage"
+      for s in 0 1 2 3 4; do
+        u=outputs/train/screen-ast/$cell/seed$s
+        [ -f $u/export${prof:+_$prof}/model.sha256 ] && continue
+        $PY -m src.training.patchmix_cl.export_probs $u --ckpt report_epoch_$ep.pth ${prof:+--sc_test_profile $prof}
+      done ;;
     c4_screen) sweep c4_screen $WORKERS 7 ;;
     c4_gate)
       [ -f outputs/train/screen-ast-cv5/screen_before_c4.json ] || cp outputs/train/screen-ast-cv5/screen.json outputs/train/screen-ast-cv5/screen_before_c4.json

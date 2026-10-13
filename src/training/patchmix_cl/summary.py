@@ -5,6 +5,8 @@ Reads one campaign, `outputs/train/<run_id>/<cell>/<unit>/report.json` (default 
 
     python -m src.training.patchmix_cl.summary screen [--run RUN_ID] [--folds 3]
         -> screening table; writes <run>/screen.json (CV epoch and sc_mode per arm, selected `auscult_trust` arm, plan)
+    python -m src.training.patchmix_cl.summary gate --run screen-ast --base_cell baseline_e14 --base_epoch 14
+        -> paired ΔScore of --arm_cell against another refit cell (sensitivity analysis of the non-inferiority check)
     python -m src.training.patchmix_cl.summary final [--run RUN_ID] [--boot 1000]
         -> final table (primary = epoch chosen by CV; extra column = best epoch on test, optimistic), paired differences
            against the baseline, and the non-inferiority check of the selected arm against the baseline
@@ -314,14 +316,47 @@ def final(a):
     (root / "final.md").write_text(txt + "\n")
 
 
+def gate(a):
+    """Paired Score difference of two refit cells at their epochs (sensitivity analysis of gate G against another baseline)."""
+    root = run_dir(a.run)
+    units = load_units(root, r"seed(\d+)")
+    arms = {"base": {"cell": a.base_cell, "epoch": a.base_epoch}, "arm": {"cell": a.arm_cell, "epoch": a.arm_epoch}}
+    res = _collect(root, units, arms)
+    b, r = res["base"]["per"], res["arm"]["per"]
+    seeds = sorted(set(b) & set(r))
+    d = [r[s]["test"]["all"]["score"] - b[s]["test"]["all"]["score"] for s in seeds]
+    m, lo, hi = _t_ci(d)
+    y, pat = b[seeds[0]]["labels"], b[seeds[0]]["patient"]
+    cv = np.stack([_score_counts(y, r[s]["pred"], pat) for s in seeds])
+    cb = np.stack([_score_counts(y, b[s]["pred"], pat) for s in seeds])
+    w = np.random.default_rng(0).multinomial(cv.shape[1], np.ones(cv.shape[1]) / cv.shape[1], size=a.boot)
+    diff = (_score_from_counts(np.einsum("bp,spk->bsk", w, cv)) - _score_from_counts(np.einsum("bp,spk->bsk", w, cb))).mean(1)
+    q = np.percentile(diff, [2.5, 97.5])
+    txt = (
+        "| comparison | seeds | base Score | arm Score | ΔScore | 95% t-CI | 95% patient bootstrap CI | lower bound > {:.1f} |\n"
+        "|---|---|---|---|---|---|---|---|\n"
+        "| {} @{} vs {} @{} | {} | {} | {} | {:+.2f} | [{:.2f}, {:.2f}] | [{:.2f}, {:.2f}] | {} |".format(
+            NON_INFERIORITY_MARGIN, a.arm_cell, a.arm_epoch, a.base_cell, a.base_epoch, len(seeds),
+            _ms([b[s]["test"]["all"]["score"] for s in seeds]), _ms([r[s]["test"]["all"]["score"] for s in seeds]),
+            m, lo, hi, *q, "yes" if lo > NON_INFERIORITY_MARGIN else "no",
+        )
+    )
+    print(txt)
+    (root / "gate_{}_vs_{}.md".format(a.arm_cell, a.base_cell)).write_text(txt + "\n")
+
+
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("mode", choices=["screen", "final"])
+    ap.add_argument("mode", choices=["screen", "final", "gate"])
+    ap.add_argument("--base_cell", default="baseline_e14")
+    ap.add_argument("--base_epoch", type=int, default=14)
+    ap.add_argument("--arm_cell", default="sc+sc_static")
+    ap.add_argument("--arm_epoch", type=int, default=14)
     ap.add_argument("--run", default="latest", help="run_id under outputs/train/")
     ap.add_argument("--folds", type=int, default=3)
     ap.add_argument("--boot", type=int, default=1000)
     a = ap.parse_args()
-    screen(a) if a.mode == "screen" else final(a)
+    {"screen": screen, "final": final, "gate": gate}[a.mode](a)
 
 
 if __name__ == "__main__":
