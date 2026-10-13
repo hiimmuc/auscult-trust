@@ -68,6 +68,9 @@ for stage in "$@"; do
         [ -f checkpoints/train/screen-ast/$cell/seed$s/report_epoch_$ep.pth ] || { echo "no checkpoint $cell seed$s"; continue; }
         $PY -m src.evaluation.screening infer outputs/train/screen-ast/$cell/seed$s --ckpt report_epoch_$ep.pth --out $o ${mode:+--sc}
       done ;;
+    snr:*)  # snr:<arm>:<cell>  noise stress on refit seeds 0-4 (official test)
+      IFS=: read -r _ arm cell <<< "$stage"
+      $PY -m src.evaluation.snr_stress infer outputs/train/screen-ast/$cell/seed{0,1,2,3,4} --out outputs/snr/$arm ;;
     c4_screen) sweep c4_screen $WORKERS 7 ;;
     c4_gate)
       [ -f outputs/train/screen-ast-cv5/screen_before_c4.json ] || cp outputs/train/screen-ast-cv5/screen.json outputs/train/screen-ast-cv5/screen_before_c4.json

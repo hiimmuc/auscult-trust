@@ -131,7 +131,10 @@ def infer(a):
         clean, coef0 = p.run(p.waves)
         res["probs_inf"] = clean
         rep = per_device_report(p.labels, clean.argmax(1), p.devices)["all"]
-        print(u, "clean Score {:.2f}".format(rep["score"]))
+        z = np.load(Path(u) / "test_preds.npz")
+        agree = float((z["preds"][list(z["epochs"]).index(p.epoch)] == clean.argmax(1)).mean())
+        res["agree_with_training_run"] = np.array(agree)
+        print(u, "clean Score {:.2f}, argmax agreement with the training run's test predictions {:.4f}".format(rep["score"], agree))
         for snr in SNRS:
             probs, coef = p.run(add_noise(p.waves, bank, snr))
             res["probs_{}".format(snr)] = probs
