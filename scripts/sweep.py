@@ -36,7 +36,9 @@ def finished(cmd):
     if not cell:
         return False
     unit = "cv" + fold.group(1) if fold and "--cv_folds" in cmd else "seed" + (seed.group(1) if seed else "0")
-    return Path("outputs/train", os.environ.get("RUN_ID", "sweep"), cell.group(1), unit, "report.json").exists()
+    run = re.search(r"(?:^|\s)RUN_ID=(\S+)", cmd)  # a job line may set its own RUN_ID (mixed campaigns in one list)
+    run = run.group(1) if run else os.environ.get("RUN_ID", "sweep")
+    return Path("outputs/train", run, cell.group(1), unit, "report.json").exists()
 
 
 def running_elsewhere(cmd):

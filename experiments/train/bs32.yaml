@@ -1,0 +1,2 @@
+# Override: batch size 32 (one job per GPU; check memory first).
+batch_size: 32
