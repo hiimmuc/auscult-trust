@@ -1,50 +1,42 @@
-# Handoff: state on 2026-10-08 17:30 and what to do next
+# Handoff: state on 2026-10-14 and what runs
 
-Read this first when resuming. Everything below is verified at the time stated; running jobs keep going without a Claude session.
+Read this first when resuming. The plan being executed is the 2026-10-14 implementation plan (two machines); its registered parts are `docs/prereg-v9-amendment.md` (correction note at the end) and `docs/prereg-v9-amendment-2.md`. The previous handoff (2026-10-08) is `docs/HANDOFF_2026-10-08.md`.
 
-## Goal and deadline
+## Machines (repo path `~/Workspace/Personal/KHKT-CVA-2026/auscult-trust` on both)
 
-- **Results report due 2026-10-09 17:00. English Markdown only** (no docx/pdf). School round talk and poster on 2026-10-17.
-- **Scope agreed with the user (cut):** Part 1 encoder comparison (done), Part 2 proposed methods with final refit (running), leave-one-device-out (LODO, AST only, running), KAUH positive controls A and B2 with frozen AST models. **Out of scope, mark [Pending] in the report:** RespireNet, pretrained Lung-SRAD/Patch-Mix CL checkpoints (our AST Patch-Mix CL baseline and plain DASS are the proxies, say so), phantom recordings, SC arms for other encoders, KAUH test B1 and C.
-- Existing report to extend: `docs/report_2026-10-08.md` (Part 1 tables, paper comparison, screening results, status). Final report = this file updated with the refit, LODO and KAUH sections; name it `docs/report_2026-10-09.md`.
+- **A** (local, RTX 5000 Ada 32 GB): code, tests, inference, analysis, light training.
+- **B** (`namdp15@10.148.183.8`, RTX 5090 32 GB): heavy training. SSH key login works. B has its own `.git` copy (not synced); code goes A -> B with
+  `rsync -a --exclude __pycache__ src experiments scripts tests CODE_COMMIT namdp15@10.148.183.8:Workspace/Personal/KHKT-CVA-2026/auscult-trust/`
+  (`git rev-parse HEAD > CODE_COMMIT` first). Results B -> A: `rsync -a --ignore-existing` of `outputs/train/<RUN_ID>/` (and checkpoints when needed).
+- B's `.venv-train` got pip (`ensurepip`) and pytest on 14/10. Reference repos added: `repos/PAFA` (BEATs module, PAFA loss) on both machines; BEATs weights `data/models/beats/`; ESC-50 in `data/raw/esc50/` (A only).
 
-## Machines (both RTX 32 GB, repo path `~/Workspace/Personal/KHKT-CVA-2026/auscult-trust`)
+## Fixed on 14/10
 
-- **local** (this machine, RTX 5000 Ada): ~350 s per epoch per job with 4 jobs; no DASS kernel needed any more.
-- **remote** `namdp15@10.148.183.8` (RTX 5090, 24 cores, 125 GB): ~2x faster. Password login only (password given by the user in chat, not stored here); ask the user to run `! ssh-copy-id namdp15@10.148.183.8` once so a new session can use keys. `10.148.182.97` (8 GB) is synced but deliberately unused. The old SSH helper lived in the previous session's scratchpad and is gone.
-- Remote needs the same code: edit locally, then `rsync -a --exclude __pycache__ src experiments scripts tests namdp15@10.148.183.8:Workspace/Personal/KHKT-CVA-2026/auscult-trust/`. Remote venvs: `.venv-train` (everything), `.venv-dass` (DASS only, `LD_LIBRARY_PATH=/usr/local/cuda-13.0/lib64`).
-- Spectrogram caches in `data/cache/train_images/` on each machine (built once; AST `ast_all_*` is the LODO cache).
+- `db_scale` of AST/DASS was 4.34x too large (Kaldi fbank is a natural log): the "6 dB" gain of `sc_gain` was ~26 dB. Decision log `docs/decision_logs/2026-10-14-db-scale.md`. Old `sc_gain` numbers are a labelled deviation; rerun as campaign C0.
 
-## What is running (schedulers survive the session; children are independent)
+## What runs (schedulers survive the session; restart any of them with the same command, finished units are skipped)
 
-| Campaign | RUN_ID | Where | Job list | Log |
-| --- | --- | --- | --- | --- |
-| Final refit, seeds 0-4, 4 arms (baseline epoch 2, freq_mixstyle 3, sc+sc_static 14, sc_gain 2), 20 runs | `screen-ast` | local 10 jobs, remote 10 jobs | `logs/screen-ast/jobs-final-local4.txt`, remote `jobs-final-remote-main.txt` | `logs/screen-ast-final-local7.log`, remote `logs/screen-ast-final-remote8.log` |
-| LODO, AST, 4 devices x {baseline, freq_mixstyle, sc+sc_static} x seeds 0-4, 60 runs (stop at the report epoch) | `lodo-ast` | local 20, remote 40 | `logs/lodo-ast/jobs-local.txt`, `jobs-remote.txt` | `logs/lodo-local.log`, remote `logs/lodo-remote.log` |
-| Final refit extra seeds 5-9 (baseline, sc+sc_static) for gate G | `screen-ast` | remote only | `logs/screen-ast/jobs-final-remote-late.txt` | starts automatically when the remote LODO scheduler exits (`/tmp/late.sh` waiter) |
+| Where | Process | Log | Content |
+|---|---|---|---|
+| B | `logs/c0_chain.sh` | `logs/c0_chain.out`, `logs/screen-ast-c0-screen.log`, `logs/screen-ast-c0-refit.log` | C0: `sc_gain` 3-fold screen (RUN_ID `screen-ast-c0`, both bounds) -> summary -> refit `sc_gain_v2[+sc_static]` seeds 0-4 in `screen-ast` |
+| B | sweep `logs/lodo-ast/jobs-e14.txt` | `logs/lodo-ast-e14.log` | C1b: `baseline_e14+lodo_<dev>` seeds 0-4 |
+| B | `scripts/queue.sh wait:c0_chain.sh wait:jobs-e14.txt smoke c4_screen c4_gate c4_final c2_ast c2_dass c3 c5 c6` | `logs/queue-b.log` | smoke runs, then C4 (`sc_cons` vs `sc_gain_v2`, 5-fold, stop rule in `scripts/c4_gate.py`), C2 AST/DASS LODO epoch 50 (`lodo-bench`), C3 BEATs, C5 batch 32, C6 PAFA |
+| A | sweep `logs/screen-ast/jobs-c1a.txt` | `logs/screen-ast-c1a.log` | C1a: `baseline_e14` seeds 0-9 (official split) |
+| A | `scripts/run_lodo_infer.sh` | `logs/lodo-infer.log` | LODO inference arms (`baseline_plain`, `baseline_ttsc` primary, `baseline_ttsc_all`, `baseline_a2`, `baseline_ttsc_a2`, `baseline_tta8`, `sc_plain`, `sc_a2`, `sc_tta8`) and the F4 target-sample sweep |
+| A | `scripts/queue.sh wait:jobs-c1a.txt kauh:p0_e14... c2_htsat c2f` | `logs/queue-a.log` | KAUH for the epoch control, C2 HTS-AT, C2f frozen AST / OPERA-CT |
+| A | `scripts/queue.sh wait:jobs-c1a.txt screen:... export:... kauh:...` | `logs/queue-a2.log` | screening view ICBHI windows, A5 inductive export, KAUH comparators (A2, TTA-EQ) |
 
-Expected finish (estimates): refit seeds 0-4 about midnight, LODO about 02:00-05:00, seeds 5-9 later (drop them if short of time and say so).
-Check progress: `ls outputs/train/screen-ast/*/seed*/report.json | wc -l` (20 for seeds 0-4 across both machines), `ls outputs/train/lodo-ast/*/seed*/report.json | wc -l` (60 across both).
-Resume after a crash (same RUN_ID, finished units are skipped, interrupted ones resume from `last.pth`): rerun the same `scripts/sweep.py` command with the same job list, e.g. `SWEEP_TAG=-x RUN_ID=screen-ast nohup .venv-train/bin/python scripts/sweep.py logs/screen-ast/jobs-final-local4.txt --workers 4 --mem-gb 7 --ram-gb 8 > logs/x.log 2>&1 &`. Never `pkill -f` a pattern in your own command line; kill schedulers by PID (children keep running).
+Job lists: `bash scripts/campaigns.sh <name>` writes `logs/campaigns/<name>.txt` (each line carries its RUN_ID). Kill schedulers by PID only.
 
-## Steps still to do, in order
+## Analyses to run when the training is in (all on A, after syncing outputs from B)
 
-1. **Gather results on one machine** (needed by the summaries): `rsync -a --ignore-existing -e ssh namdp15@10.148.183.8:Workspace/Personal/KHKT-CVA-2026/auscult-trust/outputs/train/screen-ast/ outputs/train/screen-ast/` and the same for `outputs/train/lodo-ast/`. Checkpoints stay where they are (KAUH inference runs on the machine that holds them).
-2. **Stage 1 report:** `RUN_ID=screen-ast bash scripts/run.sh report` -> `outputs/train/screen-ast/final.md` (final table of the four arms, paired differences, non-inferiority check of AuscultTrust vs baseline, margin -1.5 Score points). With only seeds 0-4 the check is over 5 seeds (registered: 10).
-3. **LODO analysis:** `.venv/bin/python -m src.evaluation.lodo --run lodo-ast` -> `outputs/train/lodo-ast/lodo_summary.md` (coverage per held-out device, null gate, H2 statistic D for AuscultTrust and Freq-MixStyle vs baseline, also without AKGC417L).
-4. **KAUH positive controls:** on each machine holding refit checkpoints: `RUN_ID=screen-ast OUT=final bash scripts/run_kauh.sh` (conditions p0, p0_sc = isolation contrast, auscult), copy `outputs/kauh/final/` together, then `bash scripts/run_kauh.sh analyse` -> `outputs/kauh/final/kauh_summary.md` (A: flip rate and TV distance across Bell/Diaphragm/Extended; B2: conformal coverage per ordered filter pair, D statistic). The one-seed smoke test gave flip rate 0.169 without SC and 0.097 with SC (pipeline check only).
-5. **Write the report** (`docs/report_2026-10-09.md`): update Part 1 (unchanged, already complete), Part 2 with the refit table and non-inferiority check, new LODO and KAUH sections (method, tables, honest reading, caveats), the scope cut with [Pending] items, reproducibility. Claims tagged [Fact]/[Interpretation]/[Pending]. Commit.
-
-## Key numbers already in `docs/report_2026-10-08.md`
-
-Part 1 table for six encoders (AST/HTS-AT/DASS fine-tune 60.5-61.6 Score best-on-test, last-epoch ~3 points lower; frozen 49.6-57.3), paper comparison (AST Patch-Mix 59.5 vs 59.46; Patch-Mix CL 61.4 vs 62.37), screening: AuscultTrust = SC with static bound (CV Score 60.51 at epoch 14, baseline 58.97 at epoch 2, gap +1.54, 3 folds only, caveats listed there).
-
-## Code added in this session (all committed on `main`, 35+ tests pass)
-
-`scripts/run.sh` (steps `screen summary final report reproduce resume lodo`, DRY mode), `scripts/sweep.py` (memory-gated parallel scheduler, retries, skip finished/running units), `scripts/run_kauh.sh`, `src/training/patchmix_cl/encoders/` (AST, HTS-AT, OPERA-CT, CLAP, HeAR, DASS adapters with Patch-Mix), LODO training path (`--holdout_device`, `lodo_split` in `src/processing/splits.py`, calibration and test softmax saved), `src/evaluation/lodo.py`, `src/evaluation/kauh_infer.py`, `src/evaluation/kauh.py`. Decision log: `docs/decision_logs/2026-10-07-training-sweep.md`.
-
-## Known risks
-
-- Local GPU is slow; if the refit lags, move jobs to the remote (edit job lists, restart schedulers by PID).
-- The LODO and KAUH analyses have only been tested on synthetic data and one smoke unit; check the first real outputs for sanity (coverage near 0.9 on source devices, null p95 plausible).
-- Best CV epochs are very early (2-3) for several arms: the fixed-epoch refit reads the epoch-2/3 checkpoint of a 50-epoch schedule (registered rule, not changed).
+- C0: `outputs/train/screen-ast-c0/screen.json`; refit table: `summary final` reads only the registered arms, so compare `sc_gain_v2*` directly (e.g. `summary gate --base_cell baseline --base_epoch 2 --arm_cell <sc_gain_v2 cell> --arm_epoch <E>`).
+- Gate G sensitivity: `python -m src.training.patchmix_cl.summary gate --run screen-ast` (AuscultTrust vs `baseline_e14`, ten seeds).
+- LODO: `python -m src.evaluation.lodo --run lodo-ast --base baseline --arms sc+sc_static freq_mixstyle baseline_ttsc baseline_ttsc_all baseline_a2 baseline_tta8 sc_tta8 sc_a2 baseline_e14 --out lodo_summary_v2`; epoch-matched: `--base baseline_e14 --arms sc+sc_static --out lodo_summary_e14`. Benchmark: `--run lodo-bench --base ast_baseline --arms htsat_baseline dass_baseline beats_baseline ast_frozen opera_ct_frozen pafa_ast`.
+- Probe: `python -m src.evaluation.probe --run lodo-ast --arms baseline_plain sc_plain`.
+- F4: `outputs/train/lodo-ast/target_n/sc+sc_static+lodo_<dev>/seed<s>.json`.
+- KAUH: `python -m src.evaluation.kauh --dir outputs/kauh/final --base p0 --arms p0_sc auscult p0_e14 p0_e14_sc p0_a2 p0_sc_a2 p0_tta8 auscult_tta8 auscult_a2`.
+- Screening / B1: `python -m src.evaluation.screening analyse --pairs p0:p0 p0:p0_sc auscult:auscult p0_e14:p0_e14 p0_e14:p0_e14_sc`.
+- Noise stress (S1): `python -m src.evaluation.snr_stress infer outputs/train/screen-ast/<cell>/seed<s> --out outputs/snr/<arm>` then `analyse --out outputs/snr --arms baseline sc sc_gain_v2`.
+- SC diagnostics: `scripts/sc_diagnostics.py` (done: `outputs/sc_diag/summary.json`, sigma_N10 = 2.23 dB).
+- Report: `docs/report_2026-11-15.md`.
