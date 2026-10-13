@@ -168,3 +168,26 @@ def random_bin_gain(logmel, max_db=6.0, knots=6, rng=None):
         np.linspace(0, 1, logmel.shape[1]), np.linspace(0, 1, knots), rng.normal(0, max_db, knots)
     )
     return logmel + curve[None, :]
+
+
+def stft_torch(waves, n_fft=1024, hop=512):
+    """Batched STFT on the device of `waves` (B, samples), same framing as `_stft` (librosa: periodic Hann, centred, zero pad)."""
+    import torch
+
+    win = torch.hann_window(n_fft, device=waves.device, dtype=waves.dtype)
+    return torch.stft(waves, n_fft, hop, window=win, center=True, pad_mode="constant", return_complex=True)
+
+
+def clip_spectra_torch(waves, n_fft=1024, hop=512):
+    """Per-clip mean |STFT| per bin, (B, bins); the mean over clips is `mean_spectrum`."""
+    return stft_torch(waves, n_fft, hop).abs().mean(-1)
+
+
+def apply_spectrum_correction_torch(waves, coef, n_fft=1024, hop=512):
+    """Batched `apply_spectrum_correction`: waves (B, samples), coef (bins,) or (B, bins) tensor; phase kept."""
+    import torch
+
+    spec = stft_torch(waves, n_fft, hop)
+    coef = coef if coef.dim() == 2 else coef[None]
+    win = torch.hann_window(n_fft, device=waves.device, dtype=waves.dtype)
+    return torch.istft(spec * coef[:, :, None].to(spec.dtype), n_fft, hop, window=win, center=True, length=waves.shape[-1])

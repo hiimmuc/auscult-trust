@@ -173,3 +173,5 @@ The registered title (fixed) commits the study to spectrum correction (SC) and c
 ## 6. Findings registered without direction
 
 F1–F5 as in proposal v9 §4.3.
+
+*Correction 14/10/2026: see the correction note at the end of `prereg-v9-amendment.md` (earlier v8 screening runs existed; paths; deviations).*

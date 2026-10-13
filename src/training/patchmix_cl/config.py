@@ -105,6 +105,21 @@ def build_parser():
     p.add_argument("--sc_limit_freq_high", type=float, default=2000.0, help='Hz, "static" only')
     p.add_argument("--sc_limit_freq_diff", type=float, default=20.0, help='dB, "dynamic" only')
     p.add_argument(
+        "--sc_only_device",
+        type=str,
+        default=None,
+        choices=DEVICES,
+        help="apply SC to this device only (others stay raw); inference-time SC on weights trained without SC",
+    )
+    p.add_argument(
+        "--sc_test_profile",
+        type=str,
+        default="target",
+        choices=["target", "source"],
+        help="official split: test clips use coefficients from their own unlabelled test clips (target, transductive) "
+        "or the training coefficient of the same device (source, inductive)",
+    )
+    p.add_argument(
         "--random_gain_db",
         type=float,
         default=0.0,

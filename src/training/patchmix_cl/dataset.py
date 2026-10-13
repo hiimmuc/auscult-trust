@@ -36,7 +36,7 @@ class ICBHIDataset(Dataset):
     reference (`sc_reference` = `device_spectra` of the train dataset). The SC state is kept in `self.sc`.
     """
 
-    def __init__(self, train_flag, transform, args, sc_reference=None, print_flag=True):
+    def __init__(self, train_flag, transform, args, sc_reference=None, print_flag=True, audio_only=False):
         self.train_flag, self.transform, self.args = train_flag, transform, args
         lodo = bool(args.holdout_device)  # leave-one-device-out: one dataset over all cycles, split by index later
         self.split = "all" if lodo else "train" if train_flag else "test"
@@ -61,7 +61,7 @@ class ICBHIDataset(Dataset):
         annotations = read_annotations(wav_dir)
 
         self.encoder = get_encoder(args.encoder)
-        cached = None if args.spectrum_correction else self._load_cache()
+        cached = None if args.spectrum_correction or audio_only else self._load_cache()
         if cached:
             self.images, self.labels, self.devices, self.patients = cached
             self.sc = None
@@ -75,6 +75,10 @@ class ICBHIDataset(Dataset):
                     devices.append(DEVICES.index(f.split("_")[-1]))
                     patients.append(f.split("_")[0])
             self.labels, self.devices, self.patients = labels, devices, np.array(patients)
+            if audio_only:  # raw cycles for inference-time pipelines; no spectrograms, no SC
+                self.audio, self.sc, self.images = audio, None, None
+                self._lodo_indices()
+                return
             self._lodo_indices()
             self.sc = (
                 self._spectrum_correct(audio, sc_reference) if args.spectrum_correction else None
@@ -174,10 +178,23 @@ class ICBHIDataset(Dataset):
             limit_freq_diff=a.sc_limit_freq_diff,
             reference_spectra=ref_spectra,
         )
+        if not self.train_flag and self.lodo is None and getattr(a, "sc_test_profile", "target") == "source":
+            # inductive: each test device uses the coefficient estimated on the training clips of the same device
+            coef = spectrum_coefficients(
+                sc_reference,
+                reference=a.sc_reference,
+                sc_mode=a.sc_mode,
+                limit_freq_low=a.sc_limit_freq_low,
+                limit_freq_high=a.sc_limit_freq_high,
+                limit_freq_diff=a.sc_limit_freq_diff,
+                reference_spectra=sc_reference,
+            )
+        only = getattr(a, "sc_only_device", None)
+        apply = {d for d in coef if only is None or d == DEVICES.index(only)}
         corrected = [
-            torch.from_numpy(apply_spectrum_correction(w.numpy()[0], coef[d]).astype(np.float32))[
-                None
-            ]
+            torch.from_numpy(apply_spectrum_correction(w.numpy()[0], coef[d]).astype(np.float32))[None]
+            if d in apply
+            else w  # devices outside --sc_only_device stay raw (not even an STFT round trip)
             for w, d in zip(audio, self.devices)
         ]
         return {

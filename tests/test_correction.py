@@ -63,3 +63,23 @@ def test_static_sc_mode_is_a_no_op_outside_the_band():
     out = limit_coefficients(raw, sc_mode="static", limit_freq_low=50.0, limit_freq_high=2000.0, sr=sr, n_fft=n_fft)
     band = (freqs >= 50) & (freqs <= 2000)
     assert np.allclose(out[band], 3.0) and np.allclose(out[~band], 1.0)
+
+
+def test_torch_sc_matches_librosa():
+    import torch
+
+    from src.processing.correction import (
+        apply_spectrum_correction,
+        apply_spectrum_correction_torch,
+        clip_spectra_torch,
+        mean_spectrum,
+    )
+
+    rng = np.random.default_rng(0)
+    waves = rng.normal(0, 0.1, (3, 16000 * 2)).astype(np.float32)
+    coef = 10 ** (rng.normal(0, 6, 513) / 20)
+    t = torch.from_numpy(waves).double()
+    assert np.allclose(clip_spectra_torch(t).mean(0).numpy(), mean_spectrum(list(waves.astype(np.float64))), rtol=1e-5, atol=1e-8)
+    got = apply_spectrum_correction_torch(t, torch.from_numpy(coef)).numpy()
+    ref = np.stack([apply_spectrum_correction(w.astype(np.float64), coef) for w in waves])
+    assert np.abs(got - ref).max() < 1e-6 * np.abs(ref).max()

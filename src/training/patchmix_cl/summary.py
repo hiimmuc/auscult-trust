@@ -164,6 +164,23 @@ def _collect(root, runs, arms):
     return res
 
 
+def both_sides_patients(split_file=None):
+    """Patients whose recordings appear in both the train and the test list of `official_split.txt`."""
+    from .config import build_parser
+
+    split_file = split_file or "{}/official_split.txt".format(build_parser().parse_args([]).data_folder)
+    sides = {}
+    for line in open(split_file).read().splitlines():
+        stem, side = line.strip().split("\t")
+        sides.setdefault(stem.split("_")[0], set()).add(side)
+    return {p for p, v in sides.items() if len(v) > 1}
+
+
+def _dropped_counts(res, both):
+    p = next(iter(next(iter(res.values()))["per"].values()))
+    return int(np.isin(p["patient"], list(both)).sum()), int(len(p["patient"]))
+
+
 def final(a):
     root = run_dir(a.run)
     scr = json.loads((root / "screen.json").read_text())
@@ -199,6 +216,31 @@ def final(a):
         "\nPublished anchors, same split, 4-class: AST fine-tuning 59.55 ± 0.88; Patch-Mix CL 62.37 ± 0.61; SG-SCL 61.71 ± 1.61 "
         "(all best epoch on test)."
     )
+
+    both = both_sides_patients()
+    L += [
+        "\n### Official test without the patients on both sides of the official split\n",
+        "Patients {} have recordings in both the official train and test lists; their test cycles are dropped here ({} of {} "
+        "cycles). Same seeds 0-4 and epochs as above. `Both` = recall of the crackle-and-wheeze class.\n".format(
+            ", ".join(sorted(both)) or "none", *_dropped_counts(res, both)
+        ),
+        "| arm | seeds | Sp | Se | Score | HS | Both recall |",
+        "|---|---|---|---|---|---|---|",
+    ]
+    for arm, r in res.items():
+        reps = []
+        for s, p in r["per"].items():
+            if s not in BENCHMARK_SEEDS:
+                continue
+            keep = ~np.isin(p["patient"], list(both))
+            reps.append(per_device_report(p["labels"][keep], p["pred"][keep], p["device"][keep])["all"])
+        L.append(
+            "| {} | {} | {} | {} | {} | {} | {} |".format(
+                arm, len(reps), *(_ms([x[k] for x in reps]) for k in ("sp", "se", "score", "hs")),
+                _ms([x["recall"][3] for x in reps]),
+            )
+        )
+    print("dropped cycles (patients on both sides): {} of {}".format(*_dropped_counts(res, both)))
 
     devs = ["Meditron", "Litt3200", "AKGC417L"]
     L += ["\n### Per device (primary epoch, seeds 0-4), mean ± SD\n"]

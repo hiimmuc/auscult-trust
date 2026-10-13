@@ -20,7 +20,7 @@ import torch
 import torch.backends.cudnn as cudnn
 from src import runs
 
-from .config import parse_args
+from .config import build_parser, parse_args
 from .dataset import build_loaders
 from .engine import evaluate, train_epoch
 from .modeling import build_model
@@ -49,7 +49,9 @@ def check_same_config(path, args):
     new = json.loads(json.dumps(vars(args), default=str))
     if path.exists():
         old = json.loads(path.read_text())
-        diff = {k for k in new if k not in _VOLATILE and old.get(k) != new[k]}
+        defaults = json.loads(json.dumps(vars(build_parser().parse_args([])), default=str))
+        # a key added to the parser after the unit started is fine while it keeps its default
+        diff = {k for k in new if k not in _VOLATILE and old.get(k, defaults.get(k)) != new[k]}
         assert not diff, "{} exists with a different config ({}); use a new RUN_ID".format(
             path.parent, sorted(diff)
         )
