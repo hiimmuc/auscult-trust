@@ -126,6 +126,14 @@ def build_parser():
         help="P3: SD (dB) of the random per-bin gain augmentation",
     )
     p.add_argument(
+        "--consistency_weight",
+        type=float,
+        default=0.0,
+        help="weight of the Jensen-Shannon consistency loss between clean images and a random per-bin gain view (0: off)",
+    )
+    p.add_argument("--consistency_gain_db", type=float, default=6.0, help="SD (dB) of the consistency view's gain knots")
+    p.add_argument("--consistency_ramp", type=int, default=5, help="epochs over which the consistency weight ramps up")
+    p.add_argument(
         "--freq_mixstyle", type=float, default=0.0, help="P4: Freq-MixStyle probability per batch"
     )
 
@@ -266,6 +274,10 @@ def parse_args(argv=None):
         assert (
             args.selection == "fixed" and args.cv_folds == 0
         ), "--holdout_device needs --selection fixed (epoch frozen from screening) and no --cv_folds"
+    if args.consistency_weight > 0:
+        assert args.random_gain_db == 0, "consistency training replaces the random gain augmentation; set random_gain_db 0"
+        assert args.method == "patchmix_cl", "consistency loss is wired into the patchmix_cl branch"
+        assert get_encoder(args.encoder).db_scale is not None, "consistency gain needs a log-mel image"
     args.lr_decay_epochs = [int(e) for e in args.lr_decay_epochs.split(",")]
     args.cls_list = CLASSES if args.n_cls == 4 else ["normal", "abnormal"]
     if args.warm:

@@ -1,0 +1,7 @@
+# SC (static bound) plus a Jensen-Shannon consistency loss between each image and a random smooth per-bin gain view.
+# Gain SD = sampling noise of a device spectrum from 10 patients (scripts/sc_diagnostics.py, sigma_N10 = 2.2 dB), rounded.
+spectrum_correction: true
+sc_mode: static
+consistency_weight: 1.0
+consistency_gain_db: 2.0
+consistency_ramp: 5

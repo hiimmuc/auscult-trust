@@ -61,6 +61,25 @@ def random_bin_gain_image(image, max_db, db_scale, rng):
     return out[..., None].astype(image.dtype)
 
 
+def random_bin_gain_batch(x, sd_db, db_scale, knots=6):
+    """GPU version of the random per-bin gain: one smooth curve per sample, added to every frame of (B, 1, time, freq) images.
+
+    Knot values are N(0, sd_db) dB, linearly interpolated over the frequency axis (as `random_bin_gain`), then converted to
+    image units with `db_scale`.
+    """
+    k = torch.randn(x.shape[0], 1, knots, device=x.device, dtype=torch.float32) * (sd_db * db_scale)
+    curve = torch.nn.functional.interpolate(k, size=x.shape[-1], mode="linear", align_corners=True)  # (B, 1, freq)
+    return x + curve[:, :, None, :].to(x.dtype)
+
+
+def js_divergence(logits_a, logits_b):
+    """Jensen-Shannon divergence between two softmax distributions, per sample mean, computed in fp32."""
+    p, q = torch.softmax(logits_a.float(), 1), torch.softmax(logits_b.float(), 1)
+    m = (0.5 * (p + q)).clamp_min(1e-8).log()
+    kl = lambda a: (a * (a.clamp_min(1e-8).log() - m)).sum(1)
+    return (0.5 * kl(p) + 0.5 * kl(q)).mean()
+
+
 def freq_mixstyle(x, p=0.5, alpha=0.1, eps=1e-6):
     """P4: Freq-MixStyle. Mix per-frequency-bin statistics (over time) between random samples of the batch.
 

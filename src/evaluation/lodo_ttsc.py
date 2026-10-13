@@ -1,18 +1,21 @@
 """Inference-only arms on a trained leave-one-device-out (LODO) unit: test-time SC, A2, TTA-EQ, and the target-sample sweep.
 
-    python -m src.evaluation.lodo_ttsc outputs/train/lodo-ast/baseline+lodo_litt3200/seed0 --sc target --cell baseline_ttsc
-    python -m src.evaluation.lodo_ttsc outputs/train/lodo-ast/sc+sc_static+lodo_litt3200/seed0 --sc all --tta_eq 8 --cell sc_tta8
-    python -m src.evaluation.lodo_ttsc <AuscultTrust unit> --sc all --target_n 1,2,3,5,10,all --target_rep 50
+    python -m src.evaluation.lodo_ttsc outputs/train/lodo-ast/baseline+lodo_*/seed* --arm baseline_ttsc:target:static \
+        --arm baseline_a2:none:a2 --arm baseline_tta8:none:tta8
+    python -m src.evaluation.lodo_ttsc outputs/train/lodo-ast/sc+sc_static+lodo_*/seed* --arm sc_tta8:all:tta8 \
+        --target_n 1,2,3,5,10,all --target_rep 50
+
+An arm is `cell:sc[:a2][:ttaK][:static|dynamic]`.
 
 The frozen weights of the unit (`report_epoch_<E>.pth`) are applied to the same calibration and test cycles as in training
 (same `lodo_split` seed). Everything runs batched on the GPU; `src.processing.correction` has the torch SC (checked against
 the librosa version in the tests).
 
-SC (`--sc`): `none`; `target` = only the held-out device is corrected towards the mean spectrum of the source devices (the
+SC: `none`; `target` = only the held-out device is corrected towards the mean spectrum of the source devices (the
 calibration cycles stay raw; primary variant for weights trained without SC); `all` = every device is corrected, as during
-SC training. Coefficient bound: `--sc_mode` (default: the unit's own when it was trained with SC, else static).
-A2 (`--a2`): per-mel-bin mean and SD of the unlabelled held-out images mapped onto the training images' statistics.
-TTA-EQ (`--tta_eq K`): mean softmax over K views, view k adds a smooth random per-bin gain (6 dB SD, `random_bin_gain`
+SC training. Coefficient bound: `static`/`dynamic` in the arm (default: the unit's own when it was trained with SC, else static).
+A2 (`a2`): per-mel-bin mean and SD of the unlabelled held-out images mapped onto the training images' statistics.
+TTA-EQ (`ttaK`): mean softmax over K views, view k adds a smooth random per-bin gain (6 dB SD, `random_bin_gain`
 distribution, seed 1000 + k, one curve per cycle) to every image; calibration and test use the same views.
 
 Outputs, readable by `src.evaluation.lodo` as an arm: `outputs/train/<run>/<cell>+lodo_<dev>/seed<s>/` with `cal_preds.npz`,
@@ -87,6 +90,7 @@ class Pipeline:
             self.model.load_state_dict(ck["model"])
         self.classifier.load_state_dict(ck["classifier"])
         self.model.eval(), self.classifier.eval()
+        self.memo = {}
 
     def spectra(self, held_rows=None):
         """Device mean spectra over the used cycles; `held_rows` restricts the held-out device's estimate to those cycles."""
@@ -167,10 +171,15 @@ def run_arm(p, a):
     sc_mode = resolve_sc_mode(p, a.sc_mode)
     coef = None if a.sc == "none" else p.coefficients(sc_mode)
     apply = () if a.sc == "none" else ({p.held} if a.sc == "target" else set(coef))
-    cal_img = p.images(p.ca, coef, apply)
-    test_img = p.images(p.te, coef, apply)
+    key = (a.sc, sc_mode)
+    if key not in p.memo:  # images are shared by the arms of one unit with the same SC setting
+        p.memo.clear()
+        p.memo[key] = {"cal": p.images(p.ca, coef, apply), "test": p.images(p.te, coef, apply)}
+    cal_img, test_img = p.memo[key]["cal"], p.memo[key]["test"]
     if a.a2:
-        test_img = a2_images(test_img, p.images(p.tr, coef, apply))
+        if "train" not in p.memo[key]:
+            p.memo[key]["train"] = p.images(p.tr, coef, apply)
+        test_img = a2_images(test_img, p.memo[key]["train"])
     if a.tta_eq:
         n_freq = test_img.shape[-1]
         sd = TTA_DB * p.encoder.db_scale
@@ -208,11 +217,21 @@ def write_arm(p, a, res):
         np.savez_compressed(out / "sc_coefficients.npz", **{"coefficients_{}".format(d): c for d, c in res["coef"].items()})
     meta = {"source_unit": str(p.unit), "ckpt": p.ckpt.name, "ckpt_sha256": runs.sha256_file(p.ckpt), "sc": a.sc,
             "sc_mode": res["sc_mode"] if a.sc != "none" else None, "a2": a.a2, "tta_eq": a.tta_eq,
-            "code_commit": runs.code_commit() if hasattr(runs, "code_commit") else None}
+            "code_commit": _code_commit()}
     (out / "infer_meta.json").write_text(json.dumps(meta, indent=1))
     (out / "report.json").write_text(json.dumps({"cell": a.cell, "unit": p.unit.name, "selection": "fixed",
                                                  "fixed": {str(E): {"epoch": E, "test": rep}}, "infer": meta}, indent=1))
     print(out, "Score {:.2f} (Sp {:.2f}, Se {:.2f})".format(rep["all"]["score"], rep["all"]["sp"], rep["all"]["se"]))
+
+
+def _code_commit():
+    f = Path("CODE_COMMIT")
+    if f.exists():
+        return f.read_text().strip()
+    import subprocess
+
+    r = subprocess.run(["git", "rev-parse", "HEAD"], capture_output=True, text=True)
+    return r.stdout.strip() or None
 
 
 def coef_db_distance(c1, c2, sr=16000, n_fft=1024, lo=50.0, hi=2000.0):
@@ -264,30 +283,49 @@ def target_n_sweep(p, a):
     print(out)
 
 
+def parse_arm(spec):
+    """`cell:sc[:a2][:ttaK]`, e.g. `baseline_ttsc:target`, `sc_tta8:all:tta8`, `baseline_a2:none:a2`."""
+    parts = spec.split(":")
+    out = argparse.Namespace(cell=parts[0], sc=parts[1], sc_mode=None, a2=False, tta_eq=0)
+    for x in parts[2:]:
+        if x == "a2":
+            out.a2 = True
+        elif x.startswith("tta"):
+            out.tta_eq = int(x[3:])
+        elif x in ("static", "dynamic"):
+            out.sc_mode = x
+        else:
+            raise ValueError(spec)
+    assert out.sc in ("none", "target", "all"), spec
+    return out
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("unit_dirs", nargs="+", help="LODO units outputs/train/<run>/<cell>+lodo_<dev>/seed<s>")
-    ap.add_argument("--cell", help="output cell name (arm name in lodo.py)")
+    ap.add_argument("--arm", action="append", default=[], help="cell:sc[:a2][:ttaK][:static|dynamic]; repeatable")
     ap.add_argument("--run", default="lodo-ast")
-    ap.add_argument("--sc", choices=["none", "target", "all"], default="none")
-    ap.add_argument("--sc_mode", choices=["dynamic", "static"], default=None)
-    ap.add_argument("--a2", action="store_true")
-    ap.add_argument("--tta_eq", type=int, default=0, help="number of TTA-EQ views (0: off)")
-    ap.add_argument("--target_n", default=None, help="comma list, e.g. 1,2,3,5,10,all: target-sample sweep instead of an arm")
+    ap.add_argument("--target_n", default=None, help="comma list, e.g. 1,2,3,5,10,all: target-sample sweep")
+    ap.add_argument("--target_sc", choices=["target", "all"], default="all")
     ap.add_argument("--target_rep", type=int, default=50)
     a = ap.parse_args()
-    assert a.target_n or a.cell, "--cell is needed for an arm"
+    arms = [parse_arm(x) for x in a.arm]
+    assert arms or a.target_n, "give --arm and/or --target_n"
     for u in a.unit_dirs:
-        if a.cell and not a.target_n:
-            dev = load_args(u).holdout_device.lower()
-            if (Path("outputs/train") / a.run / "{}+lodo_{}".format(a.cell, dev) / Path(u).name / "report.json").exists():
-                print("done:", a.cell, dev, Path(u).name)
-                continue
+        dev = load_args(u).holdout_device.lower()
+        todo = [x for x in arms if not (Path("outputs/train") / a.run / "{}+lodo_{}".format(x.cell, dev) / Path(u).name / "report.json").exists()]
+        tn_out = Path("outputs/train") / a.run / "target_n" / Path(u).parent.name / (Path(u).name + ".json")
+        do_tn = a.target_n and not tn_out.exists()
+        if not todo and not do_tn:
+            print("done:", u)
+            continue
         p = Pipeline(u)
-        if a.target_n:
-            target_n_sweep(p, a)
-        else:
-            write_arm(p, a, run_arm(p, a))
+        for x in todo:
+            x.run = a.run
+            write_arm(p, x, run_arm(p, x))
+        if do_tn:
+            target_n_sweep(p, argparse.Namespace(run=a.run, sc=a.target_sc, sc_mode=None, target_n=a.target_n,
+                                                 target_rep=a.target_rep))
         del p
         torch.cuda.empty_cache()
 

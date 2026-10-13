@@ -8,7 +8,8 @@ from copy import deepcopy
 import numpy as np
 import torch
 
-from .augment import freq_mixstyle
+from .augment import freq_mixstyle, js_divergence, random_bin_gain_batch
+from .encoders import get_encoder
 from .optim import AverageMeter, accuracy, update_moving_average, warmup_learning_rate
 from .reporting import per_device_report
 
@@ -24,6 +25,9 @@ def train_epoch(loader, model, classifier, projector, criterion, optimizer, epoc
     if args.freeze_encoder:
         model.eval()  # frozen encoder: no batch-norm statistics update, no dropout
     batch_time, losses, top1 = AverageMeter(), AverageMeter(), AverageMeter()
+    cons_loss, cons_agree = AverageMeter(), AverageMeter()
+    cons_w = args.consistency_weight * min(1.0, epoch / max(args.consistency_ramp, 1))
+    db_scale = get_encoder(args.encoder).db_scale
     end = time.time()
     for idx, (images, labels, _) in enumerate(loader):
         if (
@@ -53,6 +57,14 @@ def train_epoch(loader, model, classifier, projector, criterion, optimizer, epoc
                     features = model(images)
                 output = classifier(features)
                 loss = criterion[0](output, labels)
+                if args.consistency_weight > 0:  # same images under a random smooth per-bin gain must give the same softmax
+                    style = random_bin_gain_batch(images, args.consistency_gain_db, db_scale)
+                    with _encoder_context(args):
+                        out_style = classifier(model(style))
+                    js = js_divergence(output, out_style)
+                    loss = loss + cons_w * js
+                    cons_loss.update(js.item(), bsz)
+                    cons_agree.update((output.argmax(1) == out_style.argmax(1)).float().mean().item() * 100, bsz)
             if args.method == "patchmix_cl":
                 if args.target_type == "grad_block":
                     proj1 = features.detach().clone()
@@ -89,6 +101,11 @@ def train_epoch(loader, model, classifier, projector, criterion, optimizer, epoc
             print(
                 "Train: [{0}][{1}/{2}]\tBT {bt.val:.3f} ({bt.avg:.3f})\tloss {l.val:.3f} ({l.avg:.3f})\tAcc@1 {a.val:.3f} ({a.avg:.3f})".format(
                     epoch, idx + 1, len(loader), bt=batch_time, l=losses, a=top1
+                )
+                + (
+                    "\tloss_cons {c.val:.4f} ({c.avg:.4f})\tagree {g.avg:.1f} (w {w:.2f})".format(c=cons_loss, g=cons_agree, w=cons_w)
+                    if args.consistency_weight > 0
+                    else ""
                 )
             )
             sys.stdout.flush()
