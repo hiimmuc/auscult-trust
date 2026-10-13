@@ -39,6 +39,20 @@ for stage in "$@"; do
         if [ $rc -ne 0 ] || ! grep -q "val Score [0-9]" $log; then echo $cell >> logs/campaigns/smoke_failed.txt; fi
         if [ "$cell" = sc_cons ] && ! grep -q "loss_cons" $log; then echo sc_cons >> logs/campaigns/smoke_failed.txt; fi
       done < logs/campaigns/smoke.txt ;;
+    kauh:*)  # kauh:<condition>:<cell>:<epoch>[:sc|:scown]  frozen refit seeds 0-4 of screen-ast on KAUH windows
+      IFS=: read -r _ cond cell ep mode <<< "$stage"
+      SC_UNIT=outputs/train/screen-ast/sc+sc_static/cv0
+      for s in 0 1 2 3 4; do
+        u=outputs/train/screen-ast/$cell/seed$s; o=outputs/kauh/final/$cond/seed$s.npz
+        [ -f $o ] && continue
+        [ -f checkpoints/train/screen-ast/$cell/seed$s/report_epoch_$ep.pth ] || { echo "no checkpoint $cell seed$s"; continue; }
+        case $mode in
+          sc) extra="--sc --sc_state $SC_UNIT/sc_state.npz --sc_args $SC_UNIT/train_args.json" ;;
+          scown) extra="--sc" ;;
+          *) extra="" ;;
+        esac
+        $PY -m src.evaluation.kauh_infer $u --ckpt report_epoch_$ep.pth --out $o $extra
+      done ;;
     c4_screen) sweep c4_screen $WORKERS 7 ;;
     c4_gate)
       [ -f outputs/train/screen-ast-cv5/screen_before_c4.json ] || cp outputs/train/screen-ast-cv5/screen.json outputs/train/screen-ast-cv5/screen_before_c4.json
