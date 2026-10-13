@@ -1,0 +1,1 @@
+# Epoch control: the baseline recipe, scored at the epoch of the AuscultTrust arm (pass --report_epochs 14 --stop_epoch 14).
