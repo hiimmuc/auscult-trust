@@ -39,8 +39,8 @@ for stage in "$@"; do
         if [ $rc -ne 0 ] || ! grep -q "val Score [0-9]" $log; then echo $cell >> logs/campaigns/smoke_failed.txt; fi
         if [ "$cell" = sc_cons ] && ! grep -q "loss_cons" $log; then echo sc_cons >> logs/campaigns/smoke_failed.txt; fi
       done < logs/campaigns/smoke.txt ;;
-    kauh:*)  # kauh:<condition>:<cell>:<epoch>[:sc|:scown]  frozen refit seeds 0-4 of screen-ast on KAUH windows
-      IFS=: read -r _ cond cell ep mode <<< "$stage"
+    kauh:*)  # kauh:<condition>:<cell>:<epoch>[:sc|:scown|:none][:a2|:ttaK]  frozen refit seeds 0-4 of screen-ast on KAUH windows
+      IFS=: read -r _ cond cell ep mode more <<< "$stage"
       SC_UNIT=outputs/train/screen-ast/sc+sc_static/cv0
       for s in 0 1 2 3 4; do
         u=outputs/train/screen-ast/$cell/seed$s; o=outputs/kauh/final/$cond/seed$s.npz
@@ -51,6 +51,7 @@ for stage in "$@"; do
           scown) extra="--sc" ;;
           *) extra="" ;;
         esac
+        case $more in a2) extra="$extra --a2" ;; tta*) extra="$extra --tta_eq ${more#tta}" ;; esac
         $PY -m src.evaluation.kauh_infer $u --ckpt report_epoch_$ep.pth --out $o $extra
       done ;;
     export:*)  # export:<cell>:<epoch>[:source]  softmax export of refit seeds 0-4 (source: inductive SC test coefficients)
