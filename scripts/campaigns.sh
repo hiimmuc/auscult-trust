@@ -1,8 +1,8 @@
 #!/bin/bash
-# Job lists of the campaigns after the 2026-10-09 report (docs/prereg-v9-amendment-2.md). Writes logs/campaigns/<name>.txt,
+# Job lists of the exploratory campaigns. Writes logs/campaigns/<name>.txt,
 # one training command per line with its own RUN_ID, for scripts/sweep.py. Nothing is started here.
-#   bash scripts/campaigns.sh c2_ast c2_dass c2_htsat c2f c3 c4_screen c4_final c5 c6 smoke
-# c4_final needs the screen summary of screen-ast-cv5 (CV epoch of sc_cons) and the bound chosen in screen-ast-c0.
+#   bash scripts/campaigns.sh c2_ast c2_dass c2_htsat c2f c3 c4_screen c4_final c5 c6 c7_screen c7_final smoke
+# c4_final / c7_final need the screen summary of screen-ast-cv5 (CV epoch of sc_cons / sc_noise); c4 also the bound chosen in screen-ast-c0.
 cd "$(dirname "$0")/.." || exit 1
 C=experiments/train; DEVS="meditron littc2se litt3200 akgc417l"
 PY=.venv-train/bin/python
@@ -41,6 +41,9 @@ for name in "$@"; do
         done; done; done ;;
     c6) for s in 0 1 2 3 4; do line pafa pafa_ast "$PY" pafa_ast --selection test --seed $s; done
         lodo50 lodo-bench pafa_ast pafa_ast ;;
+    c7_screen) for k in 0 1 2 3 4; do line screen-ast-cv5 sc_noise "$PY" sc_noise --cv_folds 5 --cv_fold $k --seed $k --stop_epoch 20; done ;;
+    c7_final) ep=$($PY -c "import json; print(json.load(open('outputs/train/screen-ast-cv5/screen.json'))['arms']['sc_noise']['epoch'])")
+        for s in 0 1 2 3 4; do line screen-ast sc_noise "$PY" sc_noise --selection fixed --report_epochs $ep --stop_epoch $ep --seed $s; done ;;
     smoke) line smoke-b sc_cons "$PY" sc_cons --cv_folds 5 --cv_fold 0 --seed 0 --stop_epoch 1
         line smoke-b encoder_beats+baseline "$PY" beats_patchmix_cl --cv_folds 5 --cv_fold 0 --seed 0 --stop_epoch 1
         line smoke-b encoder_beats+beats_anchor "$PY" beats_anchor --cv_folds 5 --cv_fold 0 --seed 0 --stop_epoch 1

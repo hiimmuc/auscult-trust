@@ -1,0 +1,8 @@
+# SC (static bound) plus stationary environmental noise in training: with probability 0.5 a training image gets one ESC-50
+# noise recording (rain, wind, sea_waves, engine, vacuum_cleaner, washing_machine, airplane, train; folds 1-3 only) mixed in
+# the mel power domain at an SNR drawn uniformly from 5-30 dB.
+spectrum_correction: true
+sc_mode: static
+noise_train_prob: 0.5
+noise_snr_low: 5.0
+noise_snr_high: 30.0

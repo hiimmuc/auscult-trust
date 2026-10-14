@@ -1,4 +1,4 @@
-"""Registered stop rule of sc_cons on the 5-fold screen (docs/prereg-v9-amendment-2.md, section 3.1).
+"""Registered stop rule of sc_cons on the 5-fold screen.
 
 Stop sc_cons if its mean Se over epochs 10-20 is more than 3 points below sc_gain_v2 (same bound as chosen in screen-ast-c0),
 or its worst-device mean Score over the same epochs is more than 3 points below. Prints PASS or STOP and the numbers.

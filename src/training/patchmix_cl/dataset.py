@@ -15,11 +15,12 @@ from src.processing.correction import (
     spectrum_coefficients,
 )
 from src.processing.icbhi import DEVICES
+from src.processing.noise import TRAIN_FOLDS, noise_bank
 from src.processing.splits import cv_split, lodo_split, patient_val_split
 from torch.utils.data import DataLoader, Dataset, Subset
 from torchvision import transforms
 
-from .augment import SpecAugment, random_bin_gain_image
+from .augment import SpecAugment, noise_mix_image, random_bin_gain_image
 from .cycles import individual_cycles, read_annotations
 from .encoders import get_encoder, image_shape
 
@@ -90,6 +91,9 @@ class ICBHIDataset(Dataset):
             else:
                 self.images = self._build_cache(audio)
         assert self.images[0].shape == (*image_shape(self.encoder, self.args), 1), self.images[0].shape
+        if train_flag and args.noise_train_prob > 0:  # training noise: ESC-50 folds disjoint from the noise-stress test
+            self.noise_images = np.stack([self.encoder.preprocess(torch.from_numpy(w)[None]) for w in noise_bank(TRAIN_FOLDS)])
+            assert self.noise_images.shape[1:] == self.images[0].shape, "training noise needs 8 s cycles"
         if print_flag:
             counts = np.bincount(self.labels, minlength=args.n_cls)
             print(
@@ -213,6 +217,10 @@ class ICBHIDataset(Dataset):
                 self.encoder.db_scale,
                 np.random.default_rng(random.getrandbits(32)),
             )
+        if self.train_flag and self.args.noise_train_prob > 0 and random.random() < self.args.noise_train_prob:
+            rng = np.random.default_rng(random.getrandbits(32))
+            image = noise_mix_image(image, self.noise_images[rng.integers(len(self.noise_images))],
+                                    rng.uniform(self.args.noise_snr_low, self.args.noise_snr_high), self.encoder.db_scale, rng)
         if self.transform is not None:
             image = self.transform(image)
         return image, self.labels[index], self.devices[index], int(self.patients[index])

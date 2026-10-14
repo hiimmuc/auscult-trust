@@ -6,7 +6,8 @@
 Noise passes through the stethoscope in reality, so it is added to the waveform before spectrum correction (SC). Noise
 classes: rain, wind, sea_waves, engine, vacuum_cleaner, washing_machine, airplane, train (stationary; impulsive classes such
 as crackling_fire, clock_tick, door_wood_knock and footsteps are excluded because they can look like crackles). Each cycle gets
-one noise clip (seed = cycle index), tiled to 8 s at 16 kHz, scaled to the SNR by the power of the whole cycle.
+one noise clip (seed = cycle index), tiled to 8 s at 16 kHz, scaled to the SNR by the power of the whole cycle. With
+`--test_folds` the clips come from ESC-50 folds 4-5 only, which a noise-trained arm never sees (it trains on folds 1-3).
 SC models: the training reference s_ref and bound come from the unit's `sc_state.npz` / `train_args.json`; the test coefficient
 of every device is re-estimated from the (noisy) unlabelled test clips, as in the clean pipeline. The coefficient change
 against the clean estimate is stored.
@@ -22,38 +23,19 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
-import soundfile as sf
 import torch
-import torchaudio
 
 from src.evaluation.lodo import coverage
 from src.evaluation.lodo_ttsc import Pipeline, coef_db_distance, load_args
-from src.paths import DATA
 from src.processing.correction import clip_spectra_torch, spectrum_coefficients
 from src.processing.icbhi import DEVICES
+from src.processing.noise import SAMPLES, TEST_FOLDS, noise_bank
 from src.processing.splits import calibration_eval_splits
 from src.training.patchmix_cl.dataset import ICBHIDataset
 from src.training.patchmix_cl.reporting import per_device_report
 from src.training.patchmix_cl.summary import both_sides_patients
 
-ESC50 = DATA / "raw" / "esc50" / "ESC-50-master"
-NOISE_CLASSES = ("rain", "wind", "sea_waves", "engine", "vacuum_cleaner", "washing_machine", "airplane", "train")
 SNRS = (30, 20, 10, 5)
-SR, SAMPLES = 16000, 16000 * 8
-
-
-def noise_bank():
-    meta = pd.read_csv(ESC50 / "meta" / "esc50.csv")
-    meta = meta[meta.category.isin(NOISE_CLASSES)].sort_values("filename").reset_index(drop=True)
-    clips = []
-    for f in meta.filename:
-        x, sr = sf.read(ESC50 / "audio" / f, dtype="float32")
-        x = torchaudio.functional.resample(torch.from_numpy(x), sr, SR).numpy()
-        if np.mean(x ** 2) < 1e-8:  # a few ESC-50 clips are near silent
-            continue
-        x = np.tile(x, int(np.ceil(SAMPLES / len(x))))[:SAMPLES]
-        clips.append(x.astype(np.float32))
-    return np.stack(clips)
 
 
 def add_noise(waves, bank, snr_db):
@@ -118,7 +100,7 @@ class OfficialPipeline(Pipeline):
 
 
 def infer(a):
-    bank = noise_bank()
+    bank = noise_bank(TEST_FOLDS if a.test_folds else None)
     out = Path(a.out)
     out.mkdir(parents=True, exist_ok=True)
     for u in a.unit_dirs:
@@ -188,6 +170,7 @@ def main():
     ap.add_argument("unit_dirs", nargs="*")
     ap.add_argument("--out", required=True)
     ap.add_argument("--arms", nargs="+", default=["baseline", "sc"])
+    ap.add_argument("--test_folds", action="store_true", help="noise from ESC-50 folds 4-5 only (never seen by a noise-trained arm)")
     a = ap.parse_args()
     infer(a) if a.mode == "infer" else analyse(a)
 

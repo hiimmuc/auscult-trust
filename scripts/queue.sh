@@ -10,7 +10,7 @@ cd "$(dirname "$0")/.." || exit 1
 export PYTHONPATH=. PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
 PY=.venv-train/bin/python
 WORKERS=${WORKERS:-4}
-declare -A NEEDS=([c4_screen]=sc_cons [c4_final]=sc_cons [c3]="beats_patchmix_cl beats_anchor" [c6]=pafa_ast [c5]=sc_bs32)
+declare -A NEEDS=([c7_screen]=sc_noise [c7_final]=sc_noise [c4_screen]=sc_cons [c4_final]=sc_cons [c3]="beats_patchmix_cl beats_anchor" [c6]=pafa_ast [c5]=sc_bs32)
 sweep() {  # sweep <name> <workers> <mem-gb>
   bash scripts/campaigns.sh $1 || return 1
   for round in 1 2 3; do  # units lost to a full GPU after all retries run again; finished units are skipped
@@ -43,12 +43,13 @@ for stage in "$@"; do
         if [ $rc -ne 0 ] || ! grep -q "val Score [0-9]" $log; then echo $cell >> logs/campaigns/smoke_failed.txt; fi
         if [ "$cell" = sc_cons ] && ! grep -q "loss_cons" $log; then echo sc_cons >> logs/campaigns/smoke_failed.txt; fi
       done < logs/campaigns/smoke.txt ;;
-    kauh:*)  # kauh:<condition>:<cell>:<epoch>[:sc|:scown|:none][:a2|:ttaK]  frozen refit seeds 0-4 of screen-ast on KAUH windows
+    kauh:*)  # kauh:<condition>:<cell>:<epoch|auto>[:sc|:scown|:none][:a2|:ttaK]  frozen refit seeds 0-4 of screen-ast on KAUH windows
       IFS=: read -r _ cond cell ep mode more <<< "$stage"
       SC_UNIT=outputs/train/screen-ast/sc+sc_static/cv0
       for s in 0 1 2 3 4; do
         u=outputs/train/screen-ast/$cell/seed$s; o=outputs/kauh/final/$cond/seed$s.npz
         [ -f $o ] && continue
+        [ "$ep" = auto ] && ep=$(ls checkpoints/train/screen-ast/$cell/seed$s/report_epoch_*.pth 2>/dev/null | head -1 | sed -E 's/.*report_epoch_([0-9]+).pth/\1/')  # fixed-selection refit: one epoch
         [ -f checkpoints/train/screen-ast/$cell/seed$s/report_epoch_$ep.pth ] || { echo "no checkpoint $cell seed$s"; continue; }
         case $mode in
           sc) extra="--sc --sc_state $SC_UNIT/sc_state.npz --sc_args $SC_UNIT/train_args.json" ;;
@@ -72,9 +73,13 @@ for stage in "$@"; do
         [ -f checkpoints/train/screen-ast/$cell/seed$s/report_epoch_$ep.pth ] || { echo "no checkpoint $cell seed$s"; continue; }
         $PY -m src.evaluation.screening infer outputs/train/screen-ast/$cell/seed$s --ckpt report_epoch_$ep.pth --out $o ${mode:+--sc}
       done ;;
-    snr:*)  # snr:<arm>:<cell>  noise stress on refit seeds 0-4 (official test)
-      IFS=: read -r _ arm cell <<< "$stage"
-      $PY -m src.evaluation.snr_stress infer outputs/train/screen-ast/$cell/seed{0,1,2,3,4} --out outputs/snr/$arm ;;
+    snr:*)  # snr:<arm>:<cell>[:test]  noise stress on refit seeds 0-4 (official test); test: ESC-50 folds 4-5 only
+      IFS=: read -r _ arm cell folds <<< "$stage"
+      $PY -m src.evaluation.snr_stress infer outputs/train/screen-ast/$cell/seed{0,1,2,3,4} \
+        ${folds:+--test_folds} --out outputs/snr${folds:+_test_folds}/$arm ;;
+    c7_gate)  # CV epoch of sc_noise from the 5-fold screen
+      $PY -m src.training.patchmix_cl.summary screen --run screen-ast-cv5 --folds 5 > logs/campaigns/c7_screen_summary.txt 2>&1
+      cat logs/campaigns/c7_screen_summary.txt ;;
     c4_screen) sweep c4_screen $WORKERS 7 ;;
     c4_gate)
       [ -f outputs/train/screen-ast-cv5/screen_before_c4.json ] || cp outputs/train/screen-ast-cv5/screen.json outputs/train/screen-ast-cv5/screen_before_c4.json
@@ -83,6 +88,8 @@ for stage in "$@"; do
       cat logs/campaigns/c4_screen_summary.txt
       grep -q "^STOP" logs/campaigns/c4_screen_summary.txt && echo sc_cons >> logs/campaigns/smoke_failed.txt ;;
     c4_final) sweep c4_final $WORKERS 7 ;;
+    c7_screen) sweep c7_screen $WORKERS 7 ;;
+    c7_final) sweep c7_final $WORKERS 7 ;;
     c2_ast|c2_htsat|c2f|c3) sweep $stage $WORKERS 7 ;;
     c2_dass) sweep c2_dass $WORKERS 9 ;;
     c5) sweep c5 1 28 ;;

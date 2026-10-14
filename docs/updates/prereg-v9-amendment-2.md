@@ -59,6 +59,13 @@ Cross-entropy + PAFA (PCSL λ 5.0, GPAL λ 0.005) on the projector output, AST, 
 ### 3.5 Batch 32 (C5)
 `baseline` and `sc+sc_static` at batch 32, lr 5e-5 and 1e-4, 5-fold CV, `--stop_epoch 20`. Adopted for a later recipe only if the CV epoch moves later **and** the fold SD drops, for both arms; even then, not before the phantom.
 
+### 3.6 `sc_noise` (SC + training noise), registered 14/10 after S1, before its first training run
+- **Trigger (section 5 condition met).** S1, ESC-50 all folds, E0 split, 5 seeds [Fact]: coverage of the baseline falls from 0.896 (clean) to 0.846 at 10 dB; AuscultTrust's Score falls more than the baseline's from 20 dB down (48.3 vs 51.6 at 20 dB); the re-estimated SC coefficient moves by 8.4 dB RMS at 30 dB and 23.4 dB at 10 dB (`outputs/snr/snr_summary.md`).
+- Config `experiments/train/sc_noise.yaml`: SC with the static bound; with probability 0.5 a training image gets one stationary ESC-50 recording from folds 1-3 (the classes of S1), mixed in the mel power domain (exact up to the signal-noise cross terms; median 0.05-0.4 dB from a waveform mix on an ICBHI cycle) at an SNR uniform in 5-30 dB, random frame offset. No random gain, no consistency loss. A 1-epoch smoke run (`smoke-a`) checks that it trains.
+- Protocol: RUN_ID `screen-ast-cv5`, 5-fold CV, `--stop_epoch 20`, CV epoch by the registered rule; refit seeds 0-4 at that epoch (`screen-ast`). No LODO.
+- Readings (no verdict): S1 rerun with noise from ESC-50 folds 4-5 only (`--test_folds`, `outputs/snr_test_folds/`) for `baseline`, `sc` (AuscultTrust), `sc_gain_v2` and `sc_noise`; clean Score next to AuscultTrust; KAUH A flip rate. The registered S1 table (all folds) stays as computed.
+- Not addressed by this arm: the noisy estimate of the SC coefficient itself (reported from S1 as a limitation of transductive SC).
+
 ## 4. Analyses
 
 - **Device probe (B2).** Logistic regression on the pooled embeddings (`emb.npz` of the LODO units), patient-grouped 5-fold, subsample balanced on device x class, devices with at least 10 patients. Balanced accuracy and log-loss of device; class probe on the same embeddings. References: chance and a probe fed only the class label.

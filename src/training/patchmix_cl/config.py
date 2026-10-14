@@ -173,6 +173,10 @@ def build_parser():
     p.add_argument("--desired_length", type=int, default=8, help="seconds per cycle after cut/pad")
     p.add_argument("--n_mels", type=int, default=128)
     p.add_argument("--spec_augment", type=int, default=1, help="1: SpecAugment on training images; 0: off")
+    p.add_argument("--noise_train_prob", type=float, default=0.0,
+                   help="probability of mixing a stationary ESC-50 noise (folds 1-3) into a training image (0: off)")
+    p.add_argument("--noise_snr_low", type=float, default=5.0, help="lowest SNR (dB) of the training noise")
+    p.add_argument("--noise_snr_high", type=float, default=30.0, help="highest SNR (dB) of the training noise")
     p.add_argument("--pad_types", type=str, default="repeat", choices=["zero", "repeat"])
 
     # model (AST) and loss
@@ -278,6 +282,8 @@ def parse_args(argv=None):
         assert (
             args.selection == "fixed" and args.cv_folds == 0
         ), "--holdout_device needs --selection fixed (epoch frozen from screening) and no --cv_folds"
+    if args.noise_train_prob > 0:
+        assert get_encoder(args.encoder).db_scale is not None, "training noise is mixed in the log-mel power domain"
     if args.consistency_weight > 0:
         assert args.random_gain_db == 0, "consistency training replaces the random gain augmentation; set random_gain_db 0"
         assert args.method == "patchmix_cl", "consistency loss is wired into the patchmix_cl branch"

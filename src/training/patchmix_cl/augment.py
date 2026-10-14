@@ -102,3 +102,17 @@ def freq_mixstyle(x, p=0.5, alpha=0.1, eps=1e-6):
     )
     perm = torch.randperm(x.shape[0], device=x.device)
     return xn * (lam * sig + (1 - lam) * sig[perm]) + (lam * mu + (1 - lam) * mu[perm])
+
+
+def noise_mix_image(image, noise, snr_db, db_scale, rng):
+    """Add a noise recording to a (time, mel, 1) log-mel image at `snr_db`, in the mel power domain.
+
+    Both images are Kaldi fbanks (natural log of mel power) with the same affine normalisation, `db_scale` image units per dB,
+    so power adds as k * logaddexp(x / k, n / k + log g) with k = image units per nat; the offset cancels. Cross terms between
+    signal and noise are dropped (their expected value is zero). The noise is rolled by a random number of frames, and g sets
+    the ratio of mean mel power (signal over noise) to `snr_db`.
+    """
+    k = db_scale * 10 / np.log(10)
+    x, n = image.astype(np.float64) / k, np.roll(noise, rng.integers(noise.shape[0]), axis=0).astype(np.float64) / k
+    log_g = np.log(np.mean(np.exp(x - x.max()))) + x.max() - np.log(np.mean(np.exp(n - n.max()))) - n.max() - snr_db * np.log(10) / 10
+    return (k * np.logaddexp(x, n + log_g)).astype(image.dtype)
