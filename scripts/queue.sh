@@ -96,7 +96,7 @@ for stage in "$@"; do
     c7_screen) sweep c7_screen $WORKERS 7 ;;
     c7_final) sweep c7_final $WORKERS 7 ;;
     c2_ast|c2_htsat|c2f|c3) sweep $stage $WORKERS 7 ;;
-    c2_dass) sweep c2_dass $WORKERS 9 ;;
+    c2_dass) sweep c2_dass $WORKERS 12 ;;  # a DASS unit peaks near 11 GB
     c5) sweep c5 1 28 ;;
     c8) sweep c8 2 16 ;;
     c6) sweep c6 2 14 ;;
