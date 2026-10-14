@@ -233,6 +233,19 @@ def build_parser():
     p.add_argument("--alpha", type=float, default=1.0, help="weight of the contrastive loss")
     p.add_argument("--negative_pair", type=str, default="all", choices=["all", "diff_label"])
     p.add_argument(
+        "--cl_mode",
+        type=str,
+        default="2d",
+        choices=["2d", "dual"],
+        help="2d: one contrastive loss on the 2-D Patch-Mix view; dual (DASS only, Lung-SRAD): one loss on a time-only and one "
+        "on a frequency-only Patch-Mix view, each weighted by --alpha, with the mixed features detached",
+    )
+    p.add_argument(
+        "--gaussian_blur",
+        action="store_true",
+        help="DASS only: Gaussian blur inside VMamba blocks 2 and 3 of stage 2 (kernel 5, sigma 3), as in Lung-SRAD",
+    )
+    p.add_argument(
         "--target_type",
         type=str,
         default="grad_block",
@@ -282,6 +295,10 @@ def parse_args(argv=None):
         assert (
             args.selection == "fixed" and args.cv_folds == 0
         ), "--holdout_device needs --selection fixed (epoch frozen from screening) and no --cv_folds"
+    if args.cl_mode == "dual" or args.gaussian_blur:
+        assert args.encoder == "dass", "dual-axis Patch-Mix and the Gaussian blur exist only in the Lung-SRAD DASS"
+    if args.cl_mode == "dual":
+        assert args.method == "patchmix_cl" and not args.time_domain
     if args.noise_train_prob > 0:
         assert get_encoder(args.encoder).db_scale is not None, "training noise is mixed in the log-mel power domain"
     if args.consistency_weight > 0:

@@ -1,7 +1,9 @@
 """DASS (distilled audio state-space model, VMamba medium) from the Lung-SRAD repository, with its Patch-Mix.
 
-Same shape as AST (798 x 128 Kaldi fbank) but normalised per cycle, as Lung-SRAD does for DASS. The network is the Lung-SRAD one with the Gaussian blur blocks switched off, so
-this is plain DASS; its own 2-D Patch-Mix (the AST-equivalent token swap) is used, like for the other encoders.
+Same shape as AST (798 x 128 Kaldi fbank) but normalised per cycle, as Lung-SRAD does for DASS. The network is the Lung-SRAD one.
+By default its Gaussian blur blocks are switched off, so this is plain DASS; `--gaussian_blur` switches them on with the settings of
+the Lung-SRAD training script (blocks 2 and 3 of stage 2, kernel 5, sigma 3). Patch-Mix: the AST-equivalent 2-D token swap, or a
+time-only / frequency-only swap (`mix_type`) for the dual-axis contrastive loss.
 Needs the selective-scan CUDA kernel and runs in the separate `.venv-dass` (CUDA 12.8 build, see docs/SETUP.md).
 Weights: DASS_medium_v2.pth (AudioSet) in `<data>/models/dass/pretrained_models/`.
 """
@@ -44,7 +46,7 @@ def _dass_class():
 class DassEncoder(nn.Module):
     final_feat_dim = FEATURE_DIM
 
-    def __init__(self, n_cls, mix_beta):
+    def __init__(self, n_cls, mix_beta, gaussian_blur=False):
         super().__init__()
         with _working_directory(
             WEIGHTS_ROOT
@@ -56,23 +58,26 @@ class DassEncoder(nn.Module):
                 enable_patch_mix=True,
                 mix_beta=mix_beta,
                 model_size="medium",
-                blur_blocks=set(),
-                gaussian_blur=True,
+                blur_blocks={2, 3} if gaussian_blur else set(),
+                gaussian_blur=True,  # selects the Lung-SRAD network; blur_blocks decides whether any block blurs
+                kernel_size=5,
+                sigma=3.0,
+                blur_stage={2},
                 verbose=False,
             )
         self.mlp_head = nn.Linear(
             FEATURE_DIM, n_cls
         )  # fresh head; the reference's own head output is not used
 
-    def forward(self, x, y=None, patch_mix=False, time_domain=False):
+    def forward(self, x, y=None, patch_mix=False, time_domain=False, mix_type="2d"):
         x = x.squeeze(1)  # (B, time, freq)
         if patch_mix:
-            return self.dass(x, y=y, patch_mix=True, mix_type="2d")
+            return self.dass(x, y=y, patch_mix=True, mix_type=mix_type)
         return self.dass(x)[0]
 
 
 def build_dass(args):
-    return DassEncoder(args.n_cls, args.mix_beta)
+    return DassEncoder(args.n_cls, args.mix_beta, args.gaussian_blur)
 
 
 def preprocess_dass(wave):

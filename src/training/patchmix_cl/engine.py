@@ -82,12 +82,21 @@ def train_epoch(loader, model, classifier, projector, criterion, optimizer, epoc
                     proj1 = projector(features).detach().clone()
                 else:  # project_flow
                     proj1 = projector(features)
-                with _encoder_context(args):
-                    mix_images, _, labels_b, lam, index = model(
-                        images, y=labels, patch_mix=True, time_domain=args.time_domain
-                    )
-                proj2 = projector(mix_images)
-                loss += args.alpha * criterion[1](proj1, proj2, labels, labels_b, lam, index, args)
+                if args.cl_mode == "dual":  # time-only and frequency-only views, mixed features detached as in Lung-SRAD
+                    for mix_type in ("time", "freq"):
+                        with _encoder_context(args):
+                            mix_images, _, labels_b, lam, index = model(
+                                images, y=labels, patch_mix=True, mix_type=mix_type
+                            )
+                        proj2 = projector(mix_images.detach())
+                        loss += args.alpha * criterion[1](proj1, proj2, labels, labels_b, lam, index, args)
+                else:
+                    with _encoder_context(args):
+                        mix_images, _, labels_b, lam, index = model(
+                            images, y=labels, patch_mix=True, time_domain=args.time_domain
+                        )
+                    proj2 = projector(mix_images)
+                    loss += args.alpha * criterion[1](proj1, proj2, labels, labels_b, lam, index, args)
 
         losses.update(loss.item(), bsz)
         top1.update(accuracy(output[:bsz], labels), bsz)

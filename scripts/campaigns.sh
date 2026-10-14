@@ -1,7 +1,7 @@
 #!/bin/bash
 # Job lists of the exploratory campaigns. Writes logs/campaigns/<name>.txt,
 # one training command per line with its own RUN_ID, for scripts/sweep.py. Nothing is started here.
-#   bash scripts/campaigns.sh c2_ast c2_dass c2_htsat c2f c3 c4_screen c4_final c5 c6 c7_screen c7_final smoke
+#   bash scripts/campaigns.sh c2_ast c2_dass c2_htsat c2f c3 c4_screen c4_final c5 c6 c7_screen c7_final c8 smoke smoke_c8
 # c4_final / c7_final need the screen summary of screen-ast-cv5 (CV epoch of sc_cons / sc_noise); c4 also the bound chosen in screen-ast-c0.
 cd "$(dirname "$0")/.." || exit 1
 C=experiments/train; DEVS="meditron littc2se litt3200 akgc417l"
@@ -44,11 +44,17 @@ for name in "$@"; do
     c7_screen) for k in 0 1 2 3 4; do line screen-ast-cv5 sc_noise "$PY" sc_noise --cv_folds 5 --cv_fold $k --seed $k --stop_epoch 20; done ;;
     c7_final) ep=$($PY -c "import json; print(json.load(open('outputs/train/screen-ast-cv5/screen.json'))['arms']['sc_noise']['epoch'])")
         for s in 0 1 2 3 4; do line screen-ast sc_noise "$PY" sc_noise --selection fixed --report_epochs $ep --stop_epoch $ep --seed $s; done ;;
+    c8) for arm in lung_srad lung_srad+sc+sc_static; do for s in 0 1 2 3 4; do
+          line lung-srad encoder_dass+$arm "$DASS_PY" $arm --selection test --seed $s
+        done; done ;;
     smoke) line smoke-b sc_cons "$PY" sc_cons --cv_folds 5 --cv_fold 0 --seed 0 --stop_epoch 1
         line smoke-b encoder_beats+baseline "$PY" beats_patchmix_cl --cv_folds 5 --cv_fold 0 --seed 0 --stop_epoch 1
         line smoke-b encoder_beats+beats_anchor "$PY" beats_anchor --cv_folds 5 --cv_fold 0 --seed 0 --stop_epoch 1
         line smoke-b pafa_ast "$PY" pafa_ast --cv_folds 5 --cv_fold 0 --seed 0 --stop_epoch 1
         line smoke-b sc+sc_static+bs32 "$PY" sc_bs32 --cv_folds 5 --cv_fold 0 --seed 0 --stop_epoch 1 ;;
+    smoke_c8) for arm in lung_srad lung_srad+sc+sc_static; do
+          line smoke-a encoder_dass+$arm "$DASS_PY" $arm --cv_folds 5 --cv_fold 0 --seed 0 --stop_epoch 1
+        done ;;
     *) echo "unknown campaign $name"; exit 1 ;;
   esac > $out
   echo "$out: $(wc -l < $out) jobs"

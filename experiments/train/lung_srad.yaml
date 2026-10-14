@@ -1,0 +1,7 @@
+# Lung-SRAD on DASS, settings of its training script (icbhi_dual_patchmix_gaussian.sh): Gaussian blur in VMamba blocks 2 and 3
+# of stage 2 (kernel 5, sigma 3), dual-axis Patch-Mix CL (time-only and frequency-only views, weight 1.0 each), projector
+# target with gradient (project_flow, the Lung-SRAD default). Batch 16 and temperature 0.2 come from encoder_dass.yaml.
+# Combine after encoder_dass.yaml.
+cl_mode: dual
+gaussian_blur: true
+target_type: project_flow
