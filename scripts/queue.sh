@@ -14,7 +14,7 @@ declare -A NEEDS=([c4_screen]=sc_cons [c4_final]=sc_cons [c3]="beats_patchmix_cl
 sweep() {  # sweep <name> <workers> <mem-gb>
   bash scripts/campaigns.sh $1 || return 1
   for round in 1 2 3; do  # units lost to a full GPU after all retries run again; finished units are skipped
-    SWEEP_TAG=-$1 RUN_ID=queue-$1 $PY scripts/sweep.py logs/campaigns/$1.txt --workers $2 --mem-gb $3 --ram-gb 8 | tee /dev/stderr | grep -q "0 failed: \[\]" && return 0
+    SWEEP_TAG=-$1 RUN_ID=queue-$1 $PY scripts/sweep.py logs/campaigns/$1.txt --workers $2 --mem-gb $3 --ram-gb 8 > logs/campaigns/$1.sweep.log 2>&1; tail -n 1 logs/campaigns/$1.sweep.log; tail -n 1 logs/campaigns/$1.sweep.log | grep -q "0 failed: \[\]" && return 0
   done
   return 1
 }
