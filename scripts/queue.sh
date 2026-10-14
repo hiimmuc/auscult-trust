@@ -13,7 +13,10 @@ WORKERS=${WORKERS:-4}
 declare -A NEEDS=([c4_screen]=sc_cons [c4_final]=sc_cons [c3]="beats_patchmix_cl beats_anchor" [c6]=pafa_ast [c5]=sc_bs32)
 sweep() {  # sweep <name> <workers> <mem-gb>
   bash scripts/campaigns.sh $1 || return 1
-  SWEEP_TAG=-$1 RUN_ID=queue-$1 $PY scripts/sweep.py logs/campaigns/$1.txt --workers $2 --mem-gb $3 --ram-gb 8
+  for round in 1 2 3; do  # units lost to a full GPU after all retries run again; finished units are skipped
+    SWEEP_TAG=-$1 RUN_ID=queue-$1 $PY scripts/sweep.py logs/campaigns/$1.txt --workers $2 --mem-gb $3 --ram-gb 8 | tee /dev/stderr | grep -q "0 failed: \[\]" && return 0
+  done
+  return 1
 }
 for stage in "$@"; do
   echo "=== $(date '+%F %T') $stage"
@@ -76,7 +79,8 @@ for stage in "$@"; do
     c4_gate)
       [ -f outputs/train/screen-ast-cv5/screen_before_c4.json ] || cp outputs/train/screen-ast-cv5/screen.json outputs/train/screen-ast-cv5/screen_before_c4.json
       $PY -m src.training.patchmix_cl.summary screen --run screen-ast-cv5 --folds 5 > logs/campaigns/c4_screen_summary.txt 2>&1
-      $PY scripts/c4_gate.py | tee -a logs/campaigns/c4_screen_summary.txt
+      $PY scripts/c4_gate.py >> logs/campaigns/c4_screen_summary.txt 2>&1 || echo "STOP sc_cons: gate could not be computed (incomplete screen)" >> logs/campaigns/c4_screen_summary.txt
+      cat logs/campaigns/c4_screen_summary.txt
       grep -q "^STOP" logs/campaigns/c4_screen_summary.txt && echo sc_cons >> logs/campaigns/smoke_failed.txt ;;
     c4_final) sweep c4_final $WORKERS 7 ;;
     c2_ast|c2_htsat|c2f|c3) sweep $stage $WORKERS 7 ;;

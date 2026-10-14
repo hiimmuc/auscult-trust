@@ -58,7 +58,7 @@ def main():
     ap.add_argument("--mem-gb", type=float, default=8.0, help="GPU memory one job needs")
     ap.add_argument("--ram-gb", type=float, default=6.0, help="available RAM a new job needs (about 2 with the spectrogram cache)")
     ap.add_argument("--ramp", type=int, default=90, help="seconds a new job needs to reach its memory use; the next one starts after")
-    ap.add_argument("--retries", type=int, default=8, help="tries after a memory failure; a full GPU can crash several starts in a row")
+    ap.add_argument("--retries", type=int, default=30, help="tries after a memory failure; a full GPU can crash several starts in a row")
     ap.add_argument("--poll", type=int, default=20)
     ap.add_argument("--threads", type=int, default=3, help="math threads per job (OMP/MKL); jobs share the CPU")
     ap.add_argument("--num-workers", type=int, default=4, help="data loader workers per job")
