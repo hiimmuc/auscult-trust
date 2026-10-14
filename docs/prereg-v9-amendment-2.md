@@ -12,6 +12,8 @@ Nothing here changes a registered rule of Amendment 1. Gate G, H1, H2, H3 and th
 | Epoch control, official split | `screen-ast` / `baseline_e14` | 14/10 04:00, commit `cc56136` | baseline recipe, seeds 0-9, scored at epoch 14 (the AuscultTrust CV epoch) |
 | Epoch control, LODO | `lodo-ast` / `baseline_e14+lodo_<dev>` | 14/10 04:01, commit `cc56136` | 4 devices x seeds 0-4 at epoch 14 |
 
+**C0 incident, 14/10 07:36.** One screen unit (`sc_gain+sc_static`, fold 2) was lost to a full GPU after 9 memory failures, and the C0 chain picked the bound from the five finished units. The pick was discarded within minutes, before any refit epoch finished (no refit result exists); the incomplete summary is kept as `logs/screen-ast-c0/summary_incomplete.txt`. The lost unit runs again and the pick is made once all six units have finished, by the same rule.
+
 **Reading of the epoch control, fixed before any of its numbers are seen.**
 - KAUH A: if `p0_e14_sc` (baseline weights at epoch 14 with test-time SC) keeps a flip rate near 0.10, the missing invariance of the AuscultTrust weights comes from training with SC; if it rises towards 0.17, it comes from training longer.
 - LODO Litt3200: D(SC vs baseline at epoch 2) is compared with D(SC vs baseline at epoch 14). A large drop means part of the H2 effect is the epoch.
