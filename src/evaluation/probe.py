@@ -61,6 +61,8 @@ def cv_probe(X, target, groups, n_classes, folds=5):
 def probe_unit(unit, seed=0):
     X, y, dev, pat = load(unit)
     keep_dev = [d for d in np.unique(dev) if len(np.unique(pat[dev == d])) >= MIN_PATIENTS]
+    if len(keep_dev) < 2:  # a device probe needs two devices; the source devices of a unit hold only its calibration patients
+        return None
     m = np.isin(dev, keep_dev)
     X, y, dev, pat = X[m], y[m], dev[m], pat[m]
     idx = balanced_subsample(y, dev, seed)
@@ -88,6 +90,9 @@ def main():
         for arm in a.arms:
             rows = [probe_unit(root / "{}+lodo_{}".format(arm, dev.lower()) / "seed{}".format(s), s) for s in a.seeds
                     if (root / "{}+lodo_{}".format(arm, dev.lower()) / "seed{}".format(s) / "emb.npz").exists()]
+            if None in rows:
+                L.append("| {} | {} | - | fewer than two devices with {} patients | n/a | | | | |".format(dev, arm, MIN_PATIENTS))
+                continue
             if not rows:
                 continue
             res["{}|{}".format(dev, arm)] = rows
