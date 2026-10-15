@@ -1,6 +1,8 @@
 # environments
 .venv/
 .venv-train/
+.venv-dass/
+
 # caches
 __pycache__/
 *.py[cod]

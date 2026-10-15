@@ -18,7 +18,7 @@ Does spectrum correction (SC) let a benchmark-level lung-sound classifier **keep
 | **AST + Patch-Mix CL** | Benchmark-level 4-class cycle classifier (normal / crackle / wheeze / both). |
 | **Split-conformal layer** | LAC score, alpha = 0.1. Cycle 4-class view and recording-level screening view (normal / abnormal). |
 
-**Hypotheses** (full definitions: `docs/research-proposal-v9-en.md`, pre-registration `docs/prereg-v8.md` + `docs/prereg-v9-amendment.md`)
+**Hypotheses** (full definitions: `docs/updates/research-proposal-v9-en.md`, pre-registration `docs/updates/prereg-v8.md` + `docs/updates/prereg-v9-amendment.md`)
 
 | ID | Claim |
 | --- | --- |
@@ -31,7 +31,7 @@ Not claimed: a new algorithm, SOTA Score, disease diagnosis, patient-level guara
 
 ## Pipeline
 
-```
+```text
  wav ──► SC (per-device spectrum / reference) ──► log-mel ──► AST + Patch-Mix CL ──► softmax
                                                                                       │
                           calibration patients ──► split conformal (LAC, alpha 0.1) ◄──┘
@@ -104,9 +104,9 @@ Wrapper directory (not versioned): `../data/raw/` (ICBHI, KAUH, HF_Lung_V1), `..
 | --- | --- |
 | Install, data sources | [docs/SETUP.md](docs/SETUP.md) |
 | Run and compare arms | [docs/QUICKSTART.md](docs/QUICKSTART.md) |
-| Full design, hypotheses | [docs/research-proposal-v9-en.md](docs/research-proposal-v9-en.md) |
-| Registered plan | [docs/prereg-v8.md](docs/prereg-v8.md), [docs/prereg-v9-amendment.md](docs/prereg-v9-amendment.md) |
-| Vietnamese change list | [docs/v9-change-list-vi.md](docs/v9-change-list-vi.md) |
+| Full design, hypotheses | [docs/updates/research-proposal-v9-en.md](docs/updates/research-proposal-v9-en.md) |
+| Registered plan | [docs/updates/prereg-v8.md](docs/updates/prereg-v8.md), [docs/updates/prereg-v9-amendment.md](docs/updates/prereg-v9-amendment.md) |
+| Vietnamese change list | [docs/updates/v9-change-list-vi.md](docs/updates/v9-change-list-vi.md) |
 | Results so far | [report.md](report.md) |
 | Config conventions (for agents) | [CLAUDE.md](CLAUDE.md) |
 

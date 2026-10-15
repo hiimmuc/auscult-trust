@@ -4,8 +4,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Status
 
-Main line: **proposal v9** (`docs/research-proposal-v9-en.md`, 07/10/2026). Registered title (fixed): *Nghiên cứu giải pháp cải thiện độ tin cậy của mô hình phân loại âm thanh phổi dưới sự dịch chuyển thiết bị bằng hiệu chỉnh phổ và dự đoán Conformal cho hỗ trợ sàng lọc bệnh đường hô hấp*. v8 and earlier (A+B, H, v4) are superseded; their results stay in `report.md` as Phase 0.
-Pre-registration: `docs/prereg-v8.md`, amended 07/10/2026 (`docs/prereg-v9-amendment.md`, appended to the end of `prereg-v8.md`; registered, no Stage-1 run preceded it).
+Main line: **proposal v9** (`docs/updates/research-proposal-v9-en.md`, 07/10/2026). Registered title (fixed): *Nghiên cứu giải pháp cải thiện độ tin cậy của mô hình phân loại âm thanh phổi dưới sự dịch chuyển thiết bị bằng hiệu chỉnh phổ và dự đoán Conformal cho hỗ trợ sàng lọc bệnh đường hô hấp*. v8 and earlier (A+B, H, v4) are superseded; their results stay in `report.md` as Phase 0.
+Pre-registration: `docs/updates/prereg-v8.md`, amended 07/10/2026 (`docs/updates/prereg-v9-amendment.md`, appended to the end of `prereg-v8.md`; registered, no Stage-1 run preceded it).
 Data in `../data/raw/`: ICBHI (920 wav, 6898 cycles, 126 patients), HF_Lung_V1 (9765 wav, not used in v9 core), KAUH (336 wav = 112 patients x 3 filters). Reference repos in `../repos` (read-only): OPERA, patch-mix_contrastive_learning, SG-SCL.
 Model name: **AuscultTrust** = SC front end + AST (Patch-Mix CL recipe) + split-conformal layer (cycle 4-class view + recording-level screening view).
 Dates: school round 17/10/2026 (10-min talk + poster, results report required); research cut-off 31/01/2027.
@@ -90,6 +90,7 @@ Run from repo root, imports are `src.*` (`pyproject.toml` sets `pythonpath`).
 ## Working conventions
 
 - `../repos/*` is read-only reference. Never edit, build, or write results there. Reuse them by path (`src/training/patchmix_cl/upstream.py`), never vendor a copy.
+- Docs: reports in `docs/reports/`, handoffs in `docs/handoff/` (written when a session runs out of context), proposal / prereg / amendments in `docs/updates/`, decision logs in `docs/decision_logs/`.
 - Results: `outputs|checkpoints/<exp>/<run_id>/<cell>/<unit>/`; `<exp>` = experiment (`train`), `<cell>` = variant (config stems joined by `+`, no `base`), `<unit>` = `cv<k>` or `seed<s>`, `run_id` = `YYYYMMDD-HHMMSS[_$RUN_TAG]` or a `RUN_ID` set to resume one campaign. Never write elsewhere, never reuse a unit with another config.
 - Frozen Phase 0 code lives in `../archive`; the wrapper holds `../data`, `../repos`, `../docs`.
 - Install a missing package before reaching for a workaround.
@@ -101,7 +102,7 @@ Run from repo root, imports are `src.*` (`pyproject.toml` sets `pythonpath`).
 
 ## TODO (v9, in dependency order)
 
-1. ~~Register: choose clip vs common band and the TTA-EQ seed list, then date, append and commit~~ — done (`docs/prereg-v9-amendment.md`, 07/10/2026; `sc_mode` decided by CV, not by hand). Still open: recount ICBHI cycles per device from filenames ([8] and [14] disagree on Litt3200/LittC2SE labels).
+1. ~~Register: choose clip vs common band and the TTA-EQ seed list, then date, append and commit~~ — done (`docs/updates/prereg-v9-amendment.md`, 07/10/2026; `sc_mode` decided by CV, not by hand). Still open: recount ICBHI cycles per device from filenames ([8] and [14] disagree on Litt3200/LittC2SE labels).
 2. ~~SC safety~~ — done: `sc_mode` bound in `src/processing/correction.py`, `sc_state.npz` (s_ref, per-device spectra and coefficients, `sc_mode`) and `s_ref_sha256` saved with every SC run, `run.sh screen` runs both `sc_mode` values per SC arm.
 3. ~~Stage 1 summary~~ — done (`summary.py`). Still to run: Stage 1 screen + final (`bash scripts/run.sh`).
 4. External-audio inference for the frozen Patch-Mix model: KAUH 8 s windows and phantom clips -> softmax npz, with optional SC from saved s_ref + target spectrum from unlabelled clips (`--sc_n` to cap the number of target recordings, F4).

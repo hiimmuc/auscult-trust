@@ -59,7 +59,7 @@ PYTHONPATH=. .venv-train/bin/python -m src.training.patchmix_cl.main \
 
 ## 4. Freeze a model for the conformal evaluation
 
-```bash
+```text
 PYTHONPATH=. .venv-train/bin/python -m src.training.patchmix_cl.export_probs \
   outputs/train/$RUN_ID/<cell>/seed0 --ckpt report_epoch_<E>.pth
 ```
@@ -68,7 +68,7 @@ Writes softmax, embeddings and `export/model.sha256`. Hand-off to Stage 2: froze
 
 ## 5. Where things go
 
-```
+```text
 outputs/<exp>/<run_id>/<cell>/<unit>/       report, predictions, sc_state.npz, train_args.json
 checkpoints/<exp>/<run_id>/<cell>/<unit>/   weights, last.pth
 ```
