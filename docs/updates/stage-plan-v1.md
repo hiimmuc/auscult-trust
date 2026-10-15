@@ -40,8 +40,14 @@ only) do not, so no noise arm is run.
 - HTS-AT, OPERA-CT and DASS have a fixed input length, so their PAFA cells keep 8 s cycles; AST and BEATs use PAFA's 5 s.
 - ADD-RSC: the reference resizes the AST image to 1024 x 256 and uses its own AST (patch stride 16). Here the denoising
   layer runs on each encoder's own image and encoder, so the diagonal cell may land below the published 65.53.
-- QLung: the reference quality score is NaN on digitally silent frames (14 training and 57 test cycles). Here those frames
-  are left out of the frame average.
+- QLung: the reference quality score is NaN for 71 cycles (14 training, 57 test). They are the first cycles of AKGC417L
+  multi-channel recordings that start with 4,096 digital-zero samples, so their first STFT frame is all zero and its
+  entropy is 0/0. This was reproduced with the reference code itself (`util/icbhi_util.py` cycle extraction and
+  `util/get_acoustic_features.py`). In the reference loop one NaN quality makes the whole batch loss NaN, and the AMP
+  GradScaler then skips that step and halves its scale (about 14 batches per epoch). A simulation of the scaler with
+  these counts reaches scale 0 near epoch 10, after which the weights become NaN. So the reference run as released can
+  only have produced its best epoch early. Here the silent frames are left out of the frame average: no NaN, and every
+  step trains.
 - SG-SCL: SpecAugment masks are drawn per sample, not once per batch.
 - Lung-SRAD is not in the grid. Its published number is the reference row; it is reproduced only if it beats the grid.
 
@@ -49,8 +55,9 @@ only) do not, so no noise arm is run.
 
 `scripts/grid.py smoke` ran a few synthetic training steps of every cell on both machines: all 70 cells passed on A and B.
 Peak memory and step time per cell are in `logs/grid_smoke_{A,B}.json`. Job lists are balanced by measured hours: A has
-147 jobs, B 203 jobs, each about 112 GPU-hours if run one at a time. Both machines start with the reference cells
-(AST methods and PAFA on BEATs), so the port checks come first.
+149 units, B 201 units, each about 113 GPU-hours if run one at a time. Order on both machines: the reference cells
+(AST methods and PAFA on BEATs) first, so the port checks come first; then encoder by encoder (BEATs, HTS-AT, OPERA-CT),
+DASS last (`scripts/grid.py jobs --pin`, which keeps already started units on their machine).
 
 DASS fine-tuning is the bulk: about 2.4-3.5 h per run against 0.3-1.5 h for the other encoders.
 
@@ -66,6 +73,8 @@ With 4 parallel jobs per GPU (measured gain about 1.3-1.5x), the grid should end
 3. LODO scope from the table.
 
 ## Commands
+
+Monitoring is handed to a separate session: `docs/handoff/HANDOFF.md`, status with `bash scripts/grid_status.sh`.
 
 - Status: `tail logs/grid-v1-A.log` on A, `tail logs/grid-v1-B.log` on B; one log per job in `logs/grid-v1-{A,B}/`.
 - Restart after a stop (finished units are skipped, interrupted ones resume from `last.pth`):

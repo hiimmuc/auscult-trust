@@ -23,6 +23,7 @@ RUN = "grid-v1"
 ENCODERS = ["ast", "htsat", "opera_ct", "beats", "dass"]
 FT = ["ce", "patchmix", "patchmix_cl", "pafa", "sg_scl", "qlung", "add_rsc", "ce_pafa_cfg"]
 FROZEN = ["ce", "patchmix", "pafa", "qlung", "add_rsc", "ce_pafa_cfg"]  # loss-only methods on a frozen encoder train only the projector
+ENCODER_ORDER = ["ast", "beats", "htsat", "opera_ct", "dass"]  # job order: DASS (slowest) last
 FIXED_LENGTH = {"htsat", "opera_ct", "dass"}  # input length fixed by the encoder: PAFA's 5 s cycles do not apply
 TRAIN_CYCLES, TEST_CYCLES = 4142, 2756
 PY = ".venv-train/bin/python"
@@ -110,6 +111,7 @@ def main():
     j = sub.add_parser("jobs")
     j.add_argument("--smoke", nargs="+", required=True, help="smoke json per machine, in the order A B")
     j.add_argument("--seeds", type=int, default=5)
+    j.add_argument("--pin", default=None, help="file of '<machine A|B> <cell> <seed>' lines: units already started stay on their machine")
     t = sub.add_parser("table")
     t.add_argument("--epoch", default="last", help="last, best_test (optimistic: best Score on test per seed) or an epoch number")
     a = ap.parse_args()
@@ -145,7 +147,11 @@ def main():
 
 
 def write_jobs(a):
-    """Two job lists with about equal measured hours, the reference-encoder cells (diagonal) first on both machines."""
+    """Two job lists with about equal measured hours.
+
+    Order on both machines: the reference cells of each method (diagonal) first, then encoder by encoder with DASS last
+    (its fine-tuning runs take 2.5-3.5 h, the others 0.1-1.5 h), longest jobs first within an encoder.
+    """
     smokes = [json.loads(Path(p).read_text()) for p in a.smoke]
     diagonal = {"ast+ft+patchmix_cl", "ast+ft+patchmix", "ast+ft+ce", "ast+ft+pafa", "ast+ft+ce_pafa_cfg", "ast+ft+sg_scl",
                 "ast+ft+qlung", "ast+ft+add_rsc", "beats+ft+pafa", "beats+ft+ce_pafa_cfg"}
@@ -157,10 +163,15 @@ def write_jobs(a):
             line = "RUN_ID={} MEM_GB={:.0f} {} -m src.training.patchmix_cl.main --config {} --cell {} {}--selection fixed --report_epochs {} --seed {}".format(
                 RUN, max(4, smokes[0][c["cell"]]["peak_gb"] * 1.25 + 1.5), py, ",".join(c["config"]), c["cell"],
                 "".join(x + " " for x in c["extra"]), epochs, s)
-            jobs.append((c["cell"] not in diagonal, [m[c["cell"]]["run_h"] for m in smokes], line))
+            rank = 0 if c["cell"] in diagonal else 1 + ENCODER_ORDER.index(c["encoder"])
+            jobs.append((rank, [m[c["cell"]]["run_h"] for m in smokes], line, (c["cell"], s)))
+    pins = {}
+    for l in Path(a.pin).read_text().splitlines() if a.pin else []:
+        m, cell, seed = l.split()
+        pins[(cell, int(seed))] = "AB".index(m)
     load, lists = [0.0] * len(smokes), [[] for _ in smokes]
-    for prio, hours, line in sorted(jobs, key=lambda j: (j[0], -max(j[1]))):  # diagonal first, then longest first
-        k = min(range(len(smokes)), key=lambda i: load[i] + hours[i])
+    for rank, hours, line, unit in sorted(jobs, key=lambda j: (j[0], -max(j[1]))):
+        k = pins.get(unit, min(range(len(smokes)), key=lambda i: load[i] + hours[i]))
         load[k] += hours[k]
         lists[k].append(line)
     for name, lines, h in zip("AB", lists, load):
