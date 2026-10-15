@@ -1,0 +1,5 @@
+# SG-SCL (icbhi_sg_scl.sh): batch 8, device SupCon weight 1.0, temperature 0.06, two SpecAugment views, gradient reversal.
+method: sg_scl
+batch_size: 8
+alpha: 1.0
+temperature: 0.06

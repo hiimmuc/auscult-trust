@@ -178,6 +178,13 @@ def build_parser():
     p.add_argument("--noise_snr_low", type=float, default=5.0, help="lowest SNR (dB) of the training noise")
     p.add_argument("--noise_snr_high", type=float, default=30.0, help="highest SNR (dB) of the training noise")
     p.add_argument("--pad_types", type=str, default="repeat", choices=["zero", "repeat"])
+    p.add_argument(
+        "--test_fold",
+        type=str,
+        default="official",
+        choices=["official", "0", "1", "2", "3", "4"],
+        help="official: 60/40 challenge split; 0-4: patient fold held out as test (80/20 split of patient_list_foldwise.txt)",
+    )
 
     # model (AST) and loss
     p.add_argument(
@@ -222,10 +229,20 @@ def build_parser():
         "--method",
         type=str,
         default="patchmix_cl",
-        choices=["ce", "patchmix", "patchmix_cl", "ce_pafa"],
+        choices=["ce", "patchmix", "patchmix_cl", "ce_pafa", "sg_scl", "qlung", "add_rsc"],
         help="ce: plain cross-entropy; patchmix: Patch-Mix augmentation; patchmix_cl: Patch-Mix + contrastive loss; "
-        "ce_pafa: cross-entropy + PAFA patient losses (PCSL, GPAL) on the projector output",
+        "ce_pafa: cross-entropy + PAFA patient losses (PCSL, GPAL) on the projector output; sg_scl: cross-entropy + "
+        "stethoscope-guided supervised contrastive loss on two SpecAugment views behind gradient reversal; qlung: angular "
+        "classifier + quality-adaptive angular margin loss; add_rsc: adaptive differential denoising layer in front of the "
+        "encoder + bias denoising loss",
     )
+    p.add_argument("--quality_alpha", type=float, default=0.7, help="qlung: weight of the spectral entropy in the quality score")
+    p.add_argument("--quality_beta", type=float, default=0.3, help="qlung: weight of the RMS energy in the quality score")
+    p.add_argument("--qlung_gamma", type=float, default=0.5, help="qlung: share of the quality margin vs the class-prior margin")
+    p.add_argument("--qlung_m_target", type=float, default=0.2, help="qlung: class-prior margin of a class with prior 1/4")
+    p.add_argument("--denoise_heads", type=int, default=8, help="add_rsc: heads of the differential attention")
+    p.add_argument("--denoise_depth", type=int, default=6, help="add_rsc: layer depth that sets the initial lambda")
+    p.add_argument("--loss_beta", type=float, default=0.5, help="add_rsc: weight of the bias denoising loss")
     p.add_argument("--proj_dim", type=int, default=768)
     p.add_argument("--lambda_pcsl", type=float, default=5.0, help="ce_pafa: weight of the patient cohesion-separation loss")
     p.add_argument("--lambda_gpal", type=float, default=0.005, help="ce_pafa: weight of the global patient alignment loss")
@@ -299,6 +316,8 @@ def parse_args(argv=None):
         assert args.encoder == "dass", "dual-axis Patch-Mix and the Gaussian blur exist only in the Lung-SRAD DASS"
     if args.cl_mode == "dual":
         assert args.method == "patchmix_cl" and not args.time_domain
+    if args.holdout_device:
+        assert args.test_fold == "official", "leave-one-device-out builds its own split"
     if args.noise_train_prob > 0:
         assert get_encoder(args.encoder).db_scale is not None, "training noise is mixed in the log-mel power domain"
     if args.consistency_weight > 0:

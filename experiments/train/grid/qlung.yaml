@@ -1,0 +1,10 @@
+# QLung (train_qlung_icbhi.sh): batch 8, margin-loss weight 0.4, gamma 0.5, m_target 0.2, quality 0.7 entropy / 0.3 RMS,
+# moving average 0.6, SpecAugment on.
+method: qlung
+batch_size: 8
+alpha: 0.4
+qlung_gamma: 0.5
+qlung_m_target: 0.2
+quality_alpha: 0.7
+quality_beta: 0.3
+ma_beta: 0.6

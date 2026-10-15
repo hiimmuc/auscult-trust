@@ -1,0 +1,4 @@
+# Patch-Mix augmentation with cross-entropy, no contrastive loss (Patch-Mix CL paper ablation), batch 8.
+method: patchmix
+batch_size: 8
+mix_beta: 1.0

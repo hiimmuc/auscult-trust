@@ -1,0 +1,8 @@
+# PAFA on BEATs (beats_pafa.sh): as pafa.yaml with 100 epochs, lambda_pcsl 50.0, lambda_gpal 0.0005.
+method: ce_pafa
+batch_size: 32
+desired_length: 5
+spec_augment: 0
+epochs: 100
+lambda_pcsl: 50.0
+lambda_gpal: 0.0005

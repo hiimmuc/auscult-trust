@@ -1,0 +1,6 @@
+# Cross-entropy control at the PAFA BEATs setting (beats_ce.sh): batch 32, 5 s cycles, no SpecAugment, 100 epochs.
+method: ce
+batch_size: 32
+desired_length: 5
+spec_augment: 0
+epochs: 100

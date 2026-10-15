@@ -26,7 +26,7 @@ from .reporting import per_device_report
 def run(loader, model, classifier):
     model.eval(), classifier.eval()
     probs, emb, ys, devs = [], [], [], []
-    for images, labels, devices, _ in loader:
+    for images, labels, devices, *_ in loader:
         feat = model(images.cuda(non_blocking=True))
         probs.append(torch.softmax(classifier(feat).float(), 1).cpu().numpy())
         emb.append(feat.float().cpu().numpy())

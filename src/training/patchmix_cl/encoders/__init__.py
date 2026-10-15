@@ -4,7 +4,7 @@ An encoder module takes a batch of its spectrogram images (B, 1, time, freq) and
 `patch_mix=True` the tuple (features, labels a, labels b, lambda, partner index), like the reference AST. It also has
 `final_feat_dim` and `mlp_head` (a fresh classification head).
 
-AST, BEATs, DASS and HTS-AT are trained in both modes (full fine-tuning, frozen encoder); OPERA-CT, CLAP and HeAR only frozen.
+AST, BEATs, DASS, HTS-AT and OPERA-CT are trained in both modes (full fine-tuning, frozen encoder); CLAP and HeAR only frozen.
 """
 from dataclasses import dataclass
 from typing import Callable, Optional, Tuple
@@ -21,11 +21,12 @@ class EncoderSpec:
 
 
 def _ast():
-    from ..cycles import DB_PER_NAT, FBANK_STD, IMG_MEL, IMG_TIME, generate_fbank
+    from ..cycles import DB_PER_NAT, FBANK_STD, IMG_MEL, generate_fbank
     from ..upstream import build_ast
-    return EncoderSpec('ast', (IMG_TIME, IMG_MEL), 1 / (2 * FBANK_STD * DB_PER_NAT), False, lambda w: generate_fbank(w, 16000, n_mels=IMG_MEL),
-                       lambda a: build_ast(input_fdim=IMG_TIME, input_tdim=IMG_MEL, label_dim=a.n_cls, imagenet_pretrain=a.from_sl_official,
-                                           audioset_pretrain=a.audioset_pretrained, mix_beta=a.mix_beta))
+    spec = EncoderSpec('ast', (None, IMG_MEL), 1 / (2 * FBANK_STD * DB_PER_NAT), False, lambda w: generate_fbank(w, 16000, n_mels=IMG_MEL),
+                       lambda a: build_ast(input_fdim=image_shape(spec, a)[0], input_tdim=IMG_MEL, label_dim=a.n_cls,
+                                           imagenet_pretrain=a.from_sl_official, audioset_pretrain=a.audioset_pretrained, mix_beta=a.mix_beta))
+    return spec
 
 
 def _htsat():
@@ -35,7 +36,7 @@ def _htsat():
 
 def _opera_ct():
     from .swin import build_opera_ct, preprocess_opera_ct
-    return EncoderSpec('opera_ct', (251, 64), 1 / 80, True, preprocess_opera_ct, build_opera_ct)
+    return EncoderSpec('opera_ct', (251, 64), 1 / 80, False, preprocess_opera_ct, build_opera_ct)
 
 
 def _clap():

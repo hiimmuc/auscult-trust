@@ -1,0 +1,3 @@
+# Plain cross-entropy with the shared recipe of base.yaml (control of the batch-8 methods).
+method: ce
+batch_size: 8

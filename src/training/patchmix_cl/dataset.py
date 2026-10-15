@@ -1,12 +1,14 @@
-"""ICBHI cycle dataset (official 60/40 split) and the training data loaders."""
+"""ICBHI cycle dataset (official 60/40 split, or one 80/20 patient fold) and the training data loaders."""
 
 import copy
 import os
 import random
 from collections import defaultdict
 
+import librosa
 import numpy as np
 import torch
+from scipy.stats import entropy
 from src.paths import DATA
 from src.processing.correction import (
     apply_spectrum_correction,
@@ -30,7 +32,10 @@ CACHE = (
 
 
 class ICBHIDataset(Dataset):
-    """Cycles of the official train or test split. Items: (fbank image, label, device id, patient id as int).
+    """Cycles of the train or test split. Items: (fbank image, label, device id, patient id as int, QLung quality score).
+
+    The split is the official 60/40 one, or with `args.test_fold` k in 0-4 the patient fold k of `patient_list_foldwise.txt`
+    as test set (80/20). The quality score (spectral entropy and RMS energy of the raw cycle) is computed for `qlung` only, else 0.
 
     With `args.spectrum_correction` the waveform of every cycle goes through spectrum correction (SC) before the STFT: train
     clips use their own (source) device spectra, test clips their own (target) spectra, both against the train
@@ -41,6 +46,8 @@ class ICBHIDataset(Dataset):
         self.train_flag, self.transform, self.args = train_flag, transform, args
         lodo = bool(args.holdout_device)  # leave-one-device-out: one dataset over all cycles, split by index later
         self.split = "all" if lodo else "train" if train_flag else "test"
+        if args.test_fold != "official":
+            self.split = "fold{}_{}".format(args.test_fold, self.split)
         wav_dir = os.path.join(args.data_folder, "audio_test_data")
         official = dict(
             line.strip().split("\t")
@@ -57,8 +64,11 @@ class ICBHIDataset(Dataset):
                 sides[f.split("_")[0]].add(official.get(f))
             self.dropped = {p for p, s in sides.items() if len(s) > 1 or None in s}
             self.filenames = [f for f in stems if f.split("_")[0] not in self.dropped]
-        else:
+        elif args.test_fold == "official":
             self.filenames = [f for f in stems if official.get(f) == self.split]
+        else:
+            fold = dict(line.split() for line in open(os.path.join(args.data_folder, "patient_list_foldwise.txt")).read().splitlines())
+            self.filenames = [f for f in stems if (fold[f.split("_")[0]] == args.test_fold) != train_flag]
         annotations = read_annotations(wav_dir)
 
         self.encoder = get_encoder(args.encoder)
@@ -91,6 +101,7 @@ class ICBHIDataset(Dataset):
             else:
                 self.images = self._build_cache(audio)
         assert self.images[0].shape == (*image_shape(self.encoder, self.args), 1), self.images[0].shape
+        self.quality = self._quality(annotations, wav_dir) if args.method == "qlung" else np.zeros(len(self.labels), np.float32)
         if train_flag and args.noise_train_prob > 0:  # training noise: ESC-50 folds disjoint from the noise-stress test
             self.noise_images = np.stack([self.encoder.preprocess(torch.from_numpy(w)[None]) for w in noise_bank(TRAIN_FOLDS)])
             assert self.noise_images.shape[1:] == self.images[0].shape, "training noise needs 8 s cycles"
@@ -159,6 +170,35 @@ class ICBHIDataset(Dataset):
         tmp.replace(images)  # the image file last: its presence means both files are complete
         return np.load(images, mmap_mode="r")
 
+    def _quality(self, annotations, wav_dir):
+        """QLung quality score of every raw cycle (before any SC), cached per split and cycle settings."""
+        from .upstream import qlung_features as q
+
+        a = self.args
+        path = CACHE / "quality_{}_{}cls_{}s_{}_{}hz_{}_{}.npy".format(
+            self.split, a.n_cls, a.desired_length, a.pad_types, a.sample_rate, a.quality_alpha, a.quality_beta
+        )
+        if path.exists():
+            out = np.load(path)
+        else:
+            out = []
+            for f in self.filenames:
+                for wave, _ in individual_cycles(annotations[f], wav_dir, f, a):
+                    y = wave.numpy()[0]
+                    e, r = q.compute_spectral_entropy(y), q.compute_rms_energy(y)
+                    if not np.isfinite(e):  # digitally silent frames give 0/0 in the reference: average over frames with energy
+                        S = np.abs(librosa.stft(y, n_fft=1024, hop_length=512))
+                        S = S[:, S.sum(0) > 0]
+                        e = float(np.mean(entropy(S / S.sum(0), axis=0, base=2)) / np.log2(S.shape[0])) if S.size else 1.0
+                    out.append(q.compute_quality_score_entropy_rms(e, r, alpha=a.quality_alpha, beta=a.quality_beta))
+            out = np.asarray(out, np.float32)
+            path.parent.mkdir(parents=True, exist_ok=True)
+            tmp = path.with_name("{}.{}.tmp.npy".format(path.stem, os.getpid()))
+            np.save(tmp, out)
+            tmp.replace(path)
+        assert len(out) == len(self.labels)
+        return out
+
     def _spectrum_correct(self, audio, sc_reference):
         """SC of every cycle. Returns dict `device_spectra`, `reference` (s_ref), `coefficients`, corrected `audio`."""
         used = None if self.lodo is None else set(np.concatenate(self.lodo).tolist())
@@ -223,7 +263,7 @@ class ICBHIDataset(Dataset):
                                     rng.uniform(self.args.noise_snr_low, self.args.noise_snr_high), self.encoder.db_scale, rng)
         if self.transform is not None:
             image = self.transform(image)
-        return image, self.labels[index], self.devices[index], int(self.patients[index])
+        return image, self.labels[index], self.devices[index], int(self.patients[index]), self.quality[index]
 
     def __len__(self):
         return len(self.labels)
@@ -246,7 +286,7 @@ def _lodo_loaders(args):
     Returns:
         Tuple (train_loader, None, test_loader, dataset, test cycles, calibration loader, calibration cycles).
     """
-    train_tf = transforms.Compose([transforms.ToTensor()] + ([SpecAugment()] if args.spec_augment else []))
+    train_tf = transforms.Compose([transforms.ToTensor()] + ([SpecAugment()] if args.spec_augment and args.method != "sg_scl" else []))
     eval_tf = transforms.ToTensor()
     ds = ICBHIDataset(True, train_tf, args)
     tr_idx, ca_idx, te_idx = ds.lodo
@@ -288,7 +328,7 @@ def build_loaders(args):
     """
     if args.holdout_device:
         return _lodo_loaders(args)
-    train_tf = transforms.Compose([transforms.ToTensor()] + ([SpecAugment()] if args.spec_augment else []))
+    train_tf = transforms.Compose([transforms.ToTensor()] + ([SpecAugment()] if args.spec_augment and args.method != "sg_scl" else []))
     eval_tf = transforms.ToTensor()
     train_dataset = ICBHIDataset(True, train_tf, args)
     test_dataset = ICBHIDataset(

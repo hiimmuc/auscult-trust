@@ -1,0 +1,7 @@
+# ADD-RSC (main.py defaults, paper section 3.1.3): batch 8, bias denoising loss weight 0.5, 8 heads, lambda depth 6,
+# SpecAugment on. The denoising layer runs on the encoder's own (time, freq) image (the reference resizes AST input to 1024 x 256).
+method: add_rsc
+batch_size: 8
+loss_beta: 0.5
+denoise_heads: 8
+denoise_depth: 6

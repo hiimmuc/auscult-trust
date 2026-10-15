@@ -36,7 +36,8 @@ def save_model(model, args, epoch, path, classifier):
     torch.save(
         {
             "args": vars(args),
-            "model": None if args.freeze_encoder else model.state_dict(),
+            # ADD-RSC's denoising layer is trained even in front of a frozen encoder
+            "model": None if args.freeze_encoder and args.method != "add_rsc" else model.state_dict(),
             "epoch": epoch,
             "classifier": classifier.state_dict(),
         },
@@ -111,6 +112,8 @@ def main():
     train_loader, val_loader, test_loader, train_dataset, test_dataset, cal_loader, cal_cycles = (
         build_loaders(args)
     )
+    labels, idx = np.asarray(train_dataset.labels), getattr(train_loader.dataset, "indices", None)  # Subset or full set
+    args.class_nums = np.bincount(labels if idx is None else labels[idx], minlength=args.n_cls)  # QLung's class-prior margin
     model, classifier, projector, criterion, optimizer = build_model(args)
     scaler = torch.cuda.amp.GradScaler()
     s_ref_sha = (
@@ -125,6 +128,8 @@ def main():
         model.load_state_dict(ck["model"]), classifier.load_state_dict(ck["classifier"])
         projector.load_state_dict(ck["projector"]), optimizer.load_state_dict(ck["optimizer"])
         scaler.load_state_dict(ck["scaler"])
+        for c, state in zip(criterion, ck.get("criterion", [])):
+            c.load_state_dict(state)
         start_epoch, best_model, best_key = ck["epoch"] + 1, ck["best_model"], ck["best_key"]
         history, test_preds = ck["history"], ck["test_preds"]
         cal_preds = ck.get("cal_preds", {})
@@ -201,6 +206,7 @@ def main():
                 "projector": projector.state_dict(),
                 "optimizer": optimizer.state_dict(),
                 "scaler": scaler.state_dict(),
+                "criterion": [c.state_dict() for c in criterion],
                 "best_model": best_model,
                 "best_key": best_key,
                 "history": history,

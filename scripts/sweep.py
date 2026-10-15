@@ -3,7 +3,7 @@
     python scripts/sweep.py jobs.txt --workers 3 --mem-gb 8
 
 `jobs.txt` has one shell command per line (written by `PARALLEL=3 bash scripts/run.sh ...`). A job starts when fewer than
-`--workers` jobs run, the GPU has at least `--mem-gb` GB free and the machine has at least `--ram-gb` GB of available RAM
+`--workers` jobs run, the GPU has at least `--mem-gb` GB free (or the job's own `MEM_GB=<n>` prefix) and the machine has at least `--ram-gb` GB of available RAM
 (other users of the machine are respected, nothing is killed). Each job gets `--threads` math threads and `--num-workers`
 loader workers so that parallel jobs do not oversubscribe the CPU. A job that dies from lack of memory (CUDA "out of memory"
 or the kernel's kill, exit 137) is queued again, up to `--retries` times.
@@ -86,7 +86,8 @@ def main():
                     print(f"job {i}: FAILED, see {log_dir / f'{i}.log'}", flush=True)
         while queue and (finished(queue[0][1]) or running_elsewhere(queue[0][1])):  # taken over by someone else meanwhile
             queue.pop(0)
-        if queue and len(running) < a.workers and time.time() - last_start > a.ramp and free_gb() >= a.mem_gb and free_ram_gb() >= a.ram_gb:
+        need = float(re.search(r"(?:^|\s)MEM_GB=(\S+)", queue[0][1]).group(1)) if queue and "MEM_GB=" in queue[0][1] else a.mem_gb
+        if queue and len(running) < a.workers and time.time() - last_start > a.ramp and free_gb() >= need and free_ram_gb() >= a.ram_gb:
             i, cmd, tries = queue.pop(0)
             env = {**os.environ, "OMP_NUM_THREADS": str(a.threads), "MKL_NUM_THREADS": str(a.threads), "OPENBLAS_NUM_THREADS": str(a.threads)}
             proc = subprocess.Popen(cmd + f" --num_workers {a.num_workers}", env=env, shell=True, stdout=open(log_dir / f"{i}.log", "w"), stderr=subprocess.STDOUT)

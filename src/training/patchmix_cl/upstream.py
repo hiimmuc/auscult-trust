@@ -3,6 +3,7 @@
 Only what the reference does not provide is added here: its attention is replaced by PyTorch's fused attention (same maths,
 less memory, needed for batch 8 on a small GPU) and its hard-coded `./pretrained_models/` weight folder is resolved to
 `<data>/models/ast/pretrained_models/` by changing the working directory while the model is built.
+SG-SCL, QLung and ADD-RSC losses and layers come the same way from their reference repositories.
 The reference modules are loaded by file path because their package names (`models`, `method`) are too generic to put on `sys.path`.
 """
 
@@ -60,6 +61,12 @@ PatchMixLoss = _load("patchmix_reference_mix_loss", "method/patchmix.py").PatchM
 PatchMixConLoss = _load("patchmix_reference_loss", "method/patchmix_cl.py").PatchMixConLoss
 _pafa = _load_from(REPOS / "PAFA", "pafa_reference_loss", "method/pafa.py")  # PAFA (patient-aware feature alignment)
 PAFALoss, PafaProjectionHead = _pafa.PAFALoss, _pafa.ProjectionHead
+MetaCL = _load_from(REPOS / "SG-SCL", "sgscl_reference_loss", "method/mcl.py").MetaCL  # stethoscope-guided SupCon
+_qlung = _load_from(REPOS / "QLung", "qlung_reference_loss", "method/loss.py")
+AngularMarginLoss, AngularClassifier = _qlung.AngularMarginLoss, _qlung.AngularClassifier
+qlung_features = _load_from(REPOS / "QLung", "qlung_reference_features", "util/get_acoustic_features.py")
+DiffTransformerLayer = _load_from(REPOS / "ADD-RSC", "addrsc_reference_layer", "models/adapt_diff_denoise.py").DiffTransformerLayer
+LabelSmoothingLoss = _load_from(REPOS / "ADD-RSC", "addrsc_reference_loss", "models/bias_denoise_loss.py").LabelSmoothingLoss
 
 
 def build_ast(**kwargs):

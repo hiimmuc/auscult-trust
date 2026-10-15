@@ -7,16 +7,36 @@ from copy import deepcopy
 
 import numpy as np
 import torch
+import torch.nn.functional as F
 
-from .augment import freq_mixstyle, js_divergence, random_bin_gain_batch
+from .augment import SpecAugment, freq_mixstyle, js_divergence, random_bin_gain_batch
 from .encoders import get_encoder
 from .optim import AverageMeter, accuracy, update_moving_average, warmup_learning_rate
 from .reporting import per_device_report
 
 
 def _encoder_context(args):
-    """A frozen encoder runs without gradients (saves memory); a trained one with."""
-    return torch.no_grad() if args.freeze_encoder else contextlib.nullcontext()
+    """A frozen encoder runs without gradients (saves memory); a trained one with. ADD-RSC trains the layer in front of it."""
+    return torch.no_grad() if args.freeze_encoder and args.method != "add_rsc" else contextlib.nullcontext()
+
+
+class _GradientReversal(torch.autograd.Function):
+    """Identity forward, gradient times -alpha backward (SG-SCL's ReverseLayerF)."""
+
+    @staticmethod
+    def forward(ctx, x, alpha):
+        ctx.alpha = alpha
+        return x.view_as(x)
+
+    @staticmethod
+    def backward(ctx, grad):
+        return grad.neg() * ctx.alpha, None
+
+
+def _spec_augment_views(images):
+    """One SpecAugment draw per sample of a (B, 1, time, freq) batch."""
+    aug = SpecAugment()
+    return torch.stack([aug(x.clone()) for x in images])
 
 
 def train_epoch(loader, model, classifier, projector, criterion, optimizer, epoch, args, scaler):
@@ -29,13 +49,13 @@ def train_epoch(loader, model, classifier, projector, criterion, optimizer, epoc
     cons_w = args.consistency_weight * min(1.0, epoch / max(args.consistency_ramp, 1))
     db_scale = get_encoder(args.encoder).db_scale
     end = time.time()
-    for idx, (images, labels, _, patients) in enumerate(loader):
+    for idx, (images, labels, devices, patients, quality) in enumerate(loader):
         if (
             args.ma_update
         ):  # state before the step, for the moving average (a frozen encoder does not change)
             with torch.no_grad():
                 ma_state = [
-                    None if m is model and args.freeze_encoder else deepcopy(m.state_dict())
+                    None if m is model and args.freeze_encoder and args.method != "add_rsc" else deepcopy(m.state_dict())
                     for m in (model, classifier, projector)
                 ]
         images, labels = images.cuda(non_blocking=True), labels.cuda(non_blocking=True)
@@ -53,6 +73,27 @@ def train_epoch(loader, model, classifier, projector, criterion, optimizer, epoc
                     projector(features).float(), patients.cuda(non_blocking=True), lambda_pcsl=args.lambda_pcsl,
                     lambda_gpal=args.lambda_gpal,
                 )
+            elif args.method == "sg_scl":  # two SpecAugment views; device SupCon on the reversed-gradient projections
+                v1, v2 = _spec_augment_views(images), _spec_augment_views(images)
+                with _encoder_context(args):
+                    feat1, feat2 = model(v1), model(v2)
+                output = classifier(feat1)
+                p = float(idx + epoch * len(loader)) / args.epochs + 1 / len(loader)  # reference schedule (saturates at 1)
+                grl = 2.0 / (1.0 + np.exp(-10 * p)) - 1
+                proj1 = projector(_GradientReversal.apply(feat1, grl))
+                proj2 = projector(_GradientReversal.apply(feat2, grl)).detach()
+                loss = criterion[0](output, labels) + args.alpha * criterion[1](proj1, proj2, devices.cuda(non_blocking=True))
+            elif args.method == "qlung":  # angular classifier + quality-adaptive margin loss, both on normalised features
+                with _encoder_context(args):
+                    features = F.normalize(model(images))
+                output = classifier(features)
+                margin_logits = criterion[1](features, labels, quality.cuda(non_blocking=True))
+                loss = criterion[0](output.double(), labels) + args.alpha * criterion[0](margin_logits, labels)
+            elif args.method == "add_rsc":  # cross-entropy + bias denoising loss on the denoising layer's own logits
+                with _encoder_context(args):
+                    features = model(images)
+                output = classifier(features)
+                loss = (1 - args.loss_beta) * criterion[0](output, labels) + args.loss_beta * criterion[1](model.aux, labels)
             elif args.method == "patchmix":
                 with _encoder_context(args):
                     mix_images, labels_a, labels_b, lam, _ = model(
@@ -138,7 +179,7 @@ def evaluate(loader, model, classifier, args):
     """
     model.eval(), classifier.eval()
     preds, probs, ys, devs = [], [], [], []
-    for images, labels, devices, _ in loader:
+    for images, labels, devices, *_ in loader:
         with torch.cuda.amp.autocast():
             output = classifier(model(images.cuda(non_blocking=True)))
         preds.append(output.argmax(1).cpu().numpy())

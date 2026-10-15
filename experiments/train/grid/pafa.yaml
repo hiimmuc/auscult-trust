@@ -1,0 +1,8 @@
+# PAFA (ast_pafa.sh): batch 32, 5 s cycles, no SpecAugment, lambda_pcsl 5.0, lambda_gpal 0.005, 50 epochs.
+# Encoders with a fixed input length (HTS-AT, OPERA-CT, DASS) keep 8 s cycles (--desired_length 8 on the job line).
+method: ce_pafa
+batch_size: 32
+desired_length: 5
+spec_augment: 0
+lambda_pcsl: 5.0
+lambda_gpal: 0.005

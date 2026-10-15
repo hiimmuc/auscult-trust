@@ -1,0 +1,6 @@
+# Patch-Mix CL (icbhi_patchmix_cl.sh): batch 8, contrastive weight 1.0, temperature 0.06, Beta(1, 1) mixing.
+method: patchmix_cl
+batch_size: 8
+alpha: 1.0
+temperature: 0.06
+mix_beta: 1.0
