@@ -59,6 +59,7 @@ This file is for the session that monitors training. Read it fully before acting
 ## Report to the user, without acting
 
 - A FAILED job that is not out of memory.
+- Any out-of-memory requeue (count above 0 in the status output). The memory reservations should prevent them.
 - A NaN loss or NaN Score in a job log. QLung handles silent frames, but report it anyway.
 - The same sweep dying twice.
 - Less than 30 GB free disk on either machine.
@@ -68,7 +69,9 @@ This file is for the session that monitors training. Read it fully before acting
 ## Context the monitor may need
 
 - The 2-class Sp equals the 4-class Sp by construction; it is not a bug.
-- The sweep only starts a job when enough GPU memory is free (per-job `MEM_GB=` prefix). Jobs waiting while the GPU is busy
-  is normal.
+- The sweep only starts a job when its reservation (per-job `MEM_GB=` prefix, smoke peak x 1.25 + 1.5 GB) plus the
+  reservations of all units running now fit in the GPU total minus 1 GB, and that much memory is free. Since 15/10 evening
+  no out-of-memory is expected; report any `out of memory` line to the user (the sweep still requeues it). Jobs waiting
+  while the GPU is busy, and fewer than 4 jobs running, are normal.
 - QLung reference bug: in the reference code, 71 AKGC417L cycles (14 train, 57 test) get a NaN quality score. Those
   recordings start with 4,096 digital-zero samples. Our port leaves the silent frames out, so no NaN is expected.

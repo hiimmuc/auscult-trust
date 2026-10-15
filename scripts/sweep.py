@@ -3,7 +3,9 @@
     python scripts/sweep.py jobs.txt --workers 3 --mem-gb 8
 
 `jobs.txt` has one shell command per line (written by `PARALLEL=3 bash scripts/run.sh ...`). A job starts when fewer than
-`--workers` jobs run, the GPU has at least `--mem-gb` GB free (or the job's own `MEM_GB=<n>` prefix) and the machine has at least `--ram-gb` GB of available RAM
+`--workers` jobs run, the GPU has at least `--mem-gb` GB free (or the job's own `MEM_GB=<n>` prefix), the reservations of all
+units of the list that run now plus this one fit in `--gpu-gb` (default: GPU total minus 1 GB; a job's free memory at start
+says nothing about how far the running jobs will still grow) and the machine has at least `--ram-gb` GB of available RAM
 (other users of the machine are respected, nothing is killed). Each job gets `--threads` math threads and `--num-workers`
 loader workers so that parallel jobs do not oversubscribe the CPU. A job that dies from lack of memory (CUDA "out of memory"
 or the kernel's kill, exit 137) is queued again, up to `--retries` times.
@@ -18,8 +20,8 @@ import time
 from pathlib import Path
 
 
-def free_gb():
-    out = subprocess.run(["nvidia-smi", "--query-gpu=memory.free", "--format=csv,noheader,nounits"], capture_output=True, text=True)
+def free_gb(field="free"):
+    out = subprocess.run(["nvidia-smi", f"--query-gpu=memory.{field}", "--format=csv,noheader,nounits"], capture_output=True, text=True)
     return min(int(x) for x in out.stdout.split()) / 1024 if out.returncode == 0 and out.stdout.strip() else 0.0
 
 
@@ -41,13 +43,22 @@ def finished(cmd):
     return Path("outputs/train", run, cell.group(1), unit, "report.json").exists()
 
 
-def running_elsewhere(cmd):
-    """True when a process of another scheduler (or a shell) is already training this unit."""
+def mem_gb(cmd, default):
+    m = re.search(r"(?:^|\s)MEM_GB=(\S+)", cmd)
+    return float(m.group(1)) if m else default
+
+
+def ps_args():
+    return subprocess.run(["ps", "-eo", "args"], capture_output=True, text=True).stdout
+
+
+def running_elsewhere(cmd, ps=None):
+    """True when a process (this scheduler's, another one's or a shell's) is training this unit."""
     cell, seed, fold = (re.search(p, cmd) for p in (r"--cell (\S+)", r"--seed (\d+)", r"--cv_fold (\d+)"))
     if not cell:
         return False
     flag = f"--cv_fold {fold.group(1)}" if fold and "--cv_folds" in cmd else f"--seed {seed.group(1) if seed else 0}"
-    ps = subprocess.run(["ps", "-eo", "args"], capture_output=True, text=True).stdout
+    ps = ps_args() if ps is None else ps
     return any("patchmix_cl.main" in l and f"--cell {cell.group(1)} " in l and re.search(re.escape(flag) + r"( |$)", l) for l in ps.splitlines())
 
 
@@ -62,10 +73,14 @@ def main():
     ap.add_argument("--poll", type=int, default=20)
     ap.add_argument("--threads", type=int, default=3, help="math threads per job (OMP/MKL); jobs share the CPU")
     ap.add_argument("--num-workers", type=int, default=4, help="data loader workers per job")
+    ap.add_argument("--gpu-gb", type=float, default=None, help="GPU memory the reservations of running units may sum to")
     a = ap.parse_args()
+    budget = a.gpu_gb if a.gpu_gb is not None else free_gb("total") - 1
     jobs = [(i, line.strip()) for i, line in enumerate(Path(a.jobs).read_text().splitlines()) if line.strip()]
-    queue = [(i, cmd, 0) for i, cmd in jobs if not finished(cmd) and not running_elsewhere(cmd)]
-    print(f"{len(jobs)} jobs, {len(jobs) - len(queue)} finished or running elsewhere, {len(queue)} to run", flush=True)
+    # units already running (a previous scheduler's orphans) stay queued: they count against the budget while they run and
+    # are resumed from last.pth if they die unfinished
+    queue = [(i, cmd, 0) for i, cmd in jobs if not finished(cmd)]
+    print(f"{len(jobs)} jobs, {len(jobs) - len(queue)} finished, {len(queue)} to run, GPU budget {budget:.1f} GB", flush=True)
     tag = os.environ.get("SWEEP_TAG", "")  # distinguishes a second scheduler of the same RUN_ID
     log_dir = Path("logs") / (os.environ.get("RUN_ID", "sweep") + tag)
     log_dir.mkdir(parents=True, exist_ok=True)
@@ -84,16 +99,21 @@ def main():
                 else:
                     failed.append(i)
                     print(f"job {i}: FAILED, see {log_dir / f'{i}.log'}", flush=True)
-        while queue and (finished(queue[0][1]) or running_elsewhere(queue[0][1])):  # taken over by someone else meanwhile
-            queue.pop(0)
-        need = float(re.search(r"(?:^|\s)MEM_GB=(\S+)", queue[0][1]).group(1)) if queue and "MEM_GB=" in queue[0][1] else a.mem_gb
-        if queue and len(running) < a.workers and time.time() - last_start > a.ramp and free_gb() >= need and free_ram_gb() >= a.ram_gb:
-            i, cmd, tries = queue.pop(0)
-            env = {**os.environ, "OMP_NUM_THREADS": str(a.threads), "MKL_NUM_THREADS": str(a.threads), "OPENBLAS_NUM_THREADS": str(a.threads)}
+        queue = [q for q in queue if not finished(q[1])]
+        ps = ps_args()
+        reserved = sum(mem_gb(cmd, a.mem_gb) for _, cmd in jobs if running_elsewhere(cmd, ps))
+        ready = [q for q in queue if not running_elsewhere(q[1], ps)]
+        need = mem_gb(ready[0][1], a.mem_gb) if ready else 0
+        if (ready and len(running) < a.workers and time.time() - last_start > a.ramp and reserved + need <= budget
+                and free_gb() >= need and free_ram_gb() >= a.ram_gb):
+            i, cmd, tries = ready[0]
+            queue.remove(ready[0])
+            env = {**os.environ, "OMP_NUM_THREADS": str(a.threads), "MKL_NUM_THREADS": str(a.threads), "OPENBLAS_NUM_THREADS": str(a.threads),
+                   "PYTORCH_CUDA_ALLOC_CONF": "expandable_segments:True"}
             proc = subprocess.Popen(cmd + f" --num_workers {a.num_workers}", env=env, shell=True, stdout=open(log_dir / f"{i}.log", "w"), stderr=subprocess.STDOUT)
             running.append((i, cmd, tries, proc))
             last_start = time.time()
-            print(f"job {i} started ({len(running)} running, {len(queue)} waiting): {cmd[-90:]}", flush=True)
+            print(f"job {i} started ({len(running)} running, {len(queue)} waiting, {reserved + need:.0f} GB reserved): {cmd[-90:]}", flush=True)
         time.sleep(a.poll)
     print(f"all jobs finished, {len(failed)} failed: {failed}")
 

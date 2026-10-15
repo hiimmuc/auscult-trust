@@ -61,7 +61,9 @@ DASS last (`scripts/grid.py jobs --pin`, which keeps already started units on th
 
 DASS fine-tuning is the bulk: about 2.4-3.5 h per run against 0.3-1.5 h for the other encoders.
 
-With 4 parallel jobs per GPU (measured gain about 1.3-1.5x), the grid should end around 19-20/10/2026.
+Scheduling: a job starts only when the sum of the `MEM_GB` reservations of the running units plus its own fits in the GPU total minus 1 GB (one out-of-memory crash on A at launch, when only free memory was checked).
+
+With up to 4 parallel jobs per GPU (measured gain about 1.3-1.5x), the grid should end around 19-20/10/2026.
 
 ## Next steps
 
