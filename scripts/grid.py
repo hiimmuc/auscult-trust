@@ -181,9 +181,6 @@ def write_jobs(a):
         print(f"{p}: {len(lines)} jobs, {h:.0f} GPU-hours sequential (divide by the parallel workers that fit)")
 
 
-if __name__ == "__main__":
-    main()
-
 
 def unit_metrics(npz, epoch, quality=None, alpha=0.1, n_splits=20):
     """Full metrics of one seed at one epoch: per-device report, plus split-conformal (LAC) over test-patient halves.
@@ -263,3 +260,7 @@ def table(epoch):
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text("\n".join(lines) + "\n")
     print("\n".join(lines))
+
+
+if __name__ == "__main__":
+    main()
