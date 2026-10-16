@@ -49,6 +49,13 @@ only) do not, so no noise arm is run.
   only have produced its best epoch early. Here the silent frames are left out of the frame average: no NaN, and every
   step trains.
 - SG-SCL: SpecAugment masks are drawn per sample, not once per batch.
+- SG-SCL gradient-reversal weight follows the DANN ramp `2 / (1 + exp(-10 p)) - 1` with p = fraction of training done
+  (`grl_schedule: progress`). [Fact] The reference code sets p = step / epochs, which is >= 10 from the first step, so its
+  weight is 1 throughout. With that weight BEATs collapsed in 3 of 4 seeds (16/10): from epoch 1-2 the encoder output no
+  longer depended on the input (attention q/k and positional-convolution weights shrank 20-50%, no NaN), the model
+  predicted "normal" for every cycle, and the loss sat at CE of the class prior + log(15) (device SupCon on constant
+  projections). AST did not collapse. All SG-SCL cells use the ramp, AST included; the reference-schedule results
+  (AST 5 seeds 57.5 +- 0.8 last epoch; BEATs 2 seeds) are kept in `outputs/train/grid-v1-sgscl-ref/`.
 - Lung-SRAD is not in the grid. Its published number is the reference row; it is reproduced only if it beats the grid.
 
 ## Machines and estimate
@@ -60,6 +67,9 @@ Peak memory and step time per cell are in `logs/grid_smoke_{A,B}.json`. Job list
 DASS last (`scripts/grid.py jobs --pin`, which keeps already started units on their machine).
 
 DASS fine-tuning is the bulk: about 2.4-3.5 h per run against 0.3-1.5 h for the other encoders.
+
+On 16/10 the job lists were rebalanced on the work left, weighted by the measured throughput (A 0.95, B 1.4
+sequential smoke-hours per hour), about 73 h each; previous lists kept as `logs/campaigns/grid-v1-{A,B}.v1.txt`.
 
 Scheduling: a job starts only when the sum of the `MEM_GB` reservations of the running units plus its own fits in the GPU total minus 1 GB (one out-of-memory crash on A at launch, when only free memory was checked).
 

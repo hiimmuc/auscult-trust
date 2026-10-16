@@ -112,6 +112,8 @@ def main():
     j.add_argument("--smoke", nargs="+", required=True, help="smoke json per machine, in the order A B")
     j.add_argument("--seeds", type=int, default=5)
     j.add_argument("--pin", default=None, help="file of '<machine A|B> <cell> <seed>' lines: units already started stay on their machine")
+    j.add_argument("--speed", nargs="+", type=float, default=None,
+                   help="measured throughput per machine (sequential smoke hours done per hour, with its parallel jobs); default 1 each")
     t = sub.add_parser("table")
     t.add_argument("--epoch", default="last", help="last, best_test (optimistic: best Score on test per seed) or an epoch number")
     a = ap.parse_args()
@@ -169,8 +171,12 @@ def write_jobs(a):
     for l in Path(a.pin).read_text().splitlines() if a.pin else []:
         m, cell, seed = l.split()
         pins[(cell, int(seed))] = "AB".index(m)
+    speed = a.speed or [1.0] * len(smokes)
     load, lists = [0.0] * len(smokes), [[] for _ in smokes]
     for rank, hours, line, unit in sorted(jobs, key=lambda j: (j[0], -max(j[1]))):
+        if (REPO / "outputs" / "train" / RUN / unit[0] / f"seed{unit[1]}" / "report.json").exists():
+            hours = [0.0] * len(smokes)  # finished: no load (keep it pinned to the machine that holds its outputs)
+        hours = [h / v for h, v in zip(hours, speed)]
         k = pins.get(unit, min(range(len(smokes)), key=lambda i: load[i] + hours[i]))
         load[k] += hours[k]
         lists[k].append(line)
@@ -178,7 +184,7 @@ def write_jobs(a):
         p = REPO / "logs" / "campaigns" / f"{RUN}-{name}.txt"
         p.parent.mkdir(parents=True, exist_ok=True)
         p.write_text("\n".join(lines) + "\n")
-        print(f"{p}: {len(lines)} jobs, {h:.0f} GPU-hours sequential (divide by the parallel workers that fit)")
+        print(f"{p}: {len(lines)} jobs, {h:.0f} hours of remaining work at the given speed")
 
 
 

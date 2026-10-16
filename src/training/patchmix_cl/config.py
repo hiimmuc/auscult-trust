@@ -248,6 +248,10 @@ def build_parser():
     p.add_argument("--lambda_gpal", type=float, default=0.005, help="ce_pafa: weight of the global patient alignment loss")
     p.add_argument("--temperature", type=float, default=0.06)
     p.add_argument("--alpha", type=float, default=1.0, help="weight of the contrastive loss")
+    p.add_argument("--grl_schedule", choices=["reference", "progress"], default="reference",
+                   help="sg_scl gradient-reversal weight 2 / (1 + exp(-10 p)) - 1. reference: p = step / epochs as in the SG-SCL code, "
+                        "which is >= 10 from the first step, so the weight is 1 throughout; progress: p = fraction of training done "
+                        "(the DANN ramp from 0 to 1)")
     p.add_argument("--negative_pair", type=str, default="all", choices=["all", "diff_label"])
     p.add_argument(
         "--cl_mode",

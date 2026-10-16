@@ -14,6 +14,7 @@ echo "running: $(ps -eo args | grep 'src.training.patchmix_cl.main' | grep -v gr
 echo "failed (sweep gave up): $(grep -c FAILED logs/grid-v1-$M.log)   out-of-memory requeues: $(grep -c 'out of memory' logs/grid-v1-$M.log)"
 grep FAILED logs/grid-v1-$M.log | tail -5
 nan=$(grep -l -E "loss nan|Score nan" logs/grid-v1-$M/*.log 2>/dev/null | tr '\n' ' '); echo "job logs with NaN loss or Score: ${nan:-none}"
+col=$(for f in logs/grid-v1-$M/*.log; do [ $(grep -c '^ \* test' $f) -ge 3 ] && grep '^ \* test' $f | tail -1 | grep -q ' Se 0\.' && echo -n "$f "; done); echo "job logs collapsed (test Se below 1% from epoch 3): ${col:-none}"
 echo "GPU: $(nvidia-smi --query-gpu=utilization.gpu,memory.used,memory.total --format=csv,noheader)   disk free: $(df -h . | tail -1 | awk '{print $4}')"
 echo "last sweep lines:"; tail -3 logs/grid-v1-$M.log
 EOF

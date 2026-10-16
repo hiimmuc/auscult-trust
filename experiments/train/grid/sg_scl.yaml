@@ -2,4 +2,7 @@
 method: sg_scl
 batch_size: 8
 alpha: 1.0
+# The SG-SCL code computes the reversal progress as step / epochs, so its weight is 1 from the first step; that collapsed
+# BEATs in 3 of 4 seeds (constant features). Here the weight follows the DANN ramp over training.
+grl_schedule: progress
 temperature: 0.06

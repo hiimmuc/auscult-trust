@@ -9,13 +9,14 @@ This file is for the session that monitors training. Read it fully before acting
   60/40 split.
 - Two machines, each with one sweep that starts up to 4 jobs at a time on its GPU. The repo path is
   `~/Workspace/Personal/KHKT-CVA-2026/auscult-trust` on both.
-  - **A** (this machine, RTX 5000 Ada): job list `logs/campaigns/grid-v1-A.txt` (149 units), sweep log `logs/grid-v1-A.log`,
+  - **A** (this machine, RTX 5000 Ada): job list `logs/campaigns/grid-v1-A.txt` (120 units since 16/10), sweep log `logs/grid-v1-A.log`,
     one log per job in `logs/grid-v1-A/<n>.log`.
-  - **B** (`ssh namdp15@10.148.183.8`, RTX 5090): `logs/campaigns/grid-v1-B.txt` (201 units), `logs/grid-v1-B.log`,
+  - **B** (`ssh namdp15@10.148.183.8`, RTX 5090): `logs/campaigns/grid-v1-B.txt` (230 units since 16/10), `logs/grid-v1-B.log`,
     `logs/grid-v1-B/<n>.log`.
 - Order on both machines: the AST cells and PAFA on BEATs first, then BEATs, HTS-AT and OPERA-CT, then DASS last. DASS
   fine-tuning runs take 2.5-3.5 h each; the others take 0.1-1.5 h.
-- Expected end: about 19-20/10/2026.
+- Expected end: about 19/10/2026 evening (lists rebalanced 16/10; the job logs before that are in
+  `logs/grid-v1-{A,B}.v1/`).
 - A unit is finished when `outputs/train/grid-v1/<cell>/seed<s>/report.json` exists. An interrupted unit resumes from
   `checkpoints/train/grid-v1/<cell>/seed<s>/last.pth` on the same machine.
 
@@ -60,6 +61,8 @@ This file is for the session that monitors training. Read it fully before acting
 
 - A FAILED job that is not out of memory.
 - Any out-of-memory requeue (count above 0 in the status output). The memory reservations should prevent them.
+- A collapsed job log (status line "job logs collapsed"): test Se below 1% from epoch 3 on, i.e. the model predicts one
+  class. Seen with SG-SCL on BEATs under the reference reversal schedule; the grid now uses the ramp.
 - A NaN loss or NaN Score in a job log. QLung handles silent frames, but report it anyway.
 - The same sweep dying twice.
 - Less than 30 GB free disk on either machine.

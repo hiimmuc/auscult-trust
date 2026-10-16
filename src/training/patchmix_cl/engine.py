@@ -78,7 +78,10 @@ def train_epoch(loader, model, classifier, projector, criterion, optimizer, epoc
                 with _encoder_context(args):
                     feat1, feat2 = model(v1), model(v2)
                 output = classifier(feat1)
-                p = float(idx + epoch * len(loader)) / args.epochs + 1 / len(loader)  # reference schedule (saturates at 1)
+                if args.grl_schedule == "reference":
+                    p = float(idx + epoch * len(loader)) / args.epochs + 1 / len(loader)  # saturates at 1 from the first step
+                else:
+                    p = float(idx + (epoch - 1) * len(loader)) / (args.epochs * len(loader))
                 grl = 2.0 / (1.0 + np.exp(-10 * p)) - 1
                 proj1 = projector(_GradientReversal.apply(feat1, grl))
                 proj2 = projector(_GradientReversal.apply(feat2, grl)).detach()
