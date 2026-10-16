@@ -29,7 +29,10 @@ This file is for the session that monitors training. Read it fully before acting
    - jobs the sweep gave up on (FAILED) and out-of-memory requeues
    - job logs with a NaN loss or Score
    - GPU use and free disk
-2. If everything is normal, write one line in `docs/handoff/monitor_log.md`: date and time, done counts A/B, anything odd.
+2. Every 3rd check, also run the audit on both machines (read-only, seconds):
+   `PYTHONPATH=. .venv-train/bin/python scripts/grid.py audit --list logs/campaigns/grid-v1-<M>.txt` (B through ssh in its
+   repo). Report any line other than `... 0 problems` to the user.
+3. If everything is normal, write one line in `docs/handoff/monitor_log.md`: date and time, done counts A/B, anything odd.
    Do nothing else.
 
 ## Allowed actions (only these)
@@ -44,10 +47,13 @@ This file is for the session that monitors training. Read it fully before acting
     other jobs have finished. The restart picks up unfinished units.
   - Any other error: do not retry. Report it to the user with the exact error line.
 - **All units on both machines are done:**
-  1. Copy B's results to A: `rsync -a namdp15@10.148.183.8:Workspace/Personal/KHKT-CVA-2026/auscult-trust/outputs/train/grid-v1/ outputs/train/grid-v1/`
-  2. Build both tables on A: `PYTHONPATH=. .venv-train/bin/python scripts/grid.py table --epoch last` and `--epoch best_test`.
+  1. Audit each machine's units with checkpoint hashes (no training, a few minutes):
+     on A `PYTHONPATH=. .venv-train/bin/python scripts/grid.py audit --list logs/campaigns/grid-v1-A.txt --hash`, on B the
+     same with `grid-v1-B.txt`. It must print `0 problems`. Any problem: report it to the user and stop here.
+  2. Copy B's results to A: `rsync -a namdp15@10.148.183.8:Workspace/Personal/KHKT-CVA-2026/auscult-trust/outputs/train/grid-v1/ outputs/train/grid-v1/`
+  3. Build both tables on A: `PYTHONPATH=. .venv-train/bin/python scripts/grid.py table --epoch last` and `--epoch best_test`.
      They write `outputs/train/grid-v1/table_last.md` and `table_best_test.md`.
-  3. Tell the user. Do not choose the "best" cells: the user decides the rule.
+  4. Tell the user. Do not choose the "best" cells: the user decides the rule.
 
 ## Never
 

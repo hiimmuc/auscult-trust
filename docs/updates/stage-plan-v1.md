@@ -71,6 +71,12 @@ DASS fine-tuning is the bulk: about 2.4-3.5 h per run against 0.3-1.5 h for the 
 On 16/10 the job lists were rebalanced on the work left, weighted by the measured throughput (A 0.95, B 1.4
 sequential smoke-hours per hour), about 73 h each; previous lists kept as `logs/campaigns/grid-v1-{A,B}.v1.txt`.
 
+Recorded per unit: config (`train_args.json`); per-epoch test softmax and predictions with labels, device and patient
+(`test_preds.npz`); per-epoch Sp/Se/Score/HS and per-device reports (`report.json`); final weights. From 16/10 18:45 also the
+per-epoch train loss and accuracy in `report.json` history (earlier units: in their job logs). `scripts/grid.py audit` checks
+every finished unit (config equals the cell's, all epochs saved, finite probabilities, same test cycles, report agrees with the
+predictions, no collapse, checkpoint present); `--hash` writes SHA-256 of the split file and every checkpoint.
+
 Scheduling: a job starts only when the sum of the `MEM_GB` reservations of the running units plus its own fits in the GPU total minus 1 GB (one out-of-memory crash on A at launch, when only free memory was checked).
 
 With up to 4 parallel jobs per GPU (measured gain about 1.3-1.5x), the grid should end around 19-20/10/2026.

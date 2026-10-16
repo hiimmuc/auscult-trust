@@ -77,6 +77,8 @@ def history_json(history):
     return [
         {
             "epoch": h["epoch"],
+            "train_loss": h.get("train_loss"),  # absent in units resumed from an older last.pth
+            "train_acc": h.get("train_acc"),
             "val_score": score(h["val"]),
             "test_score": score(h["test"]),
             "val": sse(h["val"]),
@@ -152,7 +154,7 @@ def main():
     for epoch in range(start_epoch, args.epochs + 1):
         adjust_learning_rate(args, optimizer, epoch)
         t0 = time.time()
-        _, acc = train_epoch(
+        loss, acc = train_epoch(
             train_loader, model, classifier, projector, criterion, optimizer, epoch, args, scaler
         )
         print(
@@ -168,7 +170,9 @@ def main():
         if not screening:
             test_rep, preds, probs, _, _ = evaluate(test_loader, model, classifier, args)
             test_preds[epoch] = (preds.astype(np.int8), probs.astype(np.float16))
-        history.append({"epoch": epoch, "val": val_rep, "test": test_rep})
+        history.append(
+            {"epoch": epoch, "train_loss": float(loss), "train_acc": float(acc), "val": val_rep, "test": test_rep}
+        )
         t = (
             test_rep["all"]
             if test_rep
@@ -282,10 +286,8 @@ def main():
     ):  # frozen weights of the selected epoch
         model.load_state_dict(best_model[0]), classifier.load_state_dict(best_model[1])
         save_model(model, args, args.epochs, ckpt_dir / "best.pth", classifier)
-    last.unlink()  # resume state; the final weights are the report_epoch/best files
-    (out_dir / "report.json").write_text(
-        json.dumps(report, indent=1)
-    )  # written last: marks the unit as done
+    (out_dir / "report.json").write_text(json.dumps(report, indent=1))  # marks the unit as done
+    last.unlink()  # resume state, after the report: a crash in between keeps the unit done, not half-written
 
 
 if __name__ == "__main__":

@@ -4,6 +4,7 @@
     python scripts/grid.py smoke [--only ast] [--data] # a few synthetic training steps per cell: errors, peak GPU memory, step time
     python scripts/grid.py jobs --smoke a.json b.json  # logs/campaigns/grid-v1-{A,B}.txt, balanced by measured step time
     python scripts/grid.py table [--epoch last|best_test]  # results table -> outputs/train/grid-v1/table_<epoch>.md
+    python scripts/grid.py audit [--list <job list>] [--hash]  # check every finished unit's saved metrics; exit 1 on a problem
 
 Cell = `<encoder>+<ft|frozen>+<method>`, run `grid-v1`, seeds 0-4, `--selection fixed --report_epochs <last epoch>`
 (per-epoch test predictions are kept, so any epoch rule can be applied afterwards). Each method keeps the settings of its
@@ -12,6 +13,7 @@ reference training script (experiments/train/grid/<method>.yaml); the encoder fi
 """
 import argparse
 import json
+import re
 import subprocess
 import sys
 import time
@@ -116,6 +118,9 @@ def main():
                    help="measured throughput per machine (sequential smoke hours done per hour, with its parallel jobs); default 1 each")
     t = sub.add_parser("table")
     t.add_argument("--epoch", default="last", help="last, best_test (optimistic: best Score on test per seed) or an epoch number")
+    u = sub.add_parser("audit")
+    u.add_argument("--list", default=None, help="job list of this machine: check only its units, including their checkpoints")
+    u.add_argument("--hash", action="store_true", help="also write the SHA-256 of the split file and of every checkpoint")
     a = ap.parse_args()
 
     if a.cmd == "cells":
@@ -144,6 +149,8 @@ def main():
         print("{} ok, {} failed".format(sum(r["ok"] for r in res.values()), sum(not r["ok"] for r in res.values())))
     elif a.cmd == "jobs":
         write_jobs(a)
+    elif a.cmd == "audit":
+        sys.exit(1 if audit(a.list, a.hash) else 0)
     else:
         table(a.epoch)
 
@@ -266,6 +273,83 @@ def table(epoch):
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text("\n".join(lines) + "\n")
     print("\n".join(lines))
+
+
+def audit(job_list=None, hash_files=False):
+    """Check every finished unit (report.json present); with `job_list`, only that machine's units, whose checkpoints must be here.
+
+    Per unit: saved config equals the cell's current config; test predictions for every epoch, finite probabilities that sum
+    to 1, predictions = argmax; same test cycles (labels, device, patient) in every unit; report.json agrees with the saved
+    predictions; history covers every epoch; no collapse (last-epoch Se >= 1%); final checkpoint present, no leftover
+    last.pth. `hash_files` writes outputs/train/<run>/provenance[_<list>].json (SHA-256 of the split file and of every checkpoint).
+    Returns the number of problems.
+    """
+    import numpy as np
+    from src.runs import sha256_file
+    from src.training.patchmix_cl.main import _VOLATILE
+    from src.training.patchmix_cl.reporting import per_device_report
+
+    out_root, ck_root = REPO / "outputs" / "train" / RUN, REPO / "checkpoints" / "train" / RUN
+    want = None
+    if job_list:
+        want = set(re.findall(r"--cell (\S+) .*--seed (\d+)", Path(job_list).read_text()))
+    bad, ref, prov, n, n_train, pending = [], {}, {}, 0, 0, 0
+    for c in cells():
+        for seed in range(5):
+            if want is not None and (c["cell"], str(seed)) not in want:
+                continue
+            d, name = out_root / c["cell"] / f"seed{seed}", f"{c['cell']}/seed{seed}"
+            if not (d / "report.json").exists():
+                pending += 1
+                continue
+            n += 1
+            err = lambda m: bad.append(f"{name}: {m}")
+            try:
+                saved = json.loads((d / "train_args.json").read_text())
+                E = saved["epochs"]
+                now = json.loads(json.dumps(vars(parse(c, "--selection", "fixed", "--report_epochs", str(E), "--seed", str(seed))), default=str))
+                diff = sorted(k for k in now if k not in _VOLATILE and saved.get(k, now[k]) != now[k])
+                if diff:
+                    err(f"config differs from the cell's current config: {diff}")
+                r = json.loads((d / "report.json").read_text())
+                z = np.load(d / "test_preds.npz")
+                if list(z["epochs"]) != list(range(1, E + 1)) or [h["epoch"] for h in r["history"]] != list(range(1, E + 1)):
+                    err(f"epochs saved {len(z['epochs'])}, history {len(r['history'])}, expected {E}")
+                probs = z["probs"].astype(np.float32)
+                if not np.isfinite(probs).all() or np.abs(probs.sum(-1) - 1).max() > 0.01:
+                    err("non-finite or unnormalised probabilities")
+                if (probs.argmax(-1) != z["preds"]).mean() > 0.001:
+                    err("predictions differ from argmax of the probabilities")
+                key = tuple(z[k] for k in ("labels", "device", "patient"))
+                ref.setdefault(len(key[0]), (name, key))
+                if not all(np.array_equal(a, b) for a, b in zip(key, ref[len(key[0])][1])):
+                    err(f"test cycles differ from {ref[len(key[0])][0]}")
+                rec = per_device_report(z["labels"], z["preds"][-1], z["device"])["all"]
+                if abs(rec["score"] - r["last"]["test"]["all"]["score"]) > 1e-6:
+                    err("report.json last-epoch Score differs from the saved predictions")
+                if rec["se"] < 1:
+                    err(f"collapsed: last-epoch Se {rec['se']:.2f}")
+                n_train += all(h.get("train_loss") is not None for h in r["history"])
+            except Exception as e:  # missing or malformed file
+                err(f"unreadable: {e!r}")
+                continue
+            ck = ck_root / c["cell"] / f"seed{seed}"
+            if want is not None:
+                if not (ck / f"report_epoch_{E}.pth").exists():
+                    err("final checkpoint missing")
+                if (ck / "last.pth").exists():
+                    err("leftover last.pth")
+                if hash_files and (ck / f"report_epoch_{E}.pth").exists():
+                    prov[name] = sha256_file(ck / f"report_epoch_{E}.pth")
+    print(f"{n} finished units checked, {pending} not finished, {n_train} with per-epoch train loss/accuracy, {len(bad)} problems")
+    print("\n".join(bad))
+    if hash_files:
+        split = Path(parse(cells()[0], "--selection", "fixed", "--report_epochs", "1").data_folder) / "official_split.txt"
+        tag = "_" + Path(job_list).stem if job_list else ""
+        p = out_root / f"provenance{tag}.json"
+        p.write_text(json.dumps({"official_split_sha256": sha256_file(split), "checkpoint_sha256": prov}, indent=1))
+        print(f"{p}: {len(prov)} checkpoint hashes")
+    return len(bad)
 
 
 if __name__ == "__main__":
