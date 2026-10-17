@@ -99,3 +99,11 @@ Monitoring is handed to a separate session: `docs/handoff/HANDOFF.md`, status wi
   `RUN_ID=grid-v1 SWEEP_TAG=-A setsid nohup .venv-train/bin/python scripts/sweep.py logs/campaigns/grid-v1-A.txt --workers 4 --ram-gb 6 > logs/grid-v1-A.log 2>&1 < /dev/null &`
   (B: same with `-B`).
 - Sync results B to A: `rsync -a namdp15@10.148.183.8:Workspace/Personal/KHKT-CVA-2026/auscult-trust/outputs/train/grid-v1/ outputs/train/grid-v1/`.
+
+## Reruns of resumed units (17/10/2026)
+
+[Fact] 13 units were resumed from `last.pth` (restarts on 15-16/10 and the power cut of 17/10 10:43); the RNG state is not
+restored on resume. They are rerun without interruption (run `grid-v1-rerun`). `scripts/grid_rerun.py` starts them on the
+first machine whose grid units are done, split by remaining hours and measured throughput, then moves the resumed units to
+`outputs|checkpoints/train/grid-v1-resumed/` and copies the reruns into `grid-v1` before the audit and the tables. A rerun
+may run on the other machine's GPU than the first run.

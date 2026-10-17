@@ -46,14 +46,19 @@ This file is for the session that monitors training. Read it fully before acting
   - If the cause is memory (`out of memory`, exit 137) or a lost connection: restart that machine's sweep once all its
     other jobs have finished. The restart picks up unfinished units.
   - Any other error: do not retry. Report it to the user with the exact error line.
-- **All units on both machines are done:**
-  1. Audit each machine's units with checkpoint hashes (no training, a few minutes):
-     on A `PYTHONPATH=. .venv-train/bin/python scripts/grid.py audit --list logs/campaigns/grid-v1-A.txt --hash`, on B the
-     same with `grid-v1-B.txt`. It must print `0 problems`. Any problem: report it to the user and stop here.
-  2. Copy B's results to A: `rsync -a namdp15@10.148.183.8:Workspace/Personal/KHKT-CVA-2026/auscult-trust/outputs/train/grid-v1/ outputs/train/grid-v1/`
-  3. Build both tables on A: `PYTHONPATH=. .venv-train/bin/python scripts/grid.py table --epoch last` and `--epoch best_test`.
-     They write `outputs/train/grid-v1/table_last.md` and `table_best_test.md`.
-  4. Tell the user. Do not choose the "best" cells: the user decides the rule.
+- **Reruns and the end of the grid are automatic.** 13 units were resumed from `last.pth` after interruptions, so they
+  are rerun without interruption under run `grid-v1-rerun` (lists `logs/campaigns/grid-v1-rerun-{A,B}.txt`). A dispatcher
+  on A, `scripts/grid_rerun.py` (log `logs/grid-v1-rerun-dispatch.log`), waits until one machine's grid units are all done,
+  splits the reruns between the machines (plan in `logs/campaigns/grid-v1-rerun-plan.json`), starts them, then moves the
+  resumed units to `grid-v1-resumed/`, copies the reruns in, audits, syncs B to A and builds the tables. Its last line is
+  `ALL DONE` when the tables exist. Do not run the audit/rsync/table steps yourself and do not start rerun sweeps by hand.
+  - Each check: the dispatcher must be alive (`ps -eo pid,args | grep [g]rid_rerun.py` on A). If it is not and its log does
+    not end with `ALL DONE`, restart it (it resumes from the saved plan):
+    `cd ~/Workspace/Personal/KHKT-CVA-2026/auscult-trust && setsid nohup .venv-train/bin/python scripts/grid_rerun.py >> logs/grid-v1-rerun-dispatch.log 2>&1 < /dev/null &`
+  - A grid sweep that is not running while its grid units are all done is normal from then on; do not restart it.
+  - The rerun sweeps log to `logs/grid-v1-rerun-{A,B}.log`, job logs in `logs/grid-v1-rerun-{A,B}/`.
+  - The log ends with an error line ("audit found problems", "not clean", a traceback): report it to the user and stop.
+  - `ALL DONE`: tell the user. Do not choose the "best" cells: the user decides the rule.
 
 ## Never
 
