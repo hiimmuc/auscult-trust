@@ -21,7 +21,8 @@ best encoder (BEATs PAFA 61.7 ± 0.7 at the last epoch; BEATs Patch-Mix CL 63.6 
 user treats the old AST AuscultTrust as stale: the final AuscultTrust (encoder + method + SC) is chosen after LODO v1 and
 the trained-SC arms (BEATs so far). Running now: LODO without SC (machines A, B; D joins when PC-MCL ends), trained SC
 static (C), PC-MCL trials (D). On 19/10 machine E joined: LODO without SC is shared by A, B and E (end about 20/10
-18:00); C trains SC until PC-MCL ends on D, then C and D share the remaining SC units (end about 21/10 01:30) (section 3).
+18:00); machine C was dropped on 20/10 (our jobs killed twice by its user) with 14 of 175 SC units done; the
+remaining SC units are paused until the SC cell list is confirmed after the LODO and PC-MCL results (section 3).
 
 ## 2. Overall plan
 
@@ -34,7 +35,7 @@ then the final configuration; ensembles and distillation are optional. Phantom t
 | 1 | Registered core (v9) | Gate G on AST Patch-Mix CL vs AuscultTrust (AST + SC); LODO on AST (baseline, Freq-MixStyle, trained and test-time SC, A2, TTA-EQ); KAUH control A | Done 09/10 (section 4) |
 | 2 | Grid v1 | 5 encoders x 14 methods (8 fine-tuned, 6 frozen) x 5 seeds, official split | Done 18/10 (section 5) |
 | 3 | LODO v1 without SC (L1, Amendment 4) | 11 cells x 4 held-out devices x 5 seeds = 220 units | Running on A, B, E |
-| 4 | Trained SC, static bound (Amendment 4) | 7 cells, official split + 4 LODO folds, 175 units | Running on C (D from about 20/10 11:30) |
+| 4 | Trained SC, static bound (Amendment 4) | 7 cells, official split + 4 LODO folds, 175 units | 14 done on C (dropped 20/10); paused until the user confirms the cell list after stages 3 and 5 |
 | 5 | PC-MCL (Amendment 5) | BEATs PC-MCL and PAFA + PC-MCL, official split, 10 units | Running on D; enters LODO/SC only if its last-epoch Score beats BEATs PAFA by more than one seed SD |
 | 6 | Inference arms (L2) | Test-time SC (static, dynamic), A2, TTA-EQ on every LODO unit | [Pending], hours, after stage 3 |
 | 7 | Analysis (L3) | Per-fold Sp/Se/Score/HS/2c; method vs CE on the same encoder; H2 statistics (prior-matched coverage, null gate, two-level bootstrap) with set size beside abs(Delta); SC vs no SC paired by seed | [Pending], about 1 day; report `docs/reports/lodo-v1-results.md` |
@@ -54,27 +55,25 @@ first; C limited to 30% of its GPU; PC-MCL on D now; ensembles and distillation 
 | A | RTX 5000 Ada 32 GB | `lodo-v1` no SC, list `lodo-v1-A2` | 36 | about 20/10 18:00 |
 | B | RTX 5090 32 GB | `lodo-v1` no SC, list `lodo-v1-B2` | 89 | about 20/10 18:00 |
 | E | RTX 5090 32 GB (`10.148.182.179`) | `lodo-v1` no SC, list `lodo-v1-E2` | 88 | about 20/10 18:00 |
-| C | RTX PRO 6000 96 GB | `lodo-v1` trained SC static (3-4 jobs); its share `lodo-v1-C2` after PC-MCL ends on D | 161 at 20/10 01:00 | about 21/10 01:30 |
-| D | RTX 5090 32 GB | `pcmcl-v1` (10 units), then its share of C's SC units (`lodo-v1-D2`) | 10 + about 60 | PC-MCL about 20/10 10:45; SC about 21/10 01:30 |
+| C | RTX PRO 6000 96 GB | dropped 20/10 02:00; `lodo-v1` trained SC static stopped (14 of 175 done, copied to A) | - | - |
+| D | RTX 5090 32 GB | `pcmcl-v1` (10 units) | 5 at 20/10 02:00 | about 20/10 10:45 |
 
 - [Fact] Machine E joined on 19/10 (data, weights, caches, code and venv copied from A; 1-epoch smoke of one AST, HTS-AT
-  and BEATs LODO unit passed with all outputs). LODO without SC is shared by A, B and E; trained SC by C and D.
+  and BEATs LODO unit passed with all outputs). LODO without SC is shared by A, B and E.
 - [Fact] The dispatcher `scripts/lodo_move.py` does both shares. It stops the source schedulers by PID (their running
   jobs go on), keeps running and interrupted units on their machine, gives every unstarted unit, longest first, to the
   machine that would finish it first (measured throughput), and starts each machine's new sweep only after its own old
   jobs have ended, so nothing is killed and nothing runs twice. It restarts a sweep that dies (power cut) and copies the
-  outputs to A at the end. A+B+E: applied 19/10 18:42, log `logs/lodo-v1-share-ABE.log`. C+D (user decision 20/10):
-  waits for PC-MCL on D, then splits C's unstarted SC units between C and D, log `logs/lodo-v1-share-CD.log`.
-- [Fact] Incident: our jobs on C were killed by another user at about 19/10 23:52; restarted 20/10 01:02; the two cut-off
-  units rerun from epoch 0 (partial runs kept in `<outputs|checkpoints>/train/lodo-v1-interrupted/`).
-- [Fact] Throughput in B-smoke hours (one job alone on B) per wall hour, measured since each sweep started: A 0.80, B 1.94,
-  C 2.15; E and D assumed equal to B (same GPU). PC-MCL: about 1.9 h per unit, one at a time (a job takes about 19 GB).
-- [Assumption] ±20% on every estimate; A and B idle partly while their last old jobs drain; E's speed is unmeasured.
-- All training ends about 21/10 01:30, set by SC on C+D (moving all SC units to D alone would have ended about 21/10
-  22:00; A, B and E are free from about 20/10 18:00 and could take SC units too).
-- C runs 3-4 jobs since 20/10 01:20 (`--workers 4 --gpu-gb 34`, about 25 GB in use = 26% of the card, within the
-  user's 30%); the 21/10 01:30 estimate assumes about 2.4 B-smoke hours per hour on C at 3 jobs (not yet measured).
-- From about 20/10 18:00 A, B and E are idle; the dynamic-bound SC arms (stage 8, about 108 smoke hours) could run there.
+  outputs to A at the end. A+B+E: applied 19/10 18:42, log `logs/lodo-v1-share-ABE.log`. 
+- [Fact] Machine C: our jobs were killed by its user at 19/10 23:52 and again at 20/10 01:30; C was dropped. Its 14
+  finished SC units (outputs and checkpoints) were copied to A and verified by checksum; the 5 cut-off partial runs are
+  kept in `<outputs|checkpoints>/train/lodo-v1-interrupted/` and their units will rerun from epoch 0.
+- [Pending] Trained SC: 161 units left, paused until the user confirms the SC cell list after the LODO and PC-MCL
+  results. Agreed plan: D after PC-MCL, then A, B and E once their LODO lists end (about 21/10 05:00 for the current
+  list).
+- [Fact] Throughput in B-smoke hours (one job alone on B) per wall hour: A 0.80, B 1.94, E 1.96 (measured); D assumed
+  equal to E (same GPU). PC-MCL: about 1.9 h per unit, one at a time (a job takes about 19 GB).
+- [Assumption] ±20% on every estimate; A and B idle partly while their last old jobs drain.
 
 ## 4. Registered core (v9, AST), from `docs/reports/report_2026-10-09.md`
 
@@ -139,7 +138,7 @@ last epoch. [Interpretation] Both epoch rules put BEATs first; the method order 
 
 ### 5.4 Cells carried into LODO v1 and the trained-SC arms (last epoch)
 
-Run on A/B without SC: all 11 rows. Trained SC (machine C): rows marked SC.
+Run on A/B/E without SC: all 11 rows. Trained SC: rows marked SC (list may change after LODO and PC-MCL).
 
 | Cell | SC | Sp | Se | Score | HS | 2c Se | 2c Score | 2c HS | Worst-dev Score | Cov | Worst-dev Cov | Set size |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|
