@@ -42,8 +42,21 @@ reservations at 29 GB, but the jobs use more than reserved on this card: at 16:4
 Options: restart C's sweep with `--workers 1` (or a smaller `--gpu-gb`), or set a per-process memory fraction. Ask
 the user; killing jobs must be by PID only.
 
+**LODO units move to D (19/10 17:05, user request).** `scripts/lodo_move.py` runs on A (log `logs/lodo-v1-move.log`;
+started from the worktree copy `.claude/worktrees/lodo-move/scripts/lodo_move.py` with `AT_REPO=<main checkout>` until
+the commit reaches `main`). When D's `pcmcl-v1` sweep ends it stops the A and B schedulers by PID (their jobs go on),
+moves unstarted units from the end of each list to D until the expected ends are level (measured throughput; D = B's),
+writes `logs/campaigns/lodo-v1-{A2,B2,D}.txt` (originals kept), starts schedulers with tags -A2, -B2, -D (new job log
+directories), restarts any that dies without its final line, and rsyncs B's and D's `outputs/train/lodo-v1/` to A at the
+end. Dry run: `.venv-train/bin/python scripts/lodo_move.py --dry --d-free <hours until D is free>`. At 17:10 it moved
+48 (A) + 35 (B) units, all ending about 21/10 01:00 instead of A 22/10 03:00 / B 21/10 05:00. Restart command after a
+power cut on A: the same `setsid nohup` line; it skips the move if `logs/campaigns/lodo-v1-D.txt` exists on A.
+C estimate (measured 2.2 smoke-h/h, 2 jobs): about 21/10 14:00.
+
 **D note:** one PC-MCL job uses about 19 GB, so with `MEM_GB=15` the sweep's free-memory check keeps D at one job at a
 time (about 1.6 h per unit, 10 units about 16 h). Two jobs did fit in the 2-epoch test; raising concurrency is optional.
+
+Consolidated report with plan, timeline and grid results: `report.md` (v3.0, 19/10).
 
 ## 3. What each run contains
 

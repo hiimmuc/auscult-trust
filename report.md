@@ -2,129 +2,256 @@
 
 | | |
 |---|---|
-| Report version | 2.0 (supersedes `docs/report_archive_2026-10-05.md`, the 17-section report of 2026-10-05, kept for the full detail of the v4-era experiments) |
-| Datetime | 2026-10-07 11:52 (+07) |
-| Repo state | branch `report-update`, HEAD `9e156d8`, in sync with `origin/main` |
-| Proposal / prereg | v9 (`docs/research-proposal-v9-en.md`) over v8 (`docs/research-proposal-v8-en.md`); `docs/prereg-v8.md` (2026-10-06), `docs/prereg-v9-amendment.md` (2026-10-07) |
-| Sources | `outputs/`, `baselines/patchmix_cl/save/results.json` and `logs/`, `git log`, the work sessions of 2026-10-02 to 2026-10-07 |
+| Report version | 3.0 (supersedes version 2.0 of 2026-10-07, now `docs/reports/report_archive_2026-10-07.md`) |
+| Datetime | 2026-10-19 17:20 (+07) |
+| Proposal / prereg | v9 (`docs/updates/research-proposal-v9-en.md`); `docs/updates/prereg-v8.md` with Amendments 1-5 (`docs/updates/prereg-v9-amendment*.md`) |
+| Plans | `docs/updates/stage-plan-v1.md` (grid), `docs/updates/lodo-plan-v1.md` (LODO, ensembles; superseded where Amendment 4 differs) |
+| Detailed sources | `docs/reports/report_2026-10-09.md` (registered core), `docs/reports/grid-v1-results.md` (grid, every cell), `outputs/train/grid-v1/table_{last,best_test}.md`, `docs/handoff/HANDOFF.md` (machines, commands) |
 
-Tags: [Fact] measured in the repo, [Interpretation] reasoned, [Assumption], [Pending] not run. Score = (Sp + Se) / 2 on ICBHI, 4-class, official split unless stated.
+Tags: [Fact] measured in the repo, [Interpretation] reasoned, [Assumption], [Pending] not run. Score = (Sp + Se) / 2 on
+ICBHI 4-class, official split unless stated. All numbers are mean ± SD over seeds 0-4.
 
 ## 1. Status in one paragraph
 
-[Fact] Part I (base model) has not met its criterion: the best fine-tuning rung in our protocol is 57.3 (AST, layer-4 cache), Patch-Mix CL reproduced at 61.49 ± 0.91 with test-selected epochs and 59.59 ± 0.47 at the last epoch, against the published 62.37 ± 0.61. Stage 1 screening of the device-motivated variants is half done (P0-P3 of 24 runs finished; no variant separates from the baseline). Part II (device shift) ran on frozen and fine-tuned rungs only; spectrum correction (A1) and moment matching (A2) are now wired into extraction but no corrected feature set has been extracted or evaluated. No phantom, no hospital data.
+[Fact] The registered core of proposal v9 is done on AST (report of 09/10): gate G passed (SC vs baseline +1.91 Score,
+95% CI [+0.31, +3.50], 10 seeds); H2 is partly met (only the Litt3200 LODO fold passes the null gate; SC brings its
+coverage from 0.670 to 0.904, but sets grow from 1.92 to 2.67 labels); H1 and H3 wait for phantom hardware. The method x
+encoder grid (70 cells, 350 units, finished 18/10) showed that the encoder matters more than the method: BEATs is the
+best encoder (BEATs PAFA 61.7 ± 0.7 at the last epoch; BEATs Patch-Mix CL 63.6 ± 0.8 at the test-selected epoch). The
+user treats the old AST AuscultTrust as stale: the final AuscultTrust (encoder + method + SC) is chosen after LODO v1 and
+the trained-SC arms (BEATs so far). Running now: LODO without SC (machines A, B; D joins when PC-MCL ends), trained SC
+static (C), PC-MCL trials (D). Expected end of all training about 21/10 (section 3).
 
-## 2. File modifications (2026-10-05 to 2026-10-07)
+## 2. Overall plan
 
-Commits from `git log`; the v8 migration (6 commits) was done in this session, the rest by parallel sessions.
+The pipeline is: encoder sweep, then LODO without SC, then SC (test-time on the LODO models, and trained SC on 7 cells),
+then the final configuration; ensembles and distillation are optional. Phantom tests close the project.
 
-| Commit | Date | Change |
-|---|---|---|
-| `bcaee78`, `1aa943b`, `db15736` | 10-05 | Unified encoder extraction, archived v4 stack to `src/legacy/`, AuscultTrust ladder, Patch-Mix recipes, Part II runner, AST layer-4 retry, KAUH extraction configs |
-| `1a553e9`/`420e56f`, `44df13f` | 10-05 | Report update (Patch-Mix CL 5 seeds, HeAR/AST-l4 ladders, Part II study); PR #2 |
-| `21b64cf` | 10-06 | CLAUDE.md points at v8; hypotheses H1, H-diag, H2, H3, H-inv, finding F4 |
-| `b3da606` | 10-06 | `src/shift/correction.py`: A2 docstring fixed (needs a source/target domain boundary) |
-| `0b979a1`, `74cd264` | 10-06 | `src/features.py`: config key `correction` applies A1 on the waveform before encoding. Fix: unrelated HTS-AT lines removed from `tests/test_features.py` |
-| `ca8017f`, `40314f0` | 10-06 | `src/data/splits.py:calibration_eval_splits` (official-test patients of non-held-out devices, stratified by device, 20 re-splits; stochastic rounding fixes an odd-count bias) |
-| `5f462ae` | 10-06 | `src/features_handcrafted.py` (74-dim); `src/eval/metrics.py` (`sp_se`, `hs`, `macro_f1`, `by_device`); `src/eval/shift.py` (`closed_fraction_checked`, `prior_matched_coverage`, `decodability_curve` PCA-8, `mmd_permutation`); `src/conformal/conformal.py` (V4-oracle, V5 in patients); `spectrum_coefficients(reference=arithmetic\|geometric)`; `src/data/kauh.py:rotation_partitions` |
-| `30c5bee` | 10-06 | Patch-Mix Stage 1: `baselines/patchmix_cl/main.py` (patient-level val set, `--selection cv\|test`, three reported epochs, per-device metrics, flags for P1-P8), `util/stage1.py`, `util/icbhi_dataset.py`, `models/ast.py` (P6 affine layer), `export_probs.py` (softmax + embedding export with weight hash), `src/conformal/export.py` (E1 from export), A2 wired in `src/features.py` via `Encoder.logmel` (AST, OPERA), `configs/stage1_variants/`, `docs/prereg-v8.md`, `tests/test_stage1.py`, `tests/test_handcrafted.py` |
-| `9bccec8` | 10-06 | HTS-AT (AudioSet) encoder, extract and ladder configs |
-| `e42a105`, `aeedd4e` | 10-06 | Screening runner (3-fold patient CV, no test access), grouped-CV folds in `main.py` (`--cv_folds`, `--cv_fold`), fixed-refit mode, `stage1_summary.py`, extra P4 configs (p = 0.25, 0.75) |
-| `761cc53`, `24840c9`, `25ff50b`, `d9c9419` | 10-06/07 | Proposal v9 (single spectrum-correction chain G, H1-H3), `docs/prereg-v9-amendment.md`, `sc_mode` (dynamic dB clip vs static band bound), `configs/stage1_variants/P1P3_sc_gain.json`, CLAUDE.md rewrite, `docs/v9-change-list-vi.md`; PR #3 |
-| this report | 10-07 | old `report.md` moved to `docs/report_archive_2026-10-05.md` |
+| # | Stage | What | Status |
+|---|---|---|---|
+| 0 | Phase 0 (v4-v8) | Frozen-encoder ladders, Part II shift study, Stage-1 screening of device variants | Done; archived in `docs/reports/report_archive_2026-10-07.md` |
+| 1 | Registered core (v9) | Gate G on AST Patch-Mix CL vs AuscultTrust (AST + SC); LODO on AST (baseline, Freq-MixStyle, trained and test-time SC, A2, TTA-EQ); KAUH control A | Done 09/10 (section 4) |
+| 2 | Grid v1 | 5 encoders x 14 methods (8 fine-tuned, 6 frozen) x 5 seeds, official split | Done 18/10 (section 5) |
+| 3 | LODO v1 without SC (L1, Amendment 4) | 11 cells x 4 held-out devices x 5 seeds = 220 units | Running on A, B (D from about 20/10 11:30) |
+| 4 | Trained SC, static bound (Amendment 4) | 7 cells, official split + 4 LODO folds, 175 units | Running on C |
+| 5 | PC-MCL (Amendment 5) | BEATs PC-MCL and PAFA + PC-MCL, official split, 10 units | Running on D; enters LODO/SC only if its last-epoch Score beats BEATs PAFA by more than one seed SD |
+| 6 | Inference arms (L2) | Test-time SC (static, dynamic), A2, TTA-EQ on every LODO unit | [Pending], hours, after stage 3 |
+| 7 | Analysis (L3) | Per-fold Sp/Se/Score/HS/2c; method vs CE on the same encoder; H2 statistics (prior-matched coverage, null gate, two-level bootstrap) with set size beside abs(Delta); SC vs no SC paired by seed | [Pending], about 1 day; report `docs/reports/lodo-v1-results.md` |
+| 8 | Trained SC, dynamic bound | Same 7 cells | [Pending], after stage 4 |
+| 9 | Ensembles E1-E4, distillation (optional) | E1 = equal-weight mean softmax of the 11 cells per fold and seed; distil into one BEATs model only if E1 beats the best single cell | [Pending], optional |
+| 10 | Final AuscultTrust | Choose encoder + method + SC with the user | After stages 7-8 |
+| 11 | After LODO | KAUH positive controls on the final model, screening view (recording level), phantom tests (H1, H3) | [Pending]; phantom depends on hardware |
 
-Tests: 67 passed on the committed tree (2026-10-06 run, before the v9 commits).
+Decisions of the user (19/10): LODO cells as in stage 3 (BEATs CE replaces BEATs ce_pafa_cfg); the 80/20 split stage is
+dropped; SC cells AST Patch-Mix CL, PAFA; HTS-AT Patch-Mix CL, SG-SCL; BEATs Patch-Mix CL, PAFA, SG-SCL; static bound
+first; C limited to 30% of its GPU; PC-MCL on D now; ensembles and distillation optional.
 
-## 3. Models and configs used
+## 3. Compute and timeline (re-estimated 19/10 17:10)
 
-| Item | Setting |
+| Machine | GPU | Run | Units | Done | Expected end |
+|---|---|---|---|---|---|
+| A | RTX 5000 Ada 32 GB | `lodo-v1` no SC | 75 (27 after the move) | 0 (3 at epoch 33/50) | about 21/10 01:00 |
+| B | RTX 5090 32 GB | `lodo-v1` no SC | 145 (110 after the move) | 3 | about 21/10 01:00 |
+| C | RTX PRO 6000 96 GB | `lodo-v1` trained SC static | 175 | 4 | about 21/10 14:00 at 2 jobs at once |
+| D | RTX 5090 32 GB | `pcmcl-v1`, then 83 LODO units from A and B | 10 + 83 | 0 (1 at epoch 23/100) | PC-MCL about 20/10 11:30; LODO about 21/10 01:00 |
+
+- [Fact] Throughput measured since each sweep started, in smoke hours (one job alone) per wall hour: A 0.84, B 1.94,
+  C 2.2. A runs only 3 jobs at once so far (BEATs units reserve 10 GB each); it should speed up on the lighter AST and
+  HTS-AT units. PC-MCL: about 1.9 h per unit, one at a time (a job takes about 19 GB).
+- [Fact] Without D, A would end about 22/10 03:00 and B about 21/10 05:00. The dispatcher `scripts/lodo_move.py`
+  (started 19/10 17:05 on A, log `logs/lodo-v1-move.log`) waits for PC-MCL to end, stops the A and B schedulers (their
+  running jobs continue), moves the units that have not started from the end of each list to D until the expected ends
+  are level, restarts the three schedulers (lists `lodo-v1-{A2,B2,D}.txt`), restarts any of them after a crash, and copies
+  B's and D's outputs to A at the end. Dry run at 17:10 (D free in 18.5 h): 48 units from A and 35 from B move; all three
+  end about 32 h from now. The plan is recomputed with the measured speeds when D becomes free.
+- [Assumption] ±20% on every estimate; the first hours of a sweep include building spectrogram caches.
+- Open issue: C's jobs use 52 GB (54% of the card), above the 30% the user allowed; the scheduler budgets only the
+  reservations (29 GB). Running C with one job at a time would end it about 23/10. The user decides.
+- After 21/10 A, B and D are idle; the dynamic-bound SC arms (stage 8, about 108 smoke hours) could run on all four
+  machines in about 16 h instead of about 45 h on C alone.
+
+## 4. Registered core (v9, AST), from `docs/reports/report_2026-10-09.md`
+
+| Item | Result |
 |---|---|
-| Data | ICBHI official split (6898 cycles, 126 patients; 4142 train / 2756 test cycles), split file `../data/splits/icbhi_official_v1.json`; KAUH (112 patients x 3 filters, 8 s windows); HF_Lung_V1 |
-| Frozen encoders | AST AudioSet (primary), HeAR ViT-L, CLAP HTS-AT, OPERA-CT, OPERA-CE, HTS-AT AudioSet (`htsat_audioset`, non-leaking). Configs `configs/extract_*.yaml`, `configs/ladder_*.yaml` |
-| Ladder rungs | L0 logistic probe; L1 best frozen head by grouped CV (`<last\|concat\|scalar>-<mean\|max\|meanmax\|attn>`); L2 last-k blocks (`ft-k*`); L3 LoRA; L4 Patch-Mix CL. 5 seeds, epoch by grouped CV, test once |
-| Patch-Mix CL | `baselines/patchmix_cl/run_repro.sh`: AST (ImageNet + AudioSet), bs 8, Adam lr 5e-5, wd 1e-6, cosine, 50 epochs, temperature 0.06, alpha 1.0, mix_beta 1.0, EMA 0.5, repeat padding, 8 s cycles |
-| Stage 1 screening | `configs/stage1_variants/*.json` = Patch-Mix recipe + one flag: P1 `a1_input`, P2 `bin_norm`, P3 `rand_bin_gain` 6 dB, P4 `freq_mixstyle` (p 0.25/0.5/0.75), P6 `bin_affine`, P7 `hc_fuse` (20 MFCC frame SDs), P8 `select_metric: worst_device`, P1P3 `sc_gain`. P5 dropped (no licensed IR set). 3-fold patient-grouped CV on the 60% training patients, validation-selected epoch |
-| Conformal | LAC score, alpha = 0.1; V1 split, V2 Mondrian (`src/conformal/conformal.py`), V3-V5 and V4-oracle implemented |
-| Hardware | RTX 5000 Ada 32 GB (Patch-Mix seed 1 on an 8 GB laptop) |
+| Patch-Mix CL reproduction (AST, best epoch on test) | 61.49 ± 0.91 vs 62.37 ± 0.61 published; last epoch 59.59 ± 0.47 |
+| Refit at the CV epoch (seeds 0-4) | AuscultTrust (SC) 58.31 ± 1.08; baseline 56.80 ± 1.49; SC + random gain 59.72 (not selected by the registered rule) |
+| Gate G (10 seeds) | Paired difference +1.91, 95% CI [+0.31, +3.50]: passes (lower bound > -1.5). Superiority not shown (patient bootstrap [-0.83, +4.84]) |
+| LODO on AST (H2) | Only Litt3200 passes the null gate. Prior-matched coverage 0.670 (baseline) vs 0.904 (SC); D = +0.177 [+0.055, +0.326]; set size 1.92 vs 2.67 labels. Freq-MixStyle D = +0.126 [-0.006, +0.269] |
+| KAUH control A | Test-time SC on baseline weights lowers the cross-filter flip rate 0.188 to 0.104 (+0.085 [+0.041, +0.132]); AuscultTrust weights do not (0.175). Control B2 not interpretable (no filter pair beyond the chance range) |
+| H1, H3 | [Pending]: phantom recordings |
 
-## 4. Results
+[Interpretation] H2 failed only on set size, so the LODO v1 analysis reads set size next to abs(Delta), and ensembles
+(sharper softmax) may shrink sets.
 
-### 4.1 Frozen encoders, ICBHI official test (5 seeds; selection by grouped CV or val)
+## 5. Grid v1: method x encoder on the official split
 
-| Encoder | CV Score | MLP val | Test Score | V1 coverage | Set size |
-|---|---|---|---|---|---|
-| OPERA-CT | 0.497 ± 0.056 | 0.501 | 0.417 ± 0.023 | 0.855 | 2.56 |
-| AST | **0.601 ± 0.035** | **0.653** | **0.547 ± 0.013** | 0.830 | 1.85 |
-| CLAP | 0.578 ± 0.028 | 0.573 | 0.519 ± 0.018 | 0.847 | 2.16 |
-| HeAR | 0.580 ± 0.026 | 0.628 | 0.527 ± 0.010 | 0.857 | 2.09 |
-| HTS-AT (AudioSet) | 0.601 (last-mean) | | 0.534 ± 0.005 (`last-mean`); 0.532 ± 0.006 (`last-meanmax`); L0 probe 0.491 (CI 0.430-0.546) | L0 V1 0.786 | |
+### 5.1 Setup
 
-[Fact] AST is the primary encoder. OPERA-CT, although pretrained on ICBHI, is lowest, so pretraining overlap did not inflate it. HTS-AT with AudioSet weights is below AST and about level with CLAP/HeAR. [Interpretation] The weak base model of the early v4 experiments was the encoder.
+- 70 cells x 5 seeds = 350 units, finished 18/10 23:49. Audit (`scripts/grid.py audit`): 0 problems; SHA-256 of the
+  split file and every checkpoint in `outputs/train/grid-v1/provenance_grid-v1-final-{A,B}.json`.
+- Encoders AST, HTS-AT, BEATs, DASS, OPERA-CT. Fine-tuned (ft) methods: CE, Patch-Mix, Patch-Mix CL, PAFA, SG-SCL,
+  QLung, ADD-RSC, ce_pafa_cfg (CE with PAFA's settings: batch 32, no SpecAugment, 5 s cycles on AST/BEATs, BEATs 100
+  epochs). Frozen: the same minus Patch-Mix CL and SG-SCL. Each method with its reference settings
+  (`experiments/train/grid/<method>.yaml`). Lung-SRAD is a reference row only.
+- Last epoch = primary. Best epoch on test = optimistic, for comparison with papers only.
+- Columns (%): Sp = normal recall; Se = recall of crackle, wheeze, both; HS = harmonic mean of Sp and Se; 2c = normal
+  vs abnormal view of the same predictions (2c Sp = Sp); worst-dev = lowest per-device value; Cov = LAC split-conformal
+  coverage at 90% over 20 device-stratified calibration/evaluation halves of the test patients; set size = mean labels
+  per set (of 4).
 
-### 4.2 Fine-tuning ladder (test Score, 5 seeds, test once)
+### 5.2 Best cell per encoder, last epoch
 
-| Rung | CV Score | Test Score |
-|---|---|---|
-| HeAR `last-mean` / `concat-attn` (frozen) | 0.603 | 0.513 ± 0.010 / 0.511 ± 0.005 |
-| HeAR `ft-k4-attn` | 0.587 ± 0.025 | **0.570 ± 0.002** |
-| AST `ft-k4-attn+mix` (cache after block 8) | 0.585 ± 0.037 | 0.557 ± 0.009 |
-| AST layer-4 cache `ft-k8-attn+mix` | 0.605 ± 0.020 | **0.573 ± 0.019** (best of the ladder) |
-| HTS-AT `ft-k2-meanmax` (stage 4 only) | 0.585 ± 0.014 | 0.527 ± 0.007 |
+| Encoder | Cell | Sp | Se | Score | HS | 2c Se | 2c Score | 2c HS | Worst-dev Score | Cov | Worst-dev Cov | Set size |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| BEATs | ft pafa | 73.2 ± 2.7 | 50.2 ± 2.9 | **61.7 ± 0.7** | 59.5 ± 1.3 | 65.4 ± 3.8 | 69.3 ± 1.1 | 69.0 ± 1.4 | 58.9 ± 0.5 | 89.8 ± 0.3 | 85.4 ± 1.0 | 2.47 ± 0.16 |
+| HTS-AT | ft sg_scl | 72.4 ± 2.2 | 46.9 ± 1.2 | 59.6 ± 0.5 | 56.9 ± 0.2 | 62.3 ± 1.5 | 67.3 ± 0.6 | 66.9 ± 0.5 | 49.9 ± 2.8 | 90.1 ± 0.1 | 88.4 ± 0.3 | 2.38 ± 0.05 |
+| DASS | ft patchmix | 70.6 ± 2.8 | 48.8 ± 1.2 | 59.7 ± 0.9 | 57.7 ± 0.4 | 61.8 ± 1.9 | 66.2 ± 0.8 | 65.9 ± 0.7 | 49.8 ± 3.4 | 89.7 ± 0.3 | 87.6 ± 0.3 | 2.15 ± 0.06 |
+| AST | ft ce_pafa_cfg | 71.8 ± 2.4 | 46.2 ± 1.3 | 59.0 ± 1.0 | 56.2 ± 0.9 | 62.0 ± 1.7 | 66.9 ± 0.7 | 66.5 ± 0.7 | 48.5 ± 2.7 | 89.7 ± 0.2 | 86.6 ± 1.1 | 2.29 ± 0.04 |
+| OPERA-CT | ft patchmix_cl | 65.4 ± 0.9 | 38.0 ± 1.4 | 51.7 ± 0.7 | 48.0 ± 1.1 | 53.8 ± 1.3 | 59.6 ± 0.6 | 59.0 ± 0.7 | 35.3 ± 0.9 | 90.1 ± 0.2 | 72.1 ± 2.2 | 2.83 ± 0.04 |
+| AST | frozen add_rsc | 70.7 ± 2.4 | 43.7 ± 1.1 | 57.2 ± 1.5 | 54.0 ± 1.3 | 59.5 ± 1.0 | 65.1 ± 1.6 | 64.6 ± 1.4 | 47.4 ± 2.4 | 88.9 ± 0.3 | 84.0 ± 0.9 | 2.45 ± 0.04 |
+| DASS | frozen add_rsc | 67.2 ± 1.5 | 45.3 ± 1.6 | 56.3 ± 0.5 | 54.1 ± 0.8 | 61.6 ± 2.3 | 64.4 ± 0.9 | 64.2 ± 1.0 | 48.5 ± 2.3 | 89.3 ± 0.3 | 81.9 ± 2.3 | 2.44 ± 0.04 |
+| HTS-AT | frozen pafa | 63.1 ± 0.4 | 42.8 ± 0.2 | 52.9 ± 0.3 | 51.0 ± 0.3 | 60.0 ± 0.4 | 61.6 ± 0.3 | 61.5 ± 0.3 | 38.5 ± 1.5 | 90.0 ± 0.1 | 67.5 ± 4.5 | 2.66 ± 0.07 |
+| BEATs | frozen patchmix | 67.3 ± 1.4 | 36.3 ± 1.2 | 51.8 ± 0.3 | 47.2 ± 0.7 | 50.7 ± 1.8 | 59.0 ± 0.4 | 57.8 ± 0.7 | 45.8 ± 1.0 | 89.6 ± 0.1 | 86.4 ± 0.5 | 2.22 ± 0.02 |
+| OPERA-CT | frozen patchmix | 79.6 ± 2.3 | 18.6 ± 1.8 | 49.1 ± 0.5 | 30.1 ± 2.2 | 25.7 ± 2.0 | 52.6 ± 0.5 | 38.7 ± 2.1 | 43.1 ± 1.3 | 89.5 ± 0.1 | 87.5 ± 0.1 | 2.50 ± 0.02 |
 
-[Fact] Fine-tuning helps HeAR (+0.057) and AST (+0.02 over its frozen head 0.547); it does not help HTS-AT (0.527 vs 0.534 frozen). No paired CIs for cell-to-cell differences of 0.01-0.02.
+### 5.3 Top 5, best epoch on test (optimistic)
 
-### 4.3 Patch-Mix CL reproduction (5 seeds)
+| Rank | Cell | Sp | Se | Score | HS | 2c Se | 2c Score | 2c HS | Worst-dev Score | Cov | Worst-dev Cov | Set size |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| 1 | beats+ft+patchmix_cl | 76.4 ± 3.8 | 50.9 ± 3.4 | 63.6 ± 0.8 | 60.9 ± 1.4 | 65.5 ± 3.2 | 70.9 ± 1.0 | 70.4 ± 0.9 | 57.8 ± 3.8 | 89.2 ± 0.3 | 86.2 ± 0.7 | 1.95 ± 0.12 |
+| 2 | beats+ft+sg_scl | 78.6 ± 4.5 | 47.9 ± 3.3 | 63.2 ± 0.7 | 59.3 ± 1.3 | 62.4 ± 3.5 | 70.5 ± 0.7 | 69.4 ± 0.5 | 56.2 ± 2.9 | 89.5 ± 0.4 | 87.0 ± 0.4 | 1.99 ± 0.09 |
+| 3 | beats+ft+pafa | 75.5 ± 2.9 | 51.0 ± 2.8 | 63.2 ± 0.6 | 60.8 ± 1.2 | 65.8 ± 3.2 | 70.6 ± 0.4 | 70.2 ± 0.6 | 60.0 ± 0.9 | 89.7 ± 0.2 | 86.0 ± 0.8 | 2.16 ± 0.28 |
+| 4 | beats+ft+ce_pafa_cfg | 76.1 ± 3.2 | 50.0 ± 2.8 | 63.1 ± 1.1 | 60.3 ± 1.4 | 64.6 ± 3.6 | 70.3 ± 0.9 | 69.7 ± 1.1 | 58.5 ± 2.7 | 89.7 ± 0.1 | 86.3 ± 0.8 | 2.11 ± 0.26 |
+| 5 | beats+ft+qlung | 77.3 ± 3.3 | 48.1 ± 2.5 | 62.7 ± 0.5 | 59.2 ± 0.9 | 62.3 ± 2.5 | 69.8 ± 0.5 | 68.9 ± 0.4 | 55.9 ± 3.2 | 89.4 ± 0.3 | 86.3 ± 1.3 | 1.98 ± 0.07 |
+| (7) | beats+ft+ce | 74.9 ± 4.3 | 49.4 ± 2.3 | 62.2 ± 1.1 | 59.4 ± 0.8 | 65.2 ± 2.8 | 70.1 ± 0.8 | 69.6 ± 0.4 | 53.7 ± 3.2 | 89.7 ± 0.2 | 86.2 ± 1.0 | 2.10 ± 0.21 |
+| best non-BEATs | htsat+ft+patchmix_cl | 77.0 ± 4.6 | 47.1 ± 3.5 | 62.1 ± 1.5 | 58.3 ± 1.9 | 60.9 ± 3.4 | 69.0 ± 1.4 | 67.8 ± 1.4 | 51.5 ± 5.4 | 89.6 ± 0.2 | 86.5 ± 0.6 | 2.01 ± 0.06 |
 
-| Protocol | Score | Published |
-|---|---|---|
-| Best epoch on test (paper protocol, optimistic) | 61.49 ± 0.91 (seeds 61.18, 62.41, 60.60, 62.51, 60.76) | 62.37 ± 0.61 |
-| Last epoch (no test selection) | 59.59 ± 0.47 | plain fine-tuning 59.55 ± 0.88 |
+[Fact] The top 5 span 1.0 Score, below one seed SD. Best per encoder on the best epoch: BEATs Patch-Mix CL 63.6, HTS-AT
+Patch-Mix CL 62.1, DASS Patch-Mix 61.7, AST CE 61.3, OPERA-CT CE 52.6. Best-epoch selection adds 0.6-4.4 Score over the
+last epoch. [Interpretation] Both epoch rules put BEATs first; the method order inside BEATs is within noise.
 
-[Fact] Reproduction accepted (0.88 below the published mean, inside the +-1 point target). Part I criterion (best rung within 1 SD of or above 62.37 under the val-selected protocol) is **not met**: 57.3 (AST) is 4.2 below the test-selected and 2.3 below the last-epoch reproduction. [Interpretation] Plausible cause: the cached-token design leaves the lower blocks frozen; not tested by a full fine-tune in our protocol.
+### 5.4 Cells carried into LODO v1 and the trained-SC arms (last epoch)
 
-### 4.4 Part II: device shift (V1 coverage, nominal 0.90)
+Run on A/B without SC: all 11 rows. Trained SC (machine C): rows marked SC.
 
-E1, ICBHI one device held out (AST L0 / L1 / L2; HeAR L2):
+| Cell | SC | Sp | Se | Score | HS | 2c Se | 2c Score | 2c HS | Worst-dev Score | Cov | Worst-dev Cov | Set size |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| ast+ft+ce | | 68.4 ± 2.3 | 46.8 ± 2.5 | 57.6 ± 1.0 | 55.5 ± 1.4 | 64.5 ± 3.6 | 66.5 ± 1.2 | 66.3 ± 1.3 | 44.7 ± 0.9 | 89.5 ± 0.2 | 86.7 ± 0.4 | 2.35 ± 0.05 |
+| ast+ft+patchmix_cl | SC | 71.7 ± 4.1 | 44.7 ± 1.7 | 58.2 ± 1.3 | 55.0 ± 0.5 | 60.7 ± 2.5 | 66.2 ± 0.9 | 65.7 ± 0.4 | 47.1 ± 3.2 | 89.3 ± 0.3 | 86.9 ± 0.4 | 2.25 ± 0.03 |
+| ast+ft+pafa | SC | 69.3 ± 1.0 | 47.4 ± 1.2 | 58.3 ± 0.9 | 56.3 ± 1.0 | 63.2 ± 1.7 | 66.2 ± 1.1 | 66.1 ± 1.1 | 47.4 ± 1.9 | 89.7 ± 0.2 | 86.1 ± 0.7 | 2.34 ± 0.05 |
+| htsat+ft+ce | | 70.0 ± 3.0 | 47.6 ± 0.8 | 58.8 ± 1.4 | 56.6 ± 0.9 | 62.4 ± 1.8 | 66.2 ± 1.2 | 65.9 ± 1.1 | 46.9 ± 3.7 | 90.0 ± 0.2 | 87.1 ± 1.2 | 2.23 ± 0.03 |
+| htsat+ft+patchmix_cl | SC | 69.9 ± 2.7 | 48.3 ± 1.2 | 59.1 ± 1.0 | 57.1 ± 0.5 | 63.4 ± 1.9 | 66.7 ± 0.8 | 66.5 ± 0.7 | 46.5 ± 5.1 | 89.8 ± 0.1 | 87.6 ± 0.7 | 2.21 ± 0.02 |
+| htsat+ft+sg_scl | SC | 72.4 ± 2.2 | 46.9 ± 1.2 | 59.6 ± 0.5 | 56.9 ± 0.2 | 62.3 ± 1.5 | 67.3 ± 0.6 | 66.9 ± 0.5 | 49.9 ± 2.8 | 90.1 ± 0.1 | 88.4 ± 0.3 | 2.38 ± 0.05 |
+| beats+ft+ce | | 65.7 ± 3.7 | 52.7 ± 1.3 | 59.2 ± 1.5 | 58.4 ± 1.1 | 69.7 ± 1.4 | 67.7 ± 1.5 | 67.6 ± 1.5 | 50.4 ± 3.0 | 89.4 ± 0.4 | 86.6 ± 0.4 | 2.38 ± 0.06 |
+| beats+ft+patchmix_cl | SC | 64.2 ± 2.6 | 55.2 ± 1.8 | 59.7 ± 1.3 | 59.3 ± 1.2 | 72.4 ± 1.5 | 68.3 ± 0.9 | 68.0 ± 1.0 | 52.1 ± 3.5 | 89.3 ± 0.2 | 86.3 ± 0.2 | 2.38 ± 0.08 |
+| beats+ft+pafa | SC | 73.2 ± 2.7 | 50.2 ± 2.9 | 61.7 ± 0.7 | 59.5 ± 1.3 | 65.4 ± 3.8 | 69.3 ± 1.1 | 69.0 ± 1.4 | 58.9 ± 0.5 | 89.8 ± 0.3 | 85.4 ± 1.0 | 2.47 ± 0.16 |
+| beats+ft+sg_scl | SC | 71.9 ± 4.1 | 50.2 ± 1.5 | 61.1 ± 1.3 | 59.1 ± 0.5 | 65.8 ± 2.3 | 68.9 ± 1.0 | 68.6 ± 0.8 | 52.9 ± 6.4 | 89.7 ± 0.1 | 86.6 ± 0.6 | 2.59 ± 0.21 |
+| beats+ft+qlung | | 67.4 ± 2.1 | 51.2 ± 1.4 | 59.3 ± 0.8 | 58.2 ± 0.7 | 67.5 ± 1.6 | 67.4 ± 0.7 | 67.4 ± 0.7 | 51.8 ± 6.9 | 89.6 ± 0.3 | 86.9 ± 0.4 | 2.40 ± 0.05 |
 
-| Held-out device (cycles) | AST L0 | AST L1 | AST L2 | HeAR L2 |
-|---|---|---|---|---|
-| AKGC417L (1836) | 0.97 | 0.80 | 0.83 | 0.87 |
-| Litt3200 (461) | 0.47 | 0.97 | 0.95 | 0.91 |
-| Meditron (459) | 0.99 | 0.96 | 0.93 | 0.92 |
+### 5.5 Method effects (paired difference to CE on the same encoder and seed, last epoch)
 
-Binomial half-width +-0.014 (1836), +-0.027 (about 460). [Fact] Coverage is below nominal beyond the half-width on AKGC417L and Litt3200 for most rungs, not on Meditron. Whether this is device or label shift is **not separated** (V4 not run on these pairs). E2 (KAUH filter pairs, 30 units per rung): AST L1 0.892 to 0.914, L2 0.904 to 0.927; OPERA probes drop to 0.49 (CT) and 0.45 (CE). Decodability AUC 0.9-1.0 saturates and cannot rank rungs. [Fact] Fine-tuning did not raise decodability or the coverage deficit (AST 0.904 vs 0.910; HeAR 0.900 vs 0.869), reported as negative finding F4.
+Only the rows with abs(mean) > SD on Score, plus the LODO cells; full table in `docs/reports/grid-v1-results.md`.
 
-### 4.5 Stage 1 screening of device variants (3-fold patient CV, 12 of 24 runs)
+| Encoder | Method | ΔSp | ΔSe | ΔScore | ΔHS | Δ2c Score | ΔWorst-dev Score |
+|---|---|---|---|---|---|---|---|
+| BEATs | pafa | +7.5 ± 2.9 | -2.4 ± 2.4 | **+2.6 ± 1.4** | +1.1 ± 1.6 | +1.6 ± 1.8 | **+8.5 ± 2.9** |
+| BEATs | sg_scl | +6.3 ± 7.2 | -2.4 ± 2.2 | +1.9 ± 2.7 | +0.7 ± 1.5 | +1.2 ± 2.3 | +2.5 ± 8.7 |
+| BEATs | patchmix_cl | -1.5 ± 5.1 | +2.5 ± 2.9 | +0.5 ± 2.0 | +0.9 ± 1.7 | +0.6 ± 1.6 | +1.7 ± 6.0 |
+| BEATs | qlung | +1.7 ± 3.8 | -1.4 ± 2.5 | +0.1 ± 1.3 | -0.2 ± 1.1 | -0.3 ± 1.2 | +1.4 ± 4.7 |
+| AST | pafa | +0.9 ± 1.4 | +0.6 ± 3.2 | +0.7 ± 1.3 | +0.7 ± 2.0 | -0.2 ± 1.9 | +2.6 ± 2.2 |
+| AST | patchmix_cl | +3.3 ± 6.2 | -2.1 ± 3.6 | +0.6 ± 2.0 | -0.5 ± 1.5 | -0.2 ± 1.7 | +2.3 ± 3.4 |
+| AST | ce_pafa_cfg | +3.4 ± 2.4 | -0.7 ± 1.4 | **+1.4 ± 1.2** | +0.6 ± 1.0 | +0.5 ± 1.4 | +3.7 ± 3.1 |
+| HTS-AT | patchmix_cl | -0.1 ± 1.4 | +0.7 ± 1.0 | +0.3 ± 0.5 | +0.4 ± 0.5 | +0.5 ± 0.8 | -0.4 ± 2.1 |
+| HTS-AT | sg_scl | +2.4 ± 2.8 | -0.7 ± 0.6 | +0.8 ± 1.3 | +0.2 ± 0.9 | +1.1 ± 1.7 | +3.0 ± 4.0 |
+| HTS-AT | pafa | -3.0 ± 2.4 | -1.4 ± 1.2 | **-2.2 ± 1.3** | -2.0 ± 1.2 | -1.4 ± 1.1 | -0.7 ± 4.9 |
+| HTS-AT | ce_pafa_cfg | -3.0 ± 3.6 | -2.1 ± 3.2 | **-2.5 ± 1.1** | -2.6 ± 1.7 | -1.7 ± 1.0 | -5.2 ± 2.5 |
+| DASS | patchmix | +2.5 ± 2.9 | +0.8 ± 1.6 | **+1.7 ± 1.1** | +1.4 ± 0.8 | +0.7 ± 0.4 | +3.8 ± 4.9 |
+| DASS | pafa | +0.5 ± 3.3 | +1.8 ± 2.3 | **+1.2 ± 0.6** | +1.4 ± 0.6 | +1.3 ± 0.7 | +6.2 ± 2.7 |
+| DASS | sg_scl | +1.9 ± 2.6 | +0.6 ± 2.0 | **+1.2 ± 1.1** | +1.0 ± 1.1 | +0.8 ± 1.0 | +2.5 ± 2.3 |
+| OPERA-CT | pafa | -3.9 ± 3.2 | -0.4 ± 1.2 | **-2.2 ± 1.2** | -1.4 ± 0.7 | -1.2 ± 1.7 | +3.4 ± 1.9 |
 
-Validation-selected epoch on held-out training patients, mean over 3 folds:
+- [Fact] The encoder matters more than the method: fine-tuned Score BEATs 58.9-61.7, HTS-AT 56.3-59.6, DASS 57.5-59.7,
+  AST 56.9-59.0, OPERA-CT 49.3-51.7. Most methods gain less than one seed SD over CE.
+- [Fact] Fine-tuning beats freezing (CE): AST +2.5, DASS +3.7, OPERA-CT +4.7, HTS-AT +7.0, BEATs +7.7.
+- [Fact] PAFA on BEATs is the one large, consistent gain, mostly in Sp and in the worst device (+8.5). PAFA's losses vs
+  its settings (pafa - ce_pafa_cfg): BEATs +1.6 ± 1.8, DASS +1.6 ± 0.4, AST -0.7 ± 0.8.
+- [Fact] Frozen PAFA equals frozen ce_pafa_cfg within 0.2 Score on every encoder: its losses train a projector the
+  classifier does not use. Frozen OPERA-CT nearly ignores abnormal sounds (Se 19-25%).
 
-| Variant | Folds 0 / 1 / 2 | Mean CV Score | Sp / Se | Worst-device | Fold SD |
-|---|---|---|---|---|---|
-| P0 baseline | 64.1 / 63.5 / 56.2 | 61.3 | 84.1 / 38.4 | 54.4 | 4.3 |
-| P1 A1 input | 63.3 / 66.1 / 57.9 | **62.4** | 82.0 / 42.9 | **58.2** | 4.2 |
-| P2 bin norm | 62.0 / 65.1 / 55.7 | 60.9 | 82.0 / 39.8 | 55.5 | 4.8 |
-| P3 random bin gain | 60.3 / 64.1 / 55.5 | 60.0 | 87.7 / 32.2 | 55.1 | 4.3 |
-| P4, P6, P7, P8, P1P3 | not run | | | | |
+### 5.6 Per-class recall and ensembles (BEATs, last epoch)
 
-[Fact] P1 leads P0 by 1.1 (mean) and 3.8 (worst device) but fold SD is about 4, so no variant is distinguishable yet; fold 2 is the hardest for all. P4/P6/P7 launched with a runner that passed `--cv_fold` before `main.py` accepted it (exit at argument parsing, 0 epochs; fixed since in `aeedd4e`); P8 never started. Smoke run (1 epoch, all flags on) passed end to end, so the variant code paths work. Scores in `baselines/patchmix_cl/save/results.json`, logs in `baselines/patchmix_cl/logs/screen_*.log`.
+| Cell | Normal (= Sp) | Crackle | Wheeze | Both | Se | Score |
+|---|---|---|---|---|---|---|
+| beats+ft+ce | 65.7 | 62.3 | 42.6 | 35.8 | 52.7 | 59.2 |
+| beats+ft+pafa | 73.2 | 60.4 | 38.7 | 35.1 | 50.2 | 61.7 |
+| beats+ft+sg_scl | 71.9 | 60.6 | 39.0 | 33.6 | 50.2 | 61.1 |
+| beats+ft+patchmix_cl | 64.2 | 64.5 | 45.8 | 38.2 | 55.2 | 59.7 |
+| beats+ft+ce_pafa_cfg | 66.4 | 65.5 | 42.9 | 30.8 | 53.9 | 60.1 |
+| beats+ft+qlung | 67.4 | 61.0 | 40.9 | 35.0 | 51.2 | 59.3 |
+| beats+ft+add_rsc | 70.9 | 59.9 | 31.6 | 28.8 | 46.9 | 58.9 |
 
-### 4.6 Earlier v4-era findings (full tables in the archive)
+Ensembles = mean softmax at the last epoch, same seed. [test-picked] = members chosen after seeing test results.
 
-[Fact] Short-window branch: no gain (H1 negative). Hard phase pooling: improved AST crackle F1 on HF_Lung only. Tent: no reliable calibration gain. Conformal sets average 2.5-3.5 of 4 labels with OPERA-CT, 1.85 with AST.
+| Ensemble (members) | Sp | Se | Score | HS | 2c Se | 2c Score | 2c HS | Worst-dev Score | Cov | Worst-dev Cov | Set size |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| beats+ft+pafa alone (reference) | 73.2 ± 2.7 | 50.2 ± 2.9 | 61.7 ± 0.7 | 59.5 ± 1.3 | 65.4 ± 3.8 | 69.3 ± 1.1 | 69.0 ± 1.4 | 58.9 ± 0.5 | 89.8 ± 0.3 | 85.4 ± 1.0 | 2.47 ± 0.16 |
+| 8 fine-tuned methods on BEATs (8) | 70.6 ± 1.4 | 53.3 ± 1.2 | 62.0 ± 0.2 | 60.8 ± 0.3 | 68.6 ± 1.3 | 69.6 ± 0.2 | 69.6 ± 0.2 | 55.2 ± 1.2 | 89.3 ± 0.2 | 86.3 ± 0.4 | 1.95 ± 0.03 |
+| CE on AST, HTS-AT, BEATs, DASS (4) | 70.4 ± 2.1 | 50.4 ± 1.0 | 60.4 ± 0.8 | 58.7 ± 0.5 | 64.6 ± 1.5 | 67.5 ± 0.6 | 67.4 ± 0.6 | 48.6 ± 2.6 | 89.6 ± 0.2 | 87.0 ± 0.6 | 1.94 ± 0.01 |
+| 8 methods x 4 encoders (32) | 72.8 ± 1.3 | 50.6 ± 1.3 | 61.7 ± 0.4 | 59.7 ± 0.5 | 64.0 ± 1.1 | 68.4 ± 0.2 | 68.1 ± 0.2 | 50.9 ± 0.7 | 89.7 ± 0.1 | 85.9 ± 0.2 | 1.81 ± 0.01 |
+| [test-picked] LODO set (11) | 74.2 ± 1.5 | 51.7 ± 0.5 | 63.0 ± 0.7 | 60.9 ± 0.4 | 65.9 ± 1.0 | 70.1 ± 0.3 | 69.8 ± 0.1 | 55.8 ± 2.0 | 89.5 ± 0.1 | 86.1 ± 0.2 | 1.86 ± 0.01 |
+| [test-picked] LODO BEATs cells (5) | 71.3 ± 1.7 | 53.4 ± 1.3 | 62.4 ± 0.4 | 61.1 ± 0.4 | 68.8 ± 1.3 | 70.1 ± 0.3 | 70.0 ± 0.3 | 57.0 ± 2.2 | 89.5 ± 0.2 | 86.4 ± 0.3 | 2.08 ± 0.03 |
 
-## 5. Caveats and open issues
+- [Fact] PAFA and SG-SCL raise Sp; Patch-Mix CL raises all three abnormal recalls. Two BEATs methods disagree on 18-28%
+  of test cycles (seed 0). The 8-method BEATs ensemble picks no cell on test: +2.8 Score over BEATs CE, seed SD 1.5 to
+  0.2, and sets of 1.95 labels instead of 2.47; it does not beat PAFA alone on the worst device. Averaging the last 10
+  epochs of one model changes Score by 0.0-0.2: the ensemble gain comes from different models.
+- [Note] The LODO-set ensemble above includes ce_pafa_cfg; LODO v1 runs BEATs CE in its place (user decision 19/10), so
+  the registered E1 has the same 11-cell size with BEATs CE.
 
-- **Prereg timing.** `prereg-v9-amendment.md` (registered 2026-10-07) states that no Stage-1 run had started. File timestamps of the screening runs (local +07: P0 fold 0 01:23, P1 03:24, P2 06:29, P3 08:31 on 2026-10-07) are earlier than or close to the commit of the amendment (`d9c9419`, 04:24 UTC = 11:24 +07), so P0-P3 started before the amendment was committed. The primary hypotheses are unaffected by P0-P3 (no test access), but the amendment sentence should be corrected or the runs declared exploratory. [Assumption] The timestamps are in one timezone; check `logs/screening_driver.log`.
-- **HTS-AT** (committed `9bccec8`) is not in the v8/v9 variant pool; its numbers above come from `outputs/ladder_htsat/ladder-htsat-v1`.
-- **A1/A2 in extraction** are tested on stubs only; no corrected feature cache exists, so H3 (correction closes the deficit) is untested.
-- **ICBHI device is confounded** with class prior and site; E1 deficits are not decomposed.
-- **KAUH** test sets hold about 35 windows per partition; differences below 0.1 in coverage are inside binomial noise, and no CIs were computed for E2.
-- Patch-Mix runs are not deterministic (`cudnn.benchmark`, AMP): seed SD is the right comparison, not run-to-run equality.
+### 5.7 Coverage, published numbers, incidents
 
-## 6. Next steps
+- [Fact] Pooled coverage is at nominal (88.2-90.5%) in every cell; the worst device (Littmann 3200 in 343 of 350 units)
+  falls to 85-88% in most fine-tuned cells and 67-82% in many frozen cells.
+- [Fact] AST best epoch on test vs published: Patch-Mix CL 61.1 ± 0.4 vs 62.37; QLung 61.0 ± 0.9 vs 62.01; ADD-RSC
+  59.6 ± 0.5 vs 65.53 (the reference resizes AST input to 1024 x 256 with its own AST; here the denoising layer runs on
+  each encoder's own input). Published BEATs PC-MCL: 65.37 ± 0.73 (best epoch on test; under test on D).
+- Incidents: QLung's reference quality score is NaN on 71 AKGC417L cycles (leading silence), our port skips silent
+  frames; SG-SCL's reference reversal schedule collapsed BEATs in 3 of 4 seeds, all SG-SCL cells use the DANN ramp;
+  power cut 17/10 10:43 (9.6 h), 13 resumed units rerun cleanly and swapped in (resumed vs rerun Score: mean abs 0.61,
+  largest 2.5).
 
-1. Rerun P4 (three p values), P6, P7, P8, P1P3 screening (about 15 GPU-hours, 2 in parallel); aggregate with `baselines/patchmix_cl/stage1_summary.py`.
-2. Fix the prereg-v9 "no earlier runs" statement or label P0-P3 exploratory.
-3. Select finalists by the registered rule (top 3 by CV plus P0), 5 seeds each, test once; gate G-base on the paired Score difference over P0.
-4. Extract corrected features (`correction`, `a2` keys) and run E1 on AKGC417L and Litt3200; run V4 and V4-oracle to separate label shift from the device part.
-5. Export softmax and embeddings of the frozen finalist (`export_probs.py`) and run Stage 2 over 20 calibration/evaluation re-splits.
+## 6. Caveats
+
+- One split and 5 seeds: a 1-point difference is within seed noise for most cells. The last epoch is the reference
+  schedule's, not a validated epoch; the best epoch is test-selected.
+- Grid cells differ in batch size, cycle length and SpecAugment as well as in the method; only PAFA has a settings
+  control (ce_pafa_cfg).
+- [Fact] The LODO v1 and SC cells were chosen after seeing official-split test results; the held-out-device folds contain
+  those test cycles (mild leakage, stated in Amendment 4). The final AuscultTrust is selected on the LODO folds, so its
+  LODO numbers are selected numbers. The registered AST results stay the registered outcomes.
+- Expect statistical power for coverage on one fold only (Litt3200), as in the registered AST LODO; the other folds
+  mainly show Score robustness. The AKGC417L fold is class-mix dominated (training keeps at most 321 of 1,864 crackle
+  cycles): reported flagged, plus a macro mean without it.
+- ICBHI device is confounded with class mix and site. Worst-device numbers rest on the Littmann 3200 test set (461
+  cycles). GPU numerics are not bit-reproducible (`cudnn.benchmark`, AMP).
+- Units resumed from `last.pth` after a crash do not restore the RNG state; rerun them cleanly at the end if exact runs
+  matter (as done for the grid).
+
+## 7. Next steps
+
+1. Decide C's GPU share (30% cap vs 2 jobs at once).
+2. Monitor A, B, C, D (`logs/<run>-<M>.log`, `logs/lodo-v1-move.log`, `logs/gpu-<M>.csv`); when D's PC-MCL ends,
+   build its table paired against BEATs PAFA and CE and apply the Amendment 5 rule.
+3. When LODO v1 ends (about 21/10): stage 6 (inference arms), stage 7 (analysis, `docs/reports/lodo-v1-results.md`).
+4. When C ends: SC vs no SC paired by seed (official split vs grid units; LODO vs A/B/D units); then the dynamic bound,
+   spread over the idle machines.
+5. Optional ensembles E1-E4 and distillation; choose the final AuscultTrust with the user; KAUH controls, screening view,
+   phantom.
+
+## 8. Phase 0 (before v9)
+
+Frozen-encoder ladders, fine-tuning ladders, Part II shift study and the Stage-1 screening of device variants (P0-P8)
+are in `docs/reports/report_archive_2026-10-07.md`, with the v4-era detail it links. Their main findings: the early weak
+base model was the encoder; fine-tuning did not raise decodability or the coverage deficit (F4); no device variant
+separated from the baseline in 3-fold CV.
