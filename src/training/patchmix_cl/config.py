@@ -246,6 +246,7 @@ def build_parser():
     p.add_argument("--proj_dim", type=int, default=768)
     p.add_argument("--pcmcl_mix", type=float, default=0.5, help="pcmcl: multi-cycle samples per epoch, fraction of the training cycles")
     p.add_argument("--pcmcl_ssl", type=float, default=0.3, help="pcmcl: patient-matching samples per epoch, fraction of the training cycles")
+    p.add_argument("--pcmcl_pafa", type=int, default=0, help="pcmcl: 1 adds the PAFA losses (lambda_pcsl, lambda_gpal) on samples of one patient")
     p.add_argument("--pcmcl_aux", type=float, default=0.1, help="pcmcl: weight of the patient-matching loss (paper: 0.1)")
     p.add_argument("--lambda_pcsl", type=float, default=5.0, help="ce_pafa: weight of the patient cohesion-separation loss")
     p.add_argument("--lambda_gpal", type=float, default=0.005, help="ce_pafa: weight of the global patient alignment loss")

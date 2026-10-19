@@ -1,0 +1,13 @@
+# PAFA + PC-MCL on BEATs: pcmcl_beats.yaml plus PAFA's BEATs losses (lambda_pcsl 50.0, lambda_gpal 0.0005 as
+# pafa_beats.yaml), applied to the samples of one patient (single cycles and same-patient pairs).
+method: pcmcl
+batch_size: 32
+desired_length: 10
+spec_augment: 0
+epochs: 100
+pcmcl_mix: 0.5
+pcmcl_ssl: 0.3
+pcmcl_aux: 0.1
+pcmcl_pafa: 1
+lambda_pcsl: 50.0
+lambda_gpal: 0.0005

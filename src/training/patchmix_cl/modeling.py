@@ -57,8 +57,10 @@ def build_model(args):
         projector = Projector(model.final_feat_dim, args.proj_dim)
     elif args.method == "ce_pafa":  # PAFA AST setting: LayerNorm MLP head, 768 -> 768 -> 768
         projector = PafaProjectionHead(model.final_feat_dim, None, model.final_feat_dim, attention=False, norm_type="ln")
-    elif args.method == "pcmcl":
-        projector = nn.Linear(model.final_feat_dim, 2)
+    elif args.method == "pcmcl":  # patient-matching head, and with --pcmcl_pafa PAFA's projection head
+        projector = nn.ModuleDict({"ssl": nn.Linear(model.final_feat_dim, 2)})
+        if args.pcmcl_pafa:
+            projector["pafa"] = PafaProjectionHead(model.final_feat_dim, None, model.final_feat_dim, attention=False, norm_type="ln")
     else:
         projector = nn.Identity()
     criterion = [nn.BCEWithLogitsLoss().cuda(), nn.CrossEntropyLoss().cuda()] if args.method == "pcmcl" else [nn.CrossEntropyLoss().cuda()]
@@ -66,7 +68,7 @@ def build_model(args):
         criterion.append(PatchMixLoss(criterion=criterion[0]).cuda())
     if args.method == "patchmix_cl":
         criterion.append(PatchMixConLoss(temperature=args.temperature).cuda())
-    if args.method == "ce_pafa":
+    if args.method == "ce_pafa" or args.method == "pcmcl" and args.pcmcl_pafa:
         criterion.append(PAFALoss().cuda())
     if args.method == "sg_scl":
         criterion.append(MetaCL(temperature=args.temperature).cuda())

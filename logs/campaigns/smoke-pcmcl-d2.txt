@@ -1,0 +1,2 @@
+RUN_ID=smoke-pcmcl-d2 .venv-train/bin/python -m src.training.patchmix_cl.main --config experiments/train/base.yaml,experiments/train/encoder_beats.yaml,experiments/train/grid/pcmcl_beats.yaml --cell beats+ft+pcmcl --selection fixed --stop_epoch 2 --report_epochs 2 --seed 0
+RUN_ID=smoke-pcmcl-d2 .venv-train/bin/python -m src.training.patchmix_cl.main --config experiments/train/base.yaml,experiments/train/encoder_beats.yaml,experiments/train/grid/pafa_pcmcl_beats.yaml --cell beats+ft+pafa_pcmcl --selection fixed --stop_epoch 2 --report_epochs 2 --seed 0

@@ -100,7 +100,11 @@ def train_epoch(loader, model, classifier, projector, criterion, optimizer, epoc
                 loss = criterion[0](output.float(), labels.float())
                 ssl = quality.cuda(non_blocking=True)
                 if (ssl >= 0).any():
-                    loss = loss + args.pcmcl_aux * criterion[1](projector(features[ssl >= 0]).float(), ssl[ssl >= 0].long())
+                    loss = loss + args.pcmcl_aux * criterion[1](projector["ssl"](features[ssl >= 0]).float(), ssl[ssl >= 0].long())
+                one = patients >= 0  # PAFA only on samples of one patient (multi-patient concatenations carry -1)
+                if args.pcmcl_pafa and one.sum() > 1:
+                    loss = loss + criterion[2](projector["pafa"](features[one.cuda()]).float(), patients[one].cuda(non_blocking=True),
+                                               lambda_pcsl=args.lambda_pcsl, lambda_gpal=args.lambda_gpal)
                 output, labels = torch.log(four_class_probs(output) + 1e-8), four_class(labels)  # 4-class view for the accuracy
             elif args.method == "add_rsc":  # cross-entropy + bias denoising loss on the denoising layer's own logits
                 with _encoder_context(args):

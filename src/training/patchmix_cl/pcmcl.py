@@ -75,9 +75,9 @@ class PCMCLTrain(Dataset):
         return self.ds.transform(image) if self.ds.transform is not None else image
 
     def _item(self, parts, target, ssl):
-        first = parts[0]
-        return (self._image(parts), torch.tensor(target, dtype=torch.float32), self.ds.devices[first],
-                int(self.ds.patients[first]), float(ssl))
+        pats = {int(self.ds.patients[i]) for i in parts}
+        return (self._image(parts), torch.tensor(target, dtype=torch.float32), self.ds.devices[parts[0]],
+                pats.pop() if len(pats) == 1 else -1, float(ssl))  # patient -1: parts of several patients
 
     def _mixed(self):
         classes, target = random.choice(COMBINATIONS)

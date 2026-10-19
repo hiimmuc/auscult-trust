@@ -1,7 +1,7 @@
-# Amendment 5 to `prereg-v8.md` (proposal v9): PC-MCL on BEATs (pending)
+# Amendment 5 to `prereg-v8.md` (proposal v9): PC-MCL and PAFA + PC-MCL on BEATs
 
-**Status: DRAFT 19/10/2026, pending until the LODO v1 runs of Amendment 4 are done. Registered when committed with
-status "registered", before its first training unit.** Exploratory: reported with the same statistics, no verdict.
+**Status: registered 19/10/2026, before the first training unit of run `pcmcl-v1` (machine D; the user moved it ahead
+of the end of LODO v1).** Exploratory: reported with the same statistics, no verdict.
 
 ## 1. Why
 
@@ -22,13 +22,16 @@ best-epoch column (BEATs patchmix_cl 63.6 ± 0.8, our PAFA port 63.2 ± 0.6 vs 6
     reference threshold rule at 0.5); conformal sets use it unchanged.
   - Settings not given by the paper or a script: PAFA's BEATs setting (batch 32, lr 5e-5, 100 epochs, no SpecAugment),
     10 s input (paper).
+- Cell `beats+ft+pafa_pcmcl`: `grid/pafa_pcmcl_beats.yaml` = the above plus PAFA's BEATs losses (lambda_pcsl 50.0,
+  lambda_gpal 0.0005) on the samples of one patient (single cycles and same-patient pairs; samples joining two
+  patients have no patient and are left out of the PAFA loss).
 - Not implemented: SC on concatenated cycles (needed only if PC-MCL enters the SC arms).
 
 ## 3. Protocol and readings
 
-- Official split, seeds 0-4, fixed last epoch (100), run `pcmcl-v1`. Best epoch on test reported as optimistic.
+- Official split, seeds 0-4, fixed last epoch (100), run `pcmcl-v1`, machine D. Best epoch on test reported as optimistic.
 - Paired by seed against `beats+ft+pafa` and `beats+ft+ce` of the grid: Sp, Se, Score, HS, 2-class, worst device,
   coverage.
-- Enters LODO and SC only if its last-epoch Score beats BEATs PAFA (61.7 ± 0.7) by more than one seed SD.
-- Cost: about 28 ms per on-the-fly training item (3,313 of 7,455 items per epoch) on top of BEATs training at 10 s:
-  an estimated 3-4 h per unit, measured at the smoke run.
+- A cell enters LODO and SC only if its last-epoch Score beats BEATs PAFA (61.7 ± 0.7) by more than one seed SD.
+- Cost (smoke on D, RTX 5090, two jobs at once): about 57 s per epoch, about 1.7 h per unit; 10 units, 2 at a time,
+  about 9 h. Two epochs of the real schedule: test Score 59.9 (pcmcl) and 51.0 (pafa_pcmcl) after epochs 1 and 2.
