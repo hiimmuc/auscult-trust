@@ -21,7 +21,7 @@ best encoder (BEATs PAFA 61.7 ± 0.7 at the last epoch; BEATs Patch-Mix CL 63.6 
 user treats the old AST AuscultTrust as stale: the final AuscultTrust (encoder + method + SC) is chosen after LODO v1 and
 the trained-SC arms (BEATs so far). Running now: LODO without SC (machines A, B; D joins when PC-MCL ends), trained SC
 static (C), PC-MCL trials (D). On 19/10 machine E joined: LODO without SC is shared by A, B and E (end about 20/10
-18:00); C's SC units are shared with D once PC-MCL ends (end about 21/10 02:30) (section 3).
+18:00); C trains SC until PC-MCL ends on D, then all its unstarted SC units move to D (end about 21/10 22:00) (section 3).
 
 ## 2. Overall plan
 
@@ -54,8 +54,8 @@ first; C limited to 30% of its GPU; PC-MCL on D now; ensembles and distillation 
 | A | RTX 5000 Ada 32 GB | `lodo-v1` no SC, list `lodo-v1-A2` | 36 | about 20/10 18:00 |
 | B | RTX 5090 32 GB | `lodo-v1` no SC, list `lodo-v1-B2` | 89 | about 20/10 18:00 |
 | E | RTX 5090 32 GB (`10.148.182.179`) | `lodo-v1` no SC, list `lodo-v1-E2` | 88 | about 20/10 18:00 |
-| C | RTX PRO 6000 96 GB | `lodo-v1` trained SC static; list `lodo-v1-C2` after the split | about 104 after the split | about 21/10 02:30 |
-| D | RTX 5090 32 GB | `pcmcl-v1` (10 units), then about 65 SC units from C (`lodo-v1-D2`) | 10 + about 65 | PC-MCL about 20/10 11:30; SC about 21/10 02:30 |
+| C | RTX PRO 6000 96 GB | `lodo-v1` trained SC static, until PC-MCL ends on D; then only its running jobs | 161 at 20/10 01:00 | about 20/10 11:00 |
+| D | RTX 5090 32 GB | `pcmcl-v1` (10 units), then all unstarted SC units from C (`lodo-v1-D2`) | 10 + about 130 | PC-MCL about 20/10 10:45; SC about 21/10 22:00 |
 
 - [Fact] Machine E joined on 19/10 (data, weights, caches, code and venv copied from A; 1-epoch smoke of one AST, HTS-AT
   and BEATs LODO unit passed with all outputs). LODO without SC is shared by A, B and E; trained SC by C and D.
@@ -63,12 +63,15 @@ first; C limited to 30% of its GPU; PC-MCL on D now; ensembles and distillation 
   jobs go on), keeps running and interrupted units on their machine, gives every unstarted unit, longest first, to the
   machine that would finish it first (measured throughput), and starts each machine's new sweep only after its own old
   jobs have ended, so nothing is killed and nothing runs twice. It restarts a sweep that dies (power cut) and copies the
-  outputs to A at the end. A+B+E: applied 19/10 18:42, log `logs/lodo-v1-share-ABE.log`. C+D: waits for PC-MCL on D,
-  log `logs/lodo-v1-share-CD.log`.
+  outputs to A at the end. A+B+E: applied 19/10 18:42, log `logs/lodo-v1-share-ABE.log`. C to D (user decision 20/10):
+  waits for PC-MCL on D, then moves every unstarted SC unit from C to D, log `logs/lodo-v1-share-D.log`.
+- [Fact] Incident: our jobs on C were killed by another user at about 19/10 23:52; restarted 20/10 01:02; the two cut-off
+  units rerun from epoch 0 (partial runs kept in `<outputs|checkpoints>/train/lodo-v1-interrupted/`).
 - [Fact] Throughput in B-smoke hours (one job alone on B) per wall hour, measured since each sweep started: A 0.80, B 1.94,
   C 2.15; E and D assumed equal to B (same GPU). PC-MCL: about 1.9 h per unit, one at a time (a job takes about 19 GB).
 - [Assumption] ±20% on every estimate; A and B idle partly while their last old jobs drain; E's speed is unmeasured.
-- All training ends about 21/10 02:30 (was 21/10 14:00 for C and 22/10 03:00 for A).
+- All training ends about 21/10 22:00, set by SC on D alone (sharing the SC units between C and D would end about
+  21/10 06:00; A, B and E are free from about 20/10 18:00 and could take SC units too).
 - Open issue: C's jobs use 52 GB (54% of the card), above the 30% the user allowed; the scheduler budgets only the
   reservations (29 GB). The user decides.
 - From about 20/10 18:00 A, B and E are idle; the dynamic-bound SC arms (stage 8, about 108 smoke hours) could run there.

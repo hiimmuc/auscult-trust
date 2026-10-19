@@ -4,15 +4,16 @@ outputs on A. Runs on A, drives the other machines through ssh; safe to restart 
     # LODO without SC shared by A, B and E, now:
     setsid nohup .venv-train/bin/python scripts/lodo_move.py --src A:lodo-v1-A B:lodo-v1-B --to A B E \
         >> logs/lodo-v1-share-ABE.log 2>&1 < /dev/null &
-    # trained SC shared by C and D, once D's pcmcl-v1 sweep has ended:
-    setsid nohup .venv-train/bin/python scripts/lodo_move.py --src C:lodo-v1-C --to C D --after D:pcmcl-v1 \
-        >> logs/lodo-v1-share-CD.log 2>&1 < /dev/null &
-    # plan only (D busy for 18 more hours), nothing changed:
-    .venv-train/bin/python scripts/lodo_move.py --src C:lodo-v1-C --to C D --dry --delay D=18
+    # trained SC moved from C to D once D's pcmcl-v1 sweep has ended (C only finishes the jobs it is running):
+    setsid nohup .venv-train/bin/python scripts/lodo_move.py --src C:lodo-v1-C --to D --after D:pcmcl-v1 \
+        >> logs/lodo-v1-share-D.log 2>&1 < /dev/null &
+    # plan only (D busy for 10 more hours), nothing changed:
+    .venv-train/bin/python scripts/lodo_move.py --src C:lodo-v1-C --to D --dry --delay D=10
 
 1. With `--after M:RUN`: wait until M's sweep of RUN has stopped with all its units done (or its final line written).
-2. Stop the source schedulers by PID. Their running jobs go on and stay on their machine, as do interrupted units
-   (their last.pth is there).
+2. Stop the source schedulers by PID. Their running jobs go on and finish on their machine. Interrupted units (job log
+   or last.pth, no report.json, not running) are moved aside to `<outputs|checkpoints>/train/<run>-interrupted/` and
+   rerun from epoch 0 (a resume would not restore the RNG state). A source machine not in `--to` only drains.
 3. Every unit not started yet goes, longest first, to the machine that would finish it first. Hours = smoke hours on B x
    fold cost x SC cost; throughput = B-smoke hours per wall hour, measured on each machine's `<run>-<M>` list since it
    started (`--speed M=x` overrides; a machine without a list gets B's).
@@ -106,17 +107,19 @@ def speed(m, lst):
     ls, fin, prog = [unit(l) for l in lines(m, lst)], done(m, lst.rsplit("-", 1)[0]), progress(m, lst)
     did = sum(hours(u) for u in ls if u in fin) + sum(hours(u) - left(u, prog) for u in prog if u in ls and u not in fin)
     t0 = int(sh(m, f"stat -c %W logs/{lst}/0.log").strip())
-    return did / max((time.time() - t0) / 3600, 0.5)
+    t1 = int(sh(m, f"stat -c %Y logs/{lst}/*.log | sort -n | tail -1").strip())  # last write: a stopped list stops its clock
+    return did / max((t1 - t0) / 3600, 0.5)
 
 
 def plan(run, src, to, speeds, delay):
     """Assign units: running and interrupted ones stay; the rest longest first to the machine that ends it first."""
-    sp = {m: speeds.get(m) or (speed(m, l) if m in src else None) for m, l in [(m, src.get(m)) for m in to]}
+    sp = {m: speeds.get(m) or (speed(m, src[m]) if m in src else None) for m in dict.fromkeys(list(src) + list(to))}
     b = sp.get("B") or speeds.get("B") or speed("B", f"{run}-B")
     sp = {m: v or b for m, v in sp.items()}
     keep, free, lines_of, end = {m: [] for m in to}, [], {}, {}
-    for m in to:
+    for m in dict.fromkeys(list(src) + list(to)):
         end[m] = delay.get(m, 0.0)
+        keep.setdefault(m, [])
         if m not in src:
             continue
         ls = lines(m, src[m])
@@ -129,10 +132,8 @@ def plan(run, src, to, speeds, delay):
             lines_of[u] = l
             if u in fin:
                 continue
-            if u in run_now or u in prog:
+            if u in run_now:
                 keep[m].append(u)
-                if u not in run_now:
-                    end[m] += left(u, prog) / sp[m]
             else:
                 free.append(u)
     for u in sorted(free, key=lambda u: -hours(u)):
@@ -140,6 +141,14 @@ def plan(run, src, to, speeds, delay):
         end[m] += hours(u) / sp[m]
         keep[m].append(u)
     return keep, lines_of, sp, end
+
+
+def set_aside(m, run, u):
+    """Move an interrupted unit's outputs, checkpoint and job log aside so that it reruns from epoch 0."""
+    t = time.strftime("%Y%m%d-%H%M")
+    sh(m, f"for k in outputs checkpoints; do s=$k/train/{run}/{u[0]}/seed{u[1]}; d=$k/train/{run}-interrupted/{u[0]}/seed{u[1]}-{t}; "
+          f"[ -e $s ] && mkdir -p $(dirname $d) && mv $s $d; done; true", check=True)
+    log(f"{m}: interrupted unit {u[0]} seed {u[1]} moved aside, reruns from epoch 0")
 
 
 def start(m, lst):
@@ -178,11 +187,18 @@ def main():
             for pid in sweep_pids(m, lst):
                 sh(m, f"kill {pid}", check=True)
                 log(f"{m}: stopped sweep {lst} (PID {pid}); its running jobs continue")
+            sh(m, f"touch {CAMP}/{lst}.moved", check=True)  # tells scripts/grid_status.sh the stop was on purpose
         keep, lines_of, sp, end = plan(run, src, a.to, speeds, {})
+        for m, lst in src.items():
+            fin, run_now, prog = done(m, run), training(m), progress(m, lst)
+            ckpt = {(p.split("/")[3], int(p.split("/")[4][4:])) for p in sh(m, f"ls checkpoints/train/{run}/*/seed*/last.pth 2>/dev/null").split()}
+            for u in map(unit, lines(m, lst)):
+                if u not in fin and u not in run_now and (u in prog or u in ckpt):
+                    set_aside(m, run, u)
         for m in a.to:
             sh(m, f"mkdir -p {CAMP} && cat > {CAMP}/{new[m]}.txt", check=True, input="".join(lines_of[u] + "\n" for u in keep[m]))
         saved.write_text(json.dumps({"time": time.strftime("%Y-%m-%d %H:%M"), "speed": sp, "end_h": end,
-                                     "units": {m: [list(u) for u in keep[m]] for m in a.to}}, indent=1))
+                                     "units": {m: [list(u) for u in v] for m, v in keep.items()}}, indent=1))
         log("plan:", json.dumps({"speed": sp, "end_h": end, "units": {m: len(v) for m, v in keep.items()}}))
     units = {m: {tuple(u) for u in v} for m, v in json.loads(saved.read_text())["units"].items()}
     started = set()
@@ -206,7 +222,10 @@ def main():
         time.sleep(300)
     for m in todo:
         log(f"{m}: sweep {new[m]} ended with units missing, see logs/{new[m]}.log")
-    for m in a.to:
+    drain = [m for m in units if m not in a.to]  # source machines that only finish their running jobs
+    while any(units[m] & training(m) for m in drain):
+        time.sleep(300)
+    for m in drain + list(a.to):  # drained machines first: a unit moved off them is then overwritten by its rerun
         if m != "A":
             subprocess.run(["rsync", "-a", f"{HOST[m]}:{REMOTE}/outputs/train/{run}/", f"outputs/train/{run}/"], cwd=REPO, check=True)
     log(f"ALL DONE: {', '.join(a.to)} units of {run} in outputs/train/{run}/ on A")
