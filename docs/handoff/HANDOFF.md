@@ -25,20 +25,24 @@ The grid monitoring handoff is archived as `docs/handoff/HANDOFF_2026-10-15-grid
 
 ## Next steps
 
-Step 0 (done 19/10): job lists `logs/campaigns/lodo-v1-{A,B}.txt` (`scripts/grid.py lodo-jobs`, 315 units: 12 no-SC cells
-x 4 folds x 5 seeds + trained SC static on BEATs pafa, BEATs patchmix_cl, HTS-AT patchmix_cl, official split + 4 folds);
-smoke `smoke-lodo-v1` (21 units on A, 2 on B, 1 epoch): 0 failures, `cal_preds.npz` and `test_preds.npz` written, SC
-epoch time equal to no-SC. Draft `docs/updates/prereg-v9-amendment-4.md`. Estimate: about 68 h on both machines.
-
-Step 1 needs the user's confirmation. On confirmation:
-1. Set Amendment 4 status to "registered 19/10/2026" (or the date), commit and push.
-2. rsync code and `logs/campaigns/lodo-v1-B.txt` to B.
-3. GPU logger on both machines:
-   `setsid nohup nvidia-smi --query-gpu=timestamp,utilization.gpu,memory.used --format=csv -l 60 >> logs/gpu-<M>.csv 2>&1 < /dev/null &`
-   (over ssh, start detached processes with `ssh ... 'bash -s' < script` or the ssh client stays attached).
-4. Sweeps: `RUN_ID=lodo-v1 SWEEP_TAG=-<M> setsid nohup .venv-train/bin/python scripts/sweep.py logs/campaigns/lodo-v1-<M>.txt --workers 4 --ram-gb 6 > logs/lodo-v1-<M>.log 2>&1 < /dev/null &`
-5. Monitoring: `scripts/grid_status.sh` and `grid.py audit` hard-code `grid-v1`; parametrise by run before handing to a monitor.
-6. Then stages L2-L3 of `docs/updates/lodo-plan-v1.md`; ensembles (L5) and distillation are optional.
+State 19/10 13:10 (Amendment 4 registered, `docs/updates/prereg-v9-amendment-4.md`):
+- **Machine C** (`ssh namdp15@10.148.183.119`, key login, RTX PRO 6000 96 GB, same repo path; data, models, repos and
+  `.venv-train` synced from A; ICBHI raw audio in `data/raw/icbhi` because `data/processed` holds symlinks): trained SC,
+  static bound, 7 cells (AST patchmix_cl, pafa; HTS-AT patchmix_cl, sg_scl; BEATs patchmix_cl, pafa, sg_scl), official
+  split + 4 LODO folds, 175 units, `logs/campaigns/lodo-v1-C.txt`. Running since 13:05:
+  `RUN_ID=lodo-v1 SWEEP_TAG=-C ... sweep.py logs/campaigns/lodo-v1-C.txt --workers 3 --gpu-gb 29 --ram-gb 6`, log
+  `logs/lodo-v1-C.log`, GPU log `logs/gpu-C.csv`. The user allowed up to 30% of C's GPU: memory budget 29 GB (compute
+  share is not capped). Dynamic-bound SC comes after (`grid.py lodo-jobs --sc-mode dynamic --names C ...`).
+- **Machines A and B**: LODO without SC, 11 cells (AST ce, pafa, patchmix_cl; HTS-AT ce, patchmix_cl, sg_scl; BEATs ce,
+  patchmix_cl, sg_scl, pafa, qlung), 220 units, `logs/campaigns/lodo-v1-{A,B}.txt`, about 44 h. NOT started: waiting
+  for the user's go. Start: GPU logger, then
+  `RUN_ID=lodo-v1 SWEEP_TAG=-<M> setsid nohup .venv-train/bin/python scripts/sweep.py logs/campaigns/lodo-v1-<M>.txt --workers 4 --ram-gb 6 > logs/lodo-v1-<M>.log 2>&1 < /dev/null &`
+  (sync code and the B list to B first; over ssh use `ssh ... 'bash -s' < script` so the client detaches).
+- Smoke runs passed on A, B and C (`smoke-lodo-v1`, `-b`, `-c`).
+- Monitoring: `scripts/grid_status.sh` and `grid.py audit` hard-code `grid-v1` and machines A/B; parametrise by run and
+  add C before handing to a monitor.
+- Then stages L2-L3 of `docs/updates/lodo-plan-v1.md`; ensembles and distillation optional. The final AuscultTrust
+  configuration is chosen after LODO and SC (BEATs so far). Open: PC-MCL as an extra candidate (see the chat of 19/10).
 
 ## Gotchas learned in the grid
 
