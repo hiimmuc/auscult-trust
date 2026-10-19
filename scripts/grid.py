@@ -121,11 +121,13 @@ def main():
     t.add_argument("--epoch", default="last", help="last, best_test (optimistic: best Score on test per seed) or an epoch number")
     lj = sub.add_parser("lodo-jobs")
     lj.add_argument("--smoke", nargs="+", required=True, help="smoke json per machine, in the order A B")
-    lj.add_argument("--cells", nargs="+", required=True)
+    lj.add_argument("--cells", nargs="*", default=[])
     lj.add_argument("--sc-cells", nargs="*", default=[], help="cells that also get trained SC (static), official split and LODO")
     lj.add_argument("--speed", nargs="+", type=float, default=None)
     lj.add_argument("--seeds", type=int, default=5)
     lj.add_argument("--run", default="lodo-v1")
+    lj.add_argument("--names", nargs="+", default=["A", "B"], help="machine names, one per smoke json; lists are <run>-<name>.txt")
+    lj.add_argument("--sc-mode", default="static", choices=["static", "dynamic"])
     u = sub.add_parser("audit")
     u.add_argument("--list", default=None, help="job list of this machine: check only its units, including their checkpoints")
     u.add_argument("--hash", action="store_true", help="also write the SHA-256 of the split file and of every checkpoint")
@@ -221,9 +223,10 @@ def lodo_jobs(a):
         py = DASS_PY if c["encoder"] == "dass" else PY
         folds = ([(None, 1.0)] if sc else []) + list(LODO_DEVICES.items())
         for dev, cost in folds:
-            cfg = c["config"] + (["experiments/train/sc.yaml", "experiments/train/sc_static.yaml"] if sc else []) + (
+            sc_cfg = ["experiments/train/sc.yaml"] + (["experiments/train/sc_static.yaml"] if a.sc_mode == "static" else [])
+            cfg = c["config"] + (sc_cfg if sc else []) + (
                 [f"experiments/train/lodo_{dev}.yaml"] if dev else [])
-            name = cell + ("+sc+sc_static" if sc else "") + (f"+lodo_{dev}" if dev else "")
+            name = cell + (("+sc+sc_static" if a.sc_mode == "static" else "+sc") if sc else "") + (f"+lodo_{dev}" if dev else "")
             for s in range(a.seeds):
                 line = "RUN_ID={} MEM_GB={:.0f} {} -m src.training.patchmix_cl.main --config {} --cell {} {}--selection fixed --report_epochs {} --seed {}".format(
                     a.run, max(4, smokes[0][cell]["peak_gb"] * 1.25 + 1.5), py, ",".join(cfg), name, "".join(x + " " for x in c["extra"]), epochs, s)
@@ -235,7 +238,7 @@ def lodo_jobs(a):
         k = min(range(len(smokes)), key=lambda i: load[i] + hours[i])
         load[k] += hours[k]
         lists[k].append(line)
-    for name, lines, h in zip("AB", lists, load):
+    for name, lines, h in zip(a.names, lists, load):
         p = REPO / "logs" / "campaigns" / f"{a.run}-{name}.txt"
         p.parent.mkdir(parents=True, exist_ok=True)
         p.write_text("\n".join(lines) + "\n")
