@@ -122,3 +122,5 @@
 19/10/2026 10:20 | A 120/120 DONE, B 230/230 DONE, no sweep on either machine, 0 failed | NaN none | FAILED 0 | OOM 0 | collapsed none | disk A 137G B 369G | no change; tables built; nothing to do
 19/10/2026 11:20 | ALL-DONE stable: A 120/120, B 230/230, no sweeps, GPU ~0 both, FAILED 0, OOM 0, NaN none, collapsed none; tables present. Nothing to do.
 19/10/2026 11:20 | synced outputs B->A (no delete); A 120/120, B 230/230 | NaN none | FAILED 0 | OOM 0 | no sweep running
+19/10/2026 12:20 | ALL-DONE stable: A 120/120, B 230/230, no sweeps, GPU ~0 both, FAILED 0, OOM 0, NaN none, collapsed none; tables present; A disk 71G (down from 137G, above 30G floor). Nothing to do.
+19/10/2026 12:20 | A 120/120 DONE, B 230/230 DONE, no sweep either machine | NaN none | FAILED 0 | OOM 0 | collapsed none | checkpoints rsync B->A done | disk A 71G | nothing to act

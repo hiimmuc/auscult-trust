@@ -18,10 +18,10 @@ The grid monitoring handoff is archived as `docs/handoff/HANDOFF_2026-10-15-grid
 
 ## Decisions taken by the user
 
-- LODO cells (11): AST ce, pafa, patchmix_cl; HTS-AT ce, patchmix_cl, sg_scl; BEATs patchmix_cl, sg_scl, pafa,
-  ce_pafa_cfg, qlung. No DASS, no OPERA-CT. BEATs CE not included (open).
-- Ensemble rule fixed before LODO: E1 = equal-weight mean softmax of the 11 cells per fold and seed (primary); E2 BEATs
-  5; E3/E4 AST 3, HTS-AT 3. Then distillation into one BEATs model.
+- LODO cells: AST ce, pafa, patchmix_cl; HTS-AT ce, patchmix_cl, sg_scl; BEATs patchmix_cl, sg_scl, pafa, ce_pafa_cfg,
+  qlung. No DASS, no OPERA-CT. The draft lists also hold BEATs ce (control) and trained SC static on 3 cells: both
+  proposed, pending the user's step-1 confirmation (remove with `grid.py lodo-jobs` arguments if declined).
+- Ensembles (E1-E4) and distillation are optional, after the primary LODO analysis. The 80/20 step is dropped.
 
 ## Next steps
 
