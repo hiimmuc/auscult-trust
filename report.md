@@ -72,8 +72,8 @@ first; C limited to 30% of its GPU; PC-MCL on D now; ensembles and distillation 
 - [Assumption] ±20% on every estimate; A and B idle partly while their last old jobs drain; E's speed is unmeasured.
 - All training ends about 21/10 22:00, set by SC on D alone (sharing the SC units between C and D would end about
   21/10 06:00; A, B and E are free from about 20/10 18:00 and could take SC units too).
-- Open issue: C's jobs use 52 GB (54% of the card), above the 30% the user allowed; the scheduler budgets only the
-  reservations (29 GB). The user decides.
+- C runs 3-4 jobs since 20/10 01:20 (`--workers 4 --gpu-gb 34`, about 25 GB in use = 26% of the card, within the
+  user's 30%); this moves more SC units through C before the move to D, so the SC end may come a few hours earlier.
 - From about 20/10 18:00 A, B and E are idle; the dynamic-bound SC arms (stage 8, about 108 smoke hours) could run there.
 
 ## 4. Registered core (v9, AST), from `docs/reports/report_2026-10-09.md`

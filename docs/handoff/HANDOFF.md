@@ -59,13 +59,15 @@ line, and rsync the other machines' `outputs/train/lodo-v1/` to A at the end. Pl
 the full GPU (scheduler budget 30.8 GB). 1-epoch smoke of one unit per encoder (`smoke-lodo-e`) passed.
 
 **Scheduler restart by hand** (only if a dispatcher is not running; the dispatchers do it themselves):
-`RUN_ID=<run> SWEEP_TAG=-<tag> setsid nohup .venv-train/bin/python scripts/sweep.py logs/campaigns/<run>-<tag>.txt --workers 4 [--workers 3 --gpu-gb 29 on C] --ram-gb 6 >> logs/<run>-<tag>.log 2>&1 < /dev/null &`
+`RUN_ID=<run> SWEEP_TAG=-<tag> setsid nohup .venv-train/bin/python scripts/sweep.py logs/campaigns/<run>-<tag>.txt --workers 4 [--gpu-gb 34 on C] --ram-gb 6 >> logs/<run>-<tag>.log 2>&1 < /dev/null &`
 (`<tag>` = A2, B2, C2, D2, E2; `pcmcl-v1-D`: `--workers 2`). Over ssh start it with `ssh host 'bash -s' < script.sh`, else
 the ssh client stays attached. Finished units are skipped; interrupted ones resume from `last.pth` (RNG state not
 restored: rerun such units cleanly at the end if exact runs matter, as `scripts/grid_rerun.py` did for the grid).
 
-**Open issue on C (the user decides):** the user allowed up to 30% of C's GPU. The scheduler caps the summed `MEM_GB`
-reservations at 29 GB, but jobs use more than reserved on this card (three jobs used 52 GB on 19/10 16:49).
+**C's GPU share:** the user allows about 30% of C's 96 GB (3-4 jobs). Since 20/10 01:20 C's scheduler runs
+`--workers 4 --gpu-gb 34` (reservations: 3 BEATs jobs at 11 GB, or 4 with HTS-AT units); actual use about 8.3 GB per BEATs
+job (3 jobs about 25 GB). No hard per-process cap: on 19/10 16:49 one job grew to 35.6 GB, so check `logs/gpu-C.csv`
+(report if our jobs together pass about 35 GB).
 
 **D note:** one PC-MCL job uses about 19 GB, so `pcmcl-v1-D` runs one job at a time (about 1.9 h per unit).
 

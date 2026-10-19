@@ -37,7 +37,7 @@ HOST = {"B": "namdp15@10.148.183.8", "C": "namdp15@10.148.183.119", "D": "namdp1
 REMOTE = "Workspace/Personal/KHKT-CVA-2026/auscult-trust"
 CAMP = "logs/campaigns"
 PY = ".venv-train/bin/python"
-SWEEP_ARGS = {"C": "--workers 3 --gpu-gb 29"}  # C: the user's share of its GPU
+SWEEP_ARGS = {"C": "--workers 4 --gpu-gb 34"}  # C: the user's share of its GPU (about 30%)
 SMOKE = json.loads((REPO / "logs/grid_smoke_B.json").read_text())
 
 
