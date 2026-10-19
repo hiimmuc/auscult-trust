@@ -8,7 +8,7 @@ REMOTE=Workspace/Personal/KHKT-CVA-2026/auscult-trust
 # machine | ssh host (empty = this machine) | job lists (logs/campaigns/<list>.txt; missing ones are skipped)
 MACHINES="A||lodo-v1-A lodo-v1-A2
 B|namdp15@10.148.183.8|lodo-v1-B lodo-v1-B2
-C|namdp15@10.148.183.119|lodo-v1-C
+C|namdp15@10.148.183.119|lodo-v1-C lodo-v1-C2
 D|namdp15@10.148.183.171|pcmcl-v1-D lodo-v1-D2
 E|namdp15@10.148.182.179|lodo-v1-E2"
 
