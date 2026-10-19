@@ -62,8 +62,8 @@ def cut_pad(data, desired_length, sample_rate, pad_types):
     return data
 
 
-def individual_cycles(annotations, data_folder, filename, args):
-    """Cut one recording into its annotated cycles, each cut/padded to `args.desired_length` seconds.
+def individual_cycles(annotations, data_folder, filename, args, raw=False):
+    """Cut one recording into its annotated cycles, each cut/padded to `args.desired_length` seconds (`raw`: native length).
 
     Returns:
         List of (waveform (1, samples) tensor, label).
@@ -86,7 +86,7 @@ def individual_cycles(annotations, data_folder, filename, args):
             ),
         ]
         label = lungsound_label(row["Crackles"], row["Wheezes"], args.n_cls)
-        out.append((cut_pad(chunk, args.desired_length, args.sample_rate, args.pad_types), label))
+        out.append((chunk if raw else cut_pad(chunk, args.desired_length, args.sample_rate, args.pad_types), label))
     return out
 
 

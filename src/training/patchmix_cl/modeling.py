@@ -48,6 +48,8 @@ def build_model(args):
     classifier = deepcopy(model.mlp_head)
     if args.method == "qlung":  # cosine classifier on normalised features, scale 37 as in the reference
         classifier = AngularClassifier(model.final_feat_dim, args.n_cls, s=37)
+    if args.method == "pcmcl":  # 3 labels (normal, crackle, wheeze); the projector slot holds the patient-matching head
+        classifier = nn.Linear(model.final_feat_dim, 3)
     args.proj_dim = (
         model.final_feat_dim
     )  # the contrastive target is the raw feature, so both must have its size
@@ -55,9 +57,11 @@ def build_model(args):
         projector = Projector(model.final_feat_dim, args.proj_dim)
     elif args.method == "ce_pafa":  # PAFA AST setting: LayerNorm MLP head, 768 -> 768 -> 768
         projector = PafaProjectionHead(model.final_feat_dim, None, model.final_feat_dim, attention=False, norm_type="ln")
+    elif args.method == "pcmcl":
+        projector = nn.Linear(model.final_feat_dim, 2)
     else:
         projector = nn.Identity()
-    criterion = [nn.CrossEntropyLoss().cuda()]
+    criterion = [nn.BCEWithLogitsLoss().cuda(), nn.CrossEntropyLoss().cuda()] if args.method == "pcmcl" else [nn.CrossEntropyLoss().cuda()]
     if args.method == "patchmix":
         criterion.append(PatchMixLoss(criterion=criterion[0]).cuda())
     if args.method == "patchmix_cl":

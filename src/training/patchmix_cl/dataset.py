@@ -24,6 +24,7 @@ from torchvision import transforms
 
 from .augment import SpecAugment, noise_mix_image, random_bin_gain_image
 from .cycles import individual_cycles, read_annotations
+from .pcmcl import PCMCLTrain
 from .encoders import get_encoder, image_shape
 
 CACHE = (
@@ -308,8 +309,11 @@ def _lodo_loaders(args):
             d, batch_size=args.batch_size, num_workers=args.num_workers, pin_memory=True, **kw
         )
 
+    train = make(Subset(ds, tr_idx), shuffle=True, drop_last=True)
+    if args.method == "pcmcl":  # on-the-fly multi-cycle images: GPU front end in the main process
+        train = DataLoader(PCMCLTrain(ds, tr_idx, args), batch_size=args.batch_size, shuffle=True, drop_last=True)
     return (
-        make(Subset(ds, tr_idx), shuffle=True, drop_last=True),
+        train,
         None,
         make(Subset(eval_ds, te_idx), shuffle=False),
         ds,
@@ -364,6 +368,10 @@ def build_loaders(args):
         )
 
     train_loader = make(train_set, shuffle=True, drop_last=True)
+    if args.method == "pcmcl":  # on-the-fly multi-cycle images: GPU front end in the main process
+        assert args.selection != "cv", "pcmcl: CV screening not implemented"
+        train_loader = DataLoader(PCMCLTrain(train_dataset, np.arange(len(train_dataset.labels)), args),
+                                  batch_size=args.batch_size, shuffle=True, drop_last=True)
     val_loader = (
         make(val_set, shuffle=False) if args.selection == "cv" else None
     )  # fixed refit: val patients are in the training set

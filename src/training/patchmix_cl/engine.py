@@ -11,6 +11,7 @@ import torch.nn.functional as F
 
 from .augment import SpecAugment, freq_mixstyle, js_divergence, random_bin_gain_batch
 from .encoders import get_encoder
+from .pcmcl import four_class, four_class_probs
 from .optim import AverageMeter, accuracy, update_moving_average, warmup_learning_rate
 from .reporting import per_device_report
 
@@ -92,6 +93,15 @@ def train_epoch(loader, model, classifier, projector, criterion, optimizer, epoc
                 output = classifier(features)
                 margin_logits = criterion[1](features, labels, quality.cuda(non_blocking=True))
                 loss = criterion[0](output.double(), labels) + args.alpha * criterion[0](margin_logits, labels)
+            elif args.method == "pcmcl":  # BCE on 3 labels + patient matching (`quality` carries its label, -1 = none)
+                with _encoder_context(args):
+                    features = model(images)
+                output = classifier(features)
+                loss = criterion[0](output.float(), labels.float())
+                ssl = quality.cuda(non_blocking=True)
+                if (ssl >= 0).any():
+                    loss = loss + args.pcmcl_aux * criterion[1](projector(features[ssl >= 0]).float(), ssl[ssl >= 0].long())
+                output, labels = torch.log(four_class_probs(output) + 1e-8), four_class(labels)  # 4-class view for the accuracy
             elif args.method == "add_rsc":  # cross-entropy + bias denoising loss on the denoising layer's own logits
                 with _encoder_context(args):
                     features = model(images)
@@ -185,8 +195,9 @@ def evaluate(loader, model, classifier, args):
     for images, labels, devices, *_ in loader:
         with torch.cuda.amp.autocast():
             output = classifier(model(images.cuda(non_blocking=True)))
-        preds.append(output.argmax(1).cpu().numpy())
-        probs.append(torch.softmax(output.float(), 1).cpu().numpy())
+        p = four_class_probs(output) if args.method == "pcmcl" else torch.softmax(output.float(), 1)
+        preds.append(p.argmax(1).cpu().numpy())
+        probs.append(p.cpu().numpy())
         ys.append(labels.numpy())
         devs.append(devices.numpy())
     preds, probs, ys, devs = (np.concatenate(x) for x in (preds, probs, ys, devs))

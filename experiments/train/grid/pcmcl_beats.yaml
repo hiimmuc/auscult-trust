@@ -1,0 +1,12 @@
+# PC-MCL on BEATs (../repos/PC-MCL; the repository has no training script and the paper gives no optimiser settings):
+# PAFA's BEATs setting (same first author, same defaults in the PC-MCL code: batch 32, no SpecAugment on BEATs),
+# 10 s input as in the paper, patient-matching weight 0.1 as in the paper, mix 0.5 and patient-matching 0.3 per epoch
+# as the code defaults.
+method: pcmcl
+batch_size: 32
+desired_length: 10
+spec_augment: 0
+epochs: 100
+pcmcl_mix: 0.5
+pcmcl_ssl: 0.3
+pcmcl_aux: 0.1

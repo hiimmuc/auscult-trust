@@ -229,7 +229,7 @@ def build_parser():
         "--method",
         type=str,
         default="patchmix_cl",
-        choices=["ce", "patchmix", "patchmix_cl", "ce_pafa", "sg_scl", "qlung", "add_rsc"],
+        choices=["ce", "patchmix", "patchmix_cl", "ce_pafa", "sg_scl", "qlung", "add_rsc", "pcmcl"],
         help="ce: plain cross-entropy; patchmix: Patch-Mix augmentation; patchmix_cl: Patch-Mix + contrastive loss; "
         "ce_pafa: cross-entropy + PAFA patient losses (PCSL, GPAL) on the projector output; sg_scl: cross-entropy + "
         "stethoscope-guided supervised contrastive loss on two SpecAugment views behind gradient reversal; qlung: angular "
@@ -244,6 +244,9 @@ def build_parser():
     p.add_argument("--denoise_depth", type=int, default=6, help="add_rsc: layer depth that sets the initial lambda")
     p.add_argument("--loss_beta", type=float, default=0.5, help="add_rsc: weight of the bias denoising loss")
     p.add_argument("--proj_dim", type=int, default=768)
+    p.add_argument("--pcmcl_mix", type=float, default=0.5, help="pcmcl: multi-cycle samples per epoch, fraction of the training cycles")
+    p.add_argument("--pcmcl_ssl", type=float, default=0.3, help="pcmcl: patient-matching samples per epoch, fraction of the training cycles")
+    p.add_argument("--pcmcl_aux", type=float, default=0.1, help="pcmcl: weight of the patient-matching loss (paper: 0.1)")
     p.add_argument("--lambda_pcsl", type=float, default=5.0, help="ce_pafa: weight of the patient cohesion-separation loss")
     p.add_argument("--lambda_gpal", type=float, default=0.005, help="ce_pafa: weight of the global patient alignment loss")
     p.add_argument("--temperature", type=float, default=0.06)

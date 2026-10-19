@@ -42,7 +42,15 @@ State 19/10 13:10 (Amendment 4 registered, `docs/updates/prereg-v9-amendment-4.m
 - Monitoring: `scripts/grid_status.sh` and `grid.py audit` hard-code `grid-v1` and machines A/B; parametrise by run and
   add C before handing to a monitor.
 - Then stages L2-L3 of `docs/updates/lodo-plan-v1.md`; ensembles and distillation optional. The final AuscultTrust
-  configuration is chosen after LODO and SC (BEATs so far). Open: PC-MCL as an extra candidate (see the chat of 19/10).
+  configuration is chosen after LODO and SC (BEATs so far).
+- A and B LODO started 19/10 13:40 (`logs/lodo-v1-{A,B}.log`, GPU logs `logs/gpu-{A,B}.csv`).
+- PC-MCL ported (method `pcmcl`, `src/training/patchmix_cl/pcmcl.py`, `experiments/train/grid/pcmcl_beats.yaml`, test
+  `tests/test_pcmcl.py`); real-data item check and a GPU train/eval step passed on A. PENDING until LODO v1 is done:
+  then a 1-epoch smoke (measure peak memory for MEM_GB and time), register `docs/updates/prereg-v9-amendment-5.md`, run
+  `beats+ft+pcmcl` seeds 0-4 on the official split (run `pcmcl-v1`). The pcmcl code is on A only (B and C run the
+  previous, functionally identical code for the other methods); sync before running it elsewhere.
+- Deleted 19/10 on user request (A and B): checkpoints of smoke-*, screen-ast-cv5, grid-v1-rerun (identical copies in
+  grid-v1), grid-v1-resumed, grid-v1-sgscl-ref, repro-wave1*, lung-srad. Outputs of those runs are kept.
 
 ## Gotchas learned in the grid
 
