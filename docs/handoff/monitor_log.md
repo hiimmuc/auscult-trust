@@ -124,3 +124,7 @@
 19/10/2026 11:20 | synced outputs B->A (no delete); A 120/120, B 230/230 | NaN none | FAILED 0 | OOM 0 | no sweep running
 19/10/2026 12:20 | ALL-DONE stable: A 120/120, B 230/230, no sweeps, GPU ~0 both, FAILED 0, OOM 0, NaN none, collapsed none; tables present; A disk 71G (down from 137G, above 30G floor). Nothing to do.
 19/10/2026 12:20 | A 120/120 DONE, B 230/230 DONE, no sweep either machine | NaN none | FAILED 0 | OOM 0 | collapsed none | checkpoints rsync B->A done | disk A 71G | nothing to act
+19/10/2026 13:20 | ALL-DONE stable: A 120/120, B 230/230, no sweeps, GPU ~0 both, FAILED 0, OOM 0, NaN none, collapsed none; tables present. A disk 59G (falling: 137G->71G->59G; floor 30G). REPORT.
+19/10/2026 14:20 | grid-v1 ALL-DONE: A 120/120, B 230/230, FAILED 0, OOM 0, NaN none, collapsed none. NEW sweeps running (not monitor-started): A lodo-v1-A pid 2659555 (38m), B lodo-v1 jobs running on grid-v1 GPU (B sweep pid absent in ps; jobs lodo_littc2se). disk A 81G B 375G. REPORT.
+19/10/2026 15:20 | grid-v1 ALL-DONE: A 120/120, B 230/230, FAILED 0, OOM 0, NaN none, collapsed none. Non-monitor lodo-v1 sweeps alive: A pid 2659555 (lodo-v1-A.txt), B pid 233651 (lodo-v1-B.txt, 1h39m). disk A 81G B 375G. REPORT.
+19/10/2026 16:20 | grid-v1 ALL-DONE: A 120/120, B 230/230, FAILED 0, OOM 0, NaN none, collapsed none. Non-monitor lodo-v1 sweeps alive: A pid 2659555 (2h39m), B pid 233651 (2h39m). disk A 81G B 374G. REPORT (lodo unconfirmed).
