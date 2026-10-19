@@ -27,7 +27,8 @@ SSH from A by key to all.
 | A | local | RTX 5000 Ada 32 GB | `lodo-v1`, `logs/campaigns/lodo-v1-A.txt` | 75 | 19/10 13:40 | about 21/10 morning |
 | B | `namdp15@10.148.183.8` | RTX 5090 32 GB | `lodo-v1`, `lodo-v1-B.txt` | 145 | 19/10 13:40 | about 21/10 morning |
 | C | `namdp15@10.148.183.119` | RTX PRO 6000 96 GB | `lodo-v1`, `lodo-v1-C.txt` (SC static) | 175 | 19/10 13:05 | about 22/10 (to re-estimate) |
-| D | `namdp15@10.148.183.171` | RTX 5090 32 GB | `pcmcl-v1`, `pcmcl-v1-D.txt` | 10 | 19/10 16:40 | about 20/10 morning |
+| D | `namdp15@10.148.183.171` | RTX 5090 32 GB | `pcmcl-v1`, `pcmcl-v1-D.txt`; then SC units from C (`lodo-v1-D2.txt`) | 10 + about 65 | 19/10 16:40 | PC-MCL about 20/10 11:30; SC about 21/10 02:30 |
+| E | `namdp15@10.148.182.179` | RTX 5090 32 GB | `lodo-v1`, `lodo-v1-E2.txt` (A/B units) | 88 | 19/10 18:42 | about 20/10 18:00 |
 
 Status 16:49: A 0/75, B 3/145, C 4/175, D 0/10 done; 0 FAILED, 0 out of memory everywhere.
 Logs: sweep `logs/<run>-<M>.log`, jobs `logs/<run>-<M>/<n>.log`, GPU every minute `logs/gpu-<M>.csv`.
@@ -42,16 +43,21 @@ reservations at 29 GB, but the jobs use more than reserved on this card: at 16:4
 Options: restart C's sweep with `--workers 1` (or a smaller `--gpu-gb`), or set a per-process memory fraction. Ask
 the user; killing jobs must be by PID only.
 
-**LODO units move to D (19/10 17:05, user request).** `scripts/lodo_move.py` runs on A (log `logs/lodo-v1-move.log`;
-started from the worktree copy `.claude/worktrees/lodo-move/scripts/lodo_move.py` with `AT_REPO=<main checkout>` until
-the commit reaches `main`). When D's `pcmcl-v1` sweep ends it stops the A and B schedulers by PID (their jobs go on),
-moves unstarted units from the end of each list to D until the expected ends are level (measured throughput; D = B's),
-writes `logs/campaigns/lodo-v1-{A2,B2,D}.txt` (originals kept), starts schedulers with tags -A2, -B2, -D (new job log
-directories), restarts any that dies without its final line, and rsyncs B's and D's `outputs/train/lodo-v1/` to A at the
-end. Dry run: `.venv-train/bin/python scripts/lodo_move.py --dry --d-free <hours until D is free>`. At 17:10 it moved
-48 (A) + 35 (B) units, all ending about 21/10 01:00 instead of A 22/10 03:00 / B 21/10 05:00. Restart command after a
-power cut on A: the same `setsid nohup` line; it skips the move if `logs/campaigns/lodo-v1-D.txt` exists on A.
-C estimate (measured 2.2 smoke-h/h, 2 jobs): about 21/10 14:00.
+**Shared sweeps (19/10 18:42, user request; replaces the 17:05 plan of moving A/B units to D, which never ran).**
+Machine E = `namdp15@10.148.182.179`, RTX 5090 32 GB, key ssh; the user's `spatialdb_service` (about 6 GB of GPU) was
+stopped on request (19/10 18:47, by PID); E's sweep uses the full GPU (default budget 30.8 GB). Data, AST/BEATs/HTS-AT weights, their caches, `../repos`, code
+and venv were copied from A; a 1-epoch smoke of one unit per encoder (`smoke-lodo-e`) passed. GPU log `logs/gpu-E.csv`.
+`scripts/lodo_move.py` (see its docstring) re-splits the unstarted units of running lists over a group of machines:
+stops the source schedulers by PID (running jobs go on), keeps running/interrupted units on their machine, assigns the
+rest longest first to the machine that ends it first (measured throughput), writes `logs/campaigns/<run>-<M>2.txt`
+(source lists kept), starts each machine's sweep (tag -<M>2) once its own old jobs have ended, restarts a sweep that dies,
+and rsyncs the other machines' `outputs/train/<run>/` to A at the end. The plan is saved in
+`logs/campaigns/<run>-share-<machines>.json`; rerunning the same command (after a power cut on A) resumes from it.
+- A+B+E (LODO no SC): applied 18:42; A 36, B 89, E 88 units; all end about 20/10 18:00. Log `logs/lodo-v1-share-ABE.log`.
+- C+D (trained SC): `--src C:lodo-v1-C --to C D --after D:pcmcl-v1`, waits for PC-MCL to end on D (about 20/10 11:30),
+  then about C 104 / D 65 units; end about 21/10 02:30. Log `logs/lodo-v1-share-CD.log`.
+- Both dispatchers were started from the identical copy in `.claude/worktrees/rebalance/scripts/` with
+  `AT_REPO=<this repo>` (the session's worktree rule); restarts use `scripts/lodo_move.py` here. Commands in its docstring.
 
 **D note:** one PC-MCL job uses about 19 GB, so with `MEM_GB=15` the sweep's free-memory check keeps D at one job at a
 time (about 1.6 h per unit, 10 units about 16 h). Two jobs did fit in the 2-epoch test; raising concurrency is optional.

@@ -3,7 +3,7 @@
 | | |
 |---|---|
 | Report version | 3.0 (supersedes version 2.0 of 2026-10-07, now `docs/reports/report_archive_2026-10-07.md`) |
-| Datetime | 2026-10-19 17:20 (+07) |
+| Datetime | 2026-10-19 18:50 (+07) |
 | Proposal / prereg | v9 (`docs/updates/research-proposal-v9-en.md`); `docs/updates/prereg-v8.md` with Amendments 1-5 (`docs/updates/prereg-v9-amendment*.md`) |
 | Plans | `docs/updates/stage-plan-v1.md` (grid), `docs/updates/lodo-plan-v1.md` (LODO, ensembles; superseded where Amendment 4 differs) |
 | Detailed sources | `docs/reports/report_2026-10-09.md` (registered core), `docs/reports/grid-v1-results.md` (grid, every cell), `outputs/train/grid-v1/table_{last,best_test}.md`, `docs/handoff/HANDOFF.md` (machines, commands) |
@@ -20,7 +20,8 @@ encoder grid (70 cells, 350 units, finished 18/10) showed that the encoder matte
 best encoder (BEATs PAFA 61.7 ± 0.7 at the last epoch; BEATs Patch-Mix CL 63.6 ± 0.8 at the test-selected epoch). The
 user treats the old AST AuscultTrust as stale: the final AuscultTrust (encoder + method + SC) is chosen after LODO v1 and
 the trained-SC arms (BEATs so far). Running now: LODO without SC (machines A, B; D joins when PC-MCL ends), trained SC
-static (C), PC-MCL trials (D). Expected end of all training about 21/10 (section 3).
+static (C), PC-MCL trials (D). On 19/10 machine E joined: LODO without SC is shared by A, B and E (end about 20/10
+18:00); C's SC units are shared with D once PC-MCL ends (end about 21/10 02:30) (section 3).
 
 ## 2. Overall plan
 
@@ -32,8 +33,8 @@ then the final configuration; ensembles and distillation are optional. Phantom t
 | 0 | Phase 0 (v4-v8) | Frozen-encoder ladders, Part II shift study, Stage-1 screening of device variants | Done; archived in `docs/reports/report_archive_2026-10-07.md` |
 | 1 | Registered core (v9) | Gate G on AST Patch-Mix CL vs AuscultTrust (AST + SC); LODO on AST (baseline, Freq-MixStyle, trained and test-time SC, A2, TTA-EQ); KAUH control A | Done 09/10 (section 4) |
 | 2 | Grid v1 | 5 encoders x 14 methods (8 fine-tuned, 6 frozen) x 5 seeds, official split | Done 18/10 (section 5) |
-| 3 | LODO v1 without SC (L1, Amendment 4) | 11 cells x 4 held-out devices x 5 seeds = 220 units | Running on A, B (D from about 20/10 11:30) |
-| 4 | Trained SC, static bound (Amendment 4) | 7 cells, official split + 4 LODO folds, 175 units | Running on C |
+| 3 | LODO v1 without SC (L1, Amendment 4) | 11 cells x 4 held-out devices x 5 seeds = 220 units | Running on A, B, E |
+| 4 | Trained SC, static bound (Amendment 4) | 7 cells, official split + 4 LODO folds, 175 units | Running on C (D from about 20/10 11:30) |
 | 5 | PC-MCL (Amendment 5) | BEATs PC-MCL and PAFA + PC-MCL, official split, 10 units | Running on D; enters LODO/SC only if its last-epoch Score beats BEATs PAFA by more than one seed SD |
 | 6 | Inference arms (L2) | Test-time SC (static, dynamic), A2, TTA-EQ on every LODO unit | [Pending], hours, after stage 3 |
 | 7 | Analysis (L3) | Per-fold Sp/Se/Score/HS/2c; method vs CE on the same encoder; H2 statistics (prior-matched coverage, null gate, two-level bootstrap) with set size beside abs(Delta); SC vs no SC paired by seed | [Pending], about 1 day; report `docs/reports/lodo-v1-results.md` |
@@ -46,29 +47,31 @@ Decisions of the user (19/10): LODO cells as in stage 3 (BEATs CE replaces BEATs
 dropped; SC cells AST Patch-Mix CL, PAFA; HTS-AT Patch-Mix CL, SG-SCL; BEATs Patch-Mix CL, PAFA, SG-SCL; static bound
 first; C limited to 30% of its GPU; PC-MCL on D now; ensembles and distillation optional.
 
-## 3. Compute and timeline (re-estimated 19/10 17:10)
+## 3. Compute and timeline (re-estimated 19/10 18:45)
 
-| Machine | GPU | Run | Units | Done | Expected end |
-|---|---|---|---|---|---|
-| A | RTX 5000 Ada 32 GB | `lodo-v1` no SC | 75 (27 after the move) | 0 (3 at epoch 33/50) | about 21/10 01:00 |
-| B | RTX 5090 32 GB | `lodo-v1` no SC | 145 (110 after the move) | 3 | about 21/10 01:00 |
-| C | RTX PRO 6000 96 GB | `lodo-v1` trained SC static | 175 | 4 | about 21/10 14:00 at 2 jobs at once |
-| D | RTX 5090 32 GB | `pcmcl-v1`, then 83 LODO units from A and B | 10 + 83 | 0 (1 at epoch 23/100) | PC-MCL about 20/10 11:30; LODO about 21/10 01:00 |
+| Machine | GPU | Run | Units left | Expected end |
+|---|---|---|---|---|
+| A | RTX 5000 Ada 32 GB | `lodo-v1` no SC, list `lodo-v1-A2` | 36 | about 20/10 18:00 |
+| B | RTX 5090 32 GB | `lodo-v1` no SC, list `lodo-v1-B2` | 89 | about 20/10 18:00 |
+| E | RTX 5090 32 GB (`10.148.182.179`) | `lodo-v1` no SC, list `lodo-v1-E2` | 88 | about 20/10 18:00 |
+| C | RTX PRO 6000 96 GB | `lodo-v1` trained SC static; list `lodo-v1-C2` after the split | about 104 after the split | about 21/10 02:30 |
+| D | RTX 5090 32 GB | `pcmcl-v1` (10 units), then about 65 SC units from C (`lodo-v1-D2`) | 10 + about 65 | PC-MCL about 20/10 11:30; SC about 21/10 02:30 |
 
-- [Fact] Throughput measured since each sweep started, in smoke hours (one job alone) per wall hour: A 0.84, B 1.94,
-  C 2.2. A runs only 3 jobs at once so far (BEATs units reserve 10 GB each); it should speed up on the lighter AST and
-  HTS-AT units. PC-MCL: about 1.9 h per unit, one at a time (a job takes about 19 GB).
-- [Fact] Without D, A would end about 22/10 03:00 and B about 21/10 05:00. The dispatcher `scripts/lodo_move.py`
-  (started 19/10 17:05 on A, log `logs/lodo-v1-move.log`) waits for PC-MCL to end, stops the A and B schedulers (their
-  running jobs continue), moves the units that have not started from the end of each list to D until the expected ends
-  are level, restarts the three schedulers (lists `lodo-v1-{A2,B2,D}.txt`), restarts any of them after a crash, and copies
-  B's and D's outputs to A at the end. Dry run at 17:10 (D free in 18.5 h): 48 units from A and 35 from B move; all three
-  end about 32 h from now. The plan is recomputed with the measured speeds when D becomes free.
-- [Assumption] ±20% on every estimate; the first hours of a sweep include building spectrogram caches.
+- [Fact] Machine E joined on 19/10 (data, weights, caches, code and venv copied from A; 1-epoch smoke of one AST, HTS-AT
+  and BEATs LODO unit passed with all outputs). LODO without SC is shared by A, B and E; trained SC by C and D.
+- [Fact] The dispatcher `scripts/lodo_move.py` does both shares. It stops the source schedulers by PID (their running
+  jobs go on), keeps running and interrupted units on their machine, gives every unstarted unit, longest first, to the
+  machine that would finish it first (measured throughput), and starts each machine's new sweep only after its own old
+  jobs have ended, so nothing is killed and nothing runs twice. It restarts a sweep that dies (power cut) and copies the
+  outputs to A at the end. A+B+E: applied 19/10 18:42, log `logs/lodo-v1-share-ABE.log`. C+D: waits for PC-MCL on D,
+  log `logs/lodo-v1-share-CD.log`.
+- [Fact] Throughput in B-smoke hours (one job alone on B) per wall hour, measured since each sweep started: A 0.80, B 1.94,
+  C 2.15; E and D assumed equal to B (same GPU). PC-MCL: about 1.9 h per unit, one at a time (a job takes about 19 GB).
+- [Assumption] ±20% on every estimate; A and B idle partly while their last old jobs drain; E's speed is unmeasured.
+- All training ends about 21/10 02:30 (was 21/10 14:00 for C and 22/10 03:00 for A).
 - Open issue: C's jobs use 52 GB (54% of the card), above the 30% the user allowed; the scheduler budgets only the
-  reservations (29 GB). Running C with one job at a time would end it about 23/10. The user decides.
-- After 21/10 A, B and D are idle; the dynamic-bound SC arms (stage 8, about 108 smoke hours) could run on all four
-  machines in about 16 h instead of about 45 h on C alone.
+  reservations (29 GB). The user decides.
+- From about 20/10 18:00 A, B and E are idle; the dynamic-bound SC arms (stage 8, about 108 smoke hours) could run there.
 
 ## 4. Registered core (v9, AST), from `docs/reports/report_2026-10-09.md`
 
@@ -241,10 +244,10 @@ Ensembles = mean softmax at the last epoch, same seed. [test-picked] = members c
 ## 7. Next steps
 
 1. Decide C's GPU share (30% cap vs 2 jobs at once).
-2. Monitor A, B, C, D (`logs/<run>-<M>.log`, `logs/lodo-v1-move.log`, `logs/gpu-<M>.csv`); when D's PC-MCL ends,
+2. Monitor A-E (`logs/<run>-<M>.log`, `logs/lodo-v1-share-{ABE,CD}.log`, `logs/gpu-<M>.csv`); when D's PC-MCL ends,
    build its table paired against BEATs PAFA and CE and apply the Amendment 5 rule.
 3. When LODO v1 ends (about 21/10): stage 6 (inference arms), stage 7 (analysis, `docs/reports/lodo-v1-results.md`).
-4. When C ends: SC vs no SC paired by seed (official split vs grid units; LODO vs A/B/D units); then the dynamic bound,
+4. When C and D end: SC vs no SC paired by seed (official split vs grid units; LODO vs A/B/E units); then the dynamic bound,
    spread over the idle machines.
 5. Optional ensembles E1-E4 and distillation; choose the final AuscultTrust with the user; KAUH controls, screening view,
    phantom.
