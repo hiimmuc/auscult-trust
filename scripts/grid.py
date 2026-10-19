@@ -4,6 +4,7 @@
     python scripts/grid.py smoke [--only ast] [--data] # a few synthetic training steps per cell: errors, peak GPU memory, step time
     python scripts/grid.py jobs --smoke a.json b.json  # logs/campaigns/grid-v1-{A,B}.txt, balanced by measured step time
     python scripts/grid.py table [--epoch last|best_test]  # results table -> outputs/train/grid-v1/table_<epoch>.md
+    python scripts/grid.py lodo-jobs --smoke a.json b.json --cells ... [--sc-cells ...]  # logs/campaigns/lodo-v1-{A,B}.txt
     python scripts/grid.py audit [--list <job list>] [--hash]  # check every finished unit's saved metrics; exit 1 on a problem
 
 Cell = `<encoder>+<ft|frozen>+<method>`, run `grid-v1`, seeds 0-4, `--selection fixed --report_epochs <last epoch>`
@@ -118,6 +119,13 @@ def main():
                    help="measured throughput per machine (sequential smoke hours done per hour, with its parallel jobs); default 1 each")
     t = sub.add_parser("table")
     t.add_argument("--epoch", default="last", help="last, best_test (optimistic: best Score on test per seed) or an epoch number")
+    lj = sub.add_parser("lodo-jobs")
+    lj.add_argument("--smoke", nargs="+", required=True, help="smoke json per machine, in the order A B")
+    lj.add_argument("--cells", nargs="+", required=True)
+    lj.add_argument("--sc-cells", nargs="*", default=[], help="cells that also get trained SC (static), official split and LODO")
+    lj.add_argument("--speed", nargs="+", type=float, default=None)
+    lj.add_argument("--seeds", type=int, default=5)
+    lj.add_argument("--run", default="lodo-v1")
     u = sub.add_parser("audit")
     u.add_argument("--list", default=None, help="job list of this machine: check only its units, including their checkpoints")
     u.add_argument("--hash", action="store_true", help="also write the SHA-256 of the split file and of every checkpoint")
@@ -149,6 +157,8 @@ def main():
         print("{} ok, {} failed".format(sum(r["ok"] for r in res.values()), sum(not r["ok"] for r in res.values())))
     elif a.cmd == "jobs":
         write_jobs(a)
+    elif a.cmd == "lodo-jobs":
+        lodo_jobs(a)
     elif a.cmd == "audit":
         sys.exit(1 if audit(a.list, a.hash) else 0)
     else:
@@ -193,6 +203,43 @@ def write_jobs(a):
         p.write_text("\n".join(lines) + "\n")
         print(f"{p}: {len(lines)} jobs, {h:.0f} hours of remaining work at the given speed")
 
+
+
+LODO_DEVICES = {"meditron": 0.83, "littc2se": 0.94, "litt3200": 0.94, "akgc417l": 0.70}  # cost of a fold vs an official-split unit
+SC_COST = 1.05  # SC images are built once at start (no cache); smoke-lodo-v1: same epoch time as without SC
+
+
+def lodo_jobs(a):
+    """Leave-one-device-out job lists for two machines: the given cells on every device fold, plus trained SC (static
+    bound) on `--sc-cells`, on the official split and on every fold. Balanced by smoke hours x fold cost / speed."""
+    smokes = [json.loads(Path(p).read_text()) for p in a.smoke]
+    by = {c["cell"]: c for c in cells()}
+    units = []  # (hours per machine, line)
+    for cell, sc in [(c, False) for c in a.cells] + [(c, True) for c in a.sc_cells]:
+        c = by[cell]
+        epochs = smokes[0][cell]["epochs"]
+        py = DASS_PY if c["encoder"] == "dass" else PY
+        folds = ([(None, 1.0)] if sc else []) + list(LODO_DEVICES.items())
+        for dev, cost in folds:
+            cfg = c["config"] + (["experiments/train/sc.yaml", "experiments/train/sc_static.yaml"] if sc else []) + (
+                [f"experiments/train/lodo_{dev}.yaml"] if dev else [])
+            name = cell + ("+sc+sc_static" if sc else "") + (f"+lodo_{dev}" if dev else "")
+            for s in range(a.seeds):
+                line = "RUN_ID={} MEM_GB={:.0f} {} -m src.training.patchmix_cl.main --config {} --cell {} {}--selection fixed --report_epochs {} --seed {}".format(
+                    a.run, max(4, smokes[0][cell]["peak_gb"] * 1.25 + 1.5), py, ",".join(cfg), name, "".join(x + " " for x in c["extra"]), epochs, s)
+                units.append(([m[cell]["run_h"] * cost * (SC_COST if sc else 1.0) for m in smokes], line))
+    speed = a.speed or [1.0] * len(smokes)
+    load, lists = [0.0] * len(smokes), [[] for _ in smokes]
+    for hours, line in sorted(units, key=lambda u: -max(u[0])):  # longest first
+        hours = [h / v for h, v in zip(hours, speed)]
+        k = min(range(len(smokes)), key=lambda i: load[i] + hours[i])
+        load[k] += hours[k]
+        lists[k].append(line)
+    for name, lines, h in zip("AB", lists, load):
+        p = REPO / "logs" / "campaigns" / f"{a.run}-{name}.txt"
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_text("\n".join(lines) + "\n")
+        print(f"{p}: {len(lines)} jobs, about {h:.0f} h at the given speed")
 
 
 def unit_metrics(npz, epoch, quality=None, alpha=0.1, n_splits=20):

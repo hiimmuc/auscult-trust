@@ -23,20 +23,22 @@ The grid monitoring handoff is archived as `docs/handoff/HANDOFF_2026-10-15-grid
 - Ensemble rule fixed before LODO: E1 = equal-weight mean softmax of the 11 cells per fold and seed (primary); E2 BEATs
   5; E3/E4 AST 3, HTS-AT 3. Then distillation into one BEATs model.
 
-## Next steps (stage L0 of `docs/updates/lodo-plan-v1.md`)
+## Next steps
 
-1. Write the LODO job lists: per cell, the grid job line (`scripts/grid.py` `cells()` gives configs and extra args) with
-   `experiments/train/lodo_<dev>.yaml` appended to `--config`, cell `<cell>+lodo_<dev>`, `RUN_ID=lodo-v1`, seeds 0-4,
-   `--selection fixed --report_epochs <last epoch>`. Balance A/B by `logs/grid_smoke_{A,B}.json` run hours x fold factor
-   (Meditron 0.83, LittC2SE 0.94, Litt3200 0.94, AKGC417L 0.70) and measured speed (A 1.17, B 1.73). A small `grid.py`
-   subcommand is the natural place (reuse `write_jobs`).
-2. Smoke: one epoch (`--stop_epoch 1`) of one cell per encoder and method family on each fold, on both machines. Check
-   PAFA (patient ids), SG-SCL (3 source devices), QLung (quality cache on the LODO split), 5 s cycles, `cal_preds.npz`.
-3. Start the GPU logger on both machines (command in the plan), then the sweeps:
-   `RUN_ID=lodo-v1 SWEEP_TAG=-<M> setsid nohup .venv-train/bin/python scripts/sweep.py logs/campaigns/lodo-v1-<M>.txt --workers 4 --ram-gb 6 > logs/lodo-v1-<M>.log 2>&1 < /dev/null &`
-4. Monitoring: adapt `scripts/grid_status.sh` and `scripts/grid.py audit` to run `lodo-v1` (both hard-code `grid-v1`),
-   or pass the run as an argument. A Haiku monitor can follow the archived grid handoff with those names.
-5. After L1: stages L2-L6 of the plan.
+Step 0 (done 19/10): job lists `logs/campaigns/lodo-v1-{A,B}.txt` (`scripts/grid.py lodo-jobs`, 315 units: 12 no-SC cells
+x 4 folds x 5 seeds + trained SC static on BEATs pafa, BEATs patchmix_cl, HTS-AT patchmix_cl, official split + 4 folds);
+smoke `smoke-lodo-v1` (21 units on A, 2 on B, 1 epoch): 0 failures, `cal_preds.npz` and `test_preds.npz` written, SC
+epoch time equal to no-SC. Draft `docs/updates/prereg-v9-amendment-4.md`. Estimate: about 68 h on both machines.
+
+Step 1 needs the user's confirmation. On confirmation:
+1. Set Amendment 4 status to "registered 19/10/2026" (or the date), commit and push.
+2. rsync code and `logs/campaigns/lodo-v1-B.txt` to B.
+3. GPU logger on both machines:
+   `setsid nohup nvidia-smi --query-gpu=timestamp,utilization.gpu,memory.used --format=csv -l 60 >> logs/gpu-<M>.csv 2>&1 < /dev/null &`
+   (over ssh, start detached processes with `ssh ... 'bash -s' < script` or the ssh client stays attached).
+4. Sweeps: `RUN_ID=lodo-v1 SWEEP_TAG=-<M> setsid nohup .venv-train/bin/python scripts/sweep.py logs/campaigns/lodo-v1-<M>.txt --workers 4 --ram-gb 6 > logs/lodo-v1-<M>.log 2>&1 < /dev/null &`
+5. Monitoring: `scripts/grid_status.sh` and `grid.py audit` hard-code `grid-v1`; parametrise by run before handing to a monitor.
+6. Then stages L2-L3 of `docs/updates/lodo-plan-v1.md`; ensembles (L5) and distillation are optional.
 
 ## Gotchas learned in the grid
 
