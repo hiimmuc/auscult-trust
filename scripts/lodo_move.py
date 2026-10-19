@@ -3,10 +3,10 @@ outputs on A. Runs on A, drives the other machines through ssh; safe to restart 
 
     # LODO without SC shared by A, B and E, now:
     setsid nohup .venv-train/bin/python scripts/lodo_move.py --src A:lodo-v1-A B:lodo-v1-B --to A B E \
-        > logs/lodo-v1-share-ABE.log 2>&1 < /dev/null &
+        >> logs/lodo-v1-share-ABE.log 2>&1 < /dev/null &
     # trained SC shared by C and D, once D's pcmcl-v1 sweep has ended:
     setsid nohup .venv-train/bin/python scripts/lodo_move.py --src C:lodo-v1-C --to C D --after D:pcmcl-v1 \
-        > logs/lodo-v1-share-CD.log 2>&1 < /dev/null &
+        >> logs/lodo-v1-share-CD.log 2>&1 < /dev/null &
     # plan only (D busy for 18 more hours), nothing changed:
     .venv-train/bin/python scripts/lodo_move.py --src C:lodo-v1-C --to C D --dry --delay D=18
 

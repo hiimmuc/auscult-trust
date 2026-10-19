@@ -1,4 +1,4 @@
-# Handoff (19/10/2026 16:50): LODO v1, SC and PC-MCL running on four machines
+# Handoff (19/10/2026 19:00): LODO v1, SC and PC-MCL running on five machines
 
 For the next session. Read this file, then `CLAUDE.md` (repo rules), then as needed:
 `docs/updates/lodo-plan-v1.md` (stages), `docs/updates/prereg-v9-amendment-4.md` (LODO v1 + SC),
@@ -14,62 +14,86 @@ Grid v1 (70 method x encoder cells, 350 units, ICBHI official split) is done and
 registered core of proposal v9 (Gate G passed; H2 partly met on AST, Litt3200 fold only; H1/H3 wait for phantom
 hardware) is in `docs/reports/report_2026-10-09.md`. The user treats the old AST AuscultTrust as stale: the final
 AuscultTrust configuration (encoder + method + SC) is chosen after LODO v1 and SC (BEATs so far). Now running:
-LODO without SC (A, B), trained SC static (C), PC-MCL trials (D).
+LODO without SC (A, B, E), trained SC static (C; shared with D after PC-MCL), PC-MCL trials (D).
 
-## 2. Machines and runs
+## 2. Machines and runs (state 19/10 19:00)
 
 Repo path on all: `~/Workspace/Personal/KHKT-CVA-2026/auscult-trust`; data, model weights, `../repos` and `.venv-train`
-were rsynced from A to C and D (ICBHI audio lives in `data/raw/icbhi`; `data/processed` holds symlinks to it).
-SSH from A by key to all.
+were rsynced from A to C, D and E (ICBHI audio lives in `data/raw/icbhi`; `data/processed` holds symlinks to it).
+SSH from A by key to all. Logs per job list `<L>`: scheduler `logs/<L>.log`, jobs `logs/<L>/<n>.log`; GPU every minute
+`logs/gpu-<M>.csv`. Results `outputs/train/<run>/<cell>/seed<s>/` (`report.json` written last = unit done).
 
-| Machine | Host | GPU | Run / list | Units | Started | Est. end |
-|---|---|---|---|---|---|---|
-| A | local | RTX 5000 Ada 32 GB | `lodo-v1`, `logs/campaigns/lodo-v1-A.txt` | 75 | 19/10 13:40 | about 21/10 morning |
-| B | `namdp15@10.148.183.8` | RTX 5090 32 GB | `lodo-v1`, `lodo-v1-B.txt` | 145 | 19/10 13:40 | about 21/10 morning |
-| C | `namdp15@10.148.183.119` | RTX PRO 6000 96 GB | `lodo-v1`, `lodo-v1-C.txt` (SC static) | 175 | 19/10 13:05 | about 22/10 (to re-estimate) |
-| D | `namdp15@10.148.183.171` | RTX 5090 32 GB | `pcmcl-v1`, `pcmcl-v1-D.txt`; then SC units from C (`lodo-v1-D2.txt`) | 10 + about 65 | 19/10 16:40 | PC-MCL about 20/10 11:30; SC about 21/10 02:30 |
-| E | `namdp15@10.148.182.179` | RTX 5090 32 GB | `lodo-v1`, `lodo-v1-E2.txt` (A/B units) | 88 | 19/10 18:42 | about 20/10 18:00 |
+| Machine | Host | GPU | Active job list (run `lodo-v1` unless stated) | Units | Est. end |
+|---|---|---|---|---|---|
+| A | local | RTX 5000 Ada 32 GB | `lodo-v1-A2` (no SC); starts when A's last old job ends | 36 | about 20/10 18:00 |
+| B | `namdp15@10.148.183.8` | RTX 5090 32 GB | `lodo-v1-B2` (no SC); starts when B's old jobs end | 89 | about 20/10 18:00 |
+| E | `namdp15@10.148.182.179` | RTX 5090 32 GB | `lodo-v1-E2` (no SC, units from A/B lists) | 88 | about 20/10 18:00 |
+| C | `namdp15@10.148.183.119` | RTX PRO 6000 96 GB | `lodo-v1-C` (trained SC static); `lodo-v1-C2` after the C+D split | 175 (about 104 after) | about 21/10 02:30 |
+| D | `namdp15@10.148.183.171` | RTX 5090 32 GB | `pcmcl-v1-D` (run `pcmcl-v1`); then `lodo-v1-D2` (SC units from C) | 10 + about 65 | PC-MCL about 20/10 11:30; SC about 21/10 02:30 |
 
-Status 16:49: A 0/75, B 3/145, C 4/175, D 0/10 done; 0 FAILED, 0 out of memory everywhere.
-Logs: sweep `logs/<run>-<M>.log`, jobs `logs/<run>-<M>/<n>.log`, GPU every minute `logs/gpu-<M>.csv`.
-Restart command (same on every machine, after a power cut or crash; back up the old sweep log first):
-`RUN_ID=<run> SWEEP_TAG=-<M> setsid nohup .venv-train/bin/python scripts/sweep.py logs/campaigns/<run>-<M>.txt --workers <W> [--gpu-gb 29 on C] --ram-gb 6 > logs/<run>-<M>.log 2>&1 < /dev/null &`
-(W: A/B 4, C 3, D 2). Over ssh start it with `ssh host 'bash -s' < script.sh`, else the ssh client stays attached.
-Finished units are skipped; interrupted ones resume from `last.pth` (RNG state not restored: rerun such units
-cleanly at the end if exact runs matter, as `scripts/grid_rerun.py` did for the grid).
+Old lists `lodo-v1-A.txt`, `lodo-v1-B.txt` (and `lodo-v1-C.txt` after the split) are kept but their schedulers were
+stopped on purpose: their unfinished units are in the `*2` lists. Their last running jobs ("old jobs") finish normally.
+Status at 19:00: A 3+2 done, B 6, C 8, D 1/10, E 0; 0 FAILED, 0 out of memory everywhere. All training ends about 21/10
+02:30 (±20%).
 
-**Open issue on C (tell the user first):** the user allowed up to 30% of C's GPU. The sweep caps the summed `MEM_GB`
-reservations at 29 GB, but the jobs use more than reserved on this card: at 16:49 three jobs used 52 GB (one 35.6 GB).
-Options: restart C's sweep with `--workers 1` (or a smaller `--gpu-gb`), or set a per-process memory fraction. Ask
-the user; killing jobs must be by PID only.
+**Share dispatchers** (`scripts/lodo_move.py`, running on A; see its docstring). They stop source schedulers by PID
+(running jobs go on), keep running/interrupted units on their machine, give the unstarted units, longest first, to the
+machine that ends them first (measured throughput), write `logs/campaigns/<run>-<M>2.txt`, start each machine's new
+scheduler (tag -<M>2) only after that machine's old jobs have ended, restart a scheduler that dies without its final
+line, and rsync the other machines' `outputs/train/lodo-v1/` to A at the end. Plan saved in
+`logs/campaigns/lodo-v1-share-<machines>.json`; rerunning the same command resumes from it.
+- A+B+E (LODO no SC): PID 3011935, log `logs/lodo-v1-share-ABE.log`, plan applied 19/10 18:42 (A 36, B 89, E 88).
+- C+D (trained SC): PID 2978610, log `logs/lodo-v1-share-CD.log`; waits for `pcmcl-v1` to end on D (about 20/10
+  11:30), then stops C's scheduler, splits C's unstarted units (about C 104 / D 65) and starts `lodo-v1-C2` (when C's
+  old jobs end) and `lodo-v1-D2`.
+- Both were started from the identical copy in `.claude/worktrees/rebalance/scripts/` with `AT_REPO=<this repo>`; restart
+  them (after a power cut on A) with the commands in the docstring of `scripts/lodo_move.py` here.
 
-**Shared sweeps (19/10 18:42, user request; replaces the 17:05 plan of moving A/B units to D, which never ran).**
-Machine E = `namdp15@10.148.182.179`, RTX 5090 32 GB, key ssh; the user's `spatialdb_service` (about 6 GB of GPU) was
-stopped on request (19/10 18:47, by PID); E's sweep uses the full GPU (default budget 30.8 GB). Data, AST/BEATs/HTS-AT weights, their caches, `../repos`, code
-and venv were copied from A; a 1-epoch smoke of one unit per encoder (`smoke-lodo-e`) passed. GPU log `logs/gpu-E.csv`.
-`scripts/lodo_move.py` (see its docstring) re-splits the unstarted units of running lists over a group of machines:
-stops the source schedulers by PID (running jobs go on), keeps running/interrupted units on their machine, assigns the
-rest longest first to the machine that ends it first (measured throughput), writes `logs/campaigns/<run>-<M>2.txt`
-(source lists kept), starts each machine's sweep (tag -<M>2) once its own old jobs have ended, restarts a sweep that dies,
-and rsyncs the other machines' `outputs/train/<run>/` to A at the end. The plan is saved in
-`logs/campaigns/<run>-share-<machines>.json`; rerunning the same command (after a power cut on A) resumes from it.
-- A+B+E (LODO no SC): applied 18:42; A 36, B 89, E 88 units; all end about 20/10 18:00. Log `logs/lodo-v1-share-ABE.log`.
-- C+D (trained SC): `--src C:lodo-v1-C --to C D --after D:pcmcl-v1`, waits for PC-MCL to end on D (about 20/10 11:30),
-  then about C 104 / D 65 units; end about 21/10 02:30. Log `logs/lodo-v1-share-CD.log`.
-- Both dispatchers were started from the identical copy in `.claude/worktrees/rebalance/scripts/` with
-  `AT_REPO=<this repo>` (the session's worktree rule); restarts use `scripts/lodo_move.py` here. Commands in its docstring.
+**Machine E:** the user's `spatialdb_service` (about 6 GB of GPU) was stopped on request (19/10 18:47, by PID); E uses
+the full GPU (scheduler budget 30.8 GB). 1-epoch smoke of one unit per encoder (`smoke-lodo-e`) passed.
 
-**D note:** one PC-MCL job uses about 19 GB, so with `MEM_GB=15` the sweep's free-memory check keeps D at one job at a
-time (about 1.6 h per unit, 10 units about 16 h). Two jobs did fit in the 2-epoch test; raising concurrency is optional.
+**Scheduler restart by hand** (only if a dispatcher is not running; the dispatchers do it themselves):
+`RUN_ID=<run> SWEEP_TAG=-<tag> setsid nohup .venv-train/bin/python scripts/sweep.py logs/campaigns/<run>-<tag>.txt --workers 4 [--workers 3 --gpu-gb 29 on C] --ram-gb 6 >> logs/<run>-<tag>.log 2>&1 < /dev/null &`
+(`<tag>` = A2, B2, C2, D2, E2; `pcmcl-v1-D`: `--workers 2`). Over ssh start it with `ssh host 'bash -s' < script.sh`, else
+the ssh client stays attached. Finished units are skipped; interrupted ones resume from `last.pth` (RNG state not
+restored: rerun such units cleanly at the end if exact runs matter, as `scripts/grid_rerun.py` did for the grid).
+
+**Open issue on C (the user decides):** the user allowed up to 30% of C's GPU. The scheduler caps the summed `MEM_GB`
+reservations at 29 GB, but jobs use more than reserved on this card (three jobs used 52 GB on 19/10 16:49).
+
+**D note:** one PC-MCL job uses about 19 GB, so `pcmcl-v1-D` runs one job at a time (about 1.9 h per unit).
 
 Consolidated report with plan, timeline and grid results: `report.md` (v3.0, 19/10).
 
+## 2a. Monitoring (for the monitor session)
+
+Run `bash scripts/grid_status.sh` on A (read-only; covers A-E and both dispatchers; about 1 min) every hour and append
+one line per run to `docs/handoff/monitor_log.md` (`dd/mm/yyyy HH:MM | ...`). `grid-v1` is finished: stop checking it.
+
+Normal, no action:
+- `lodo-v1-A`, `lodo-v1-B` "superseded ... stopped on purpose"; `lodo-v1-A2`/`B2` "not started yet" while that
+  machine still trains old units (shown under "training now").
+- `lodo-v1-C2`, `lodo-v1-D2` absent until PC-MCL ends on D; then `lodo-v1-C` turns "superseded".
+- `pcmcl-v1-D` "NOT RUNNING" after its final line `all jobs finished, 0 failed`.
+- Out-of-memory requeues: the scheduler retries them; report the count only.
+
+Report to the user at once (do not fix, do not kill, do not restart anything yourself):
+- `FAILED` > 0 in any list; any NaN or collapsed job log.
+- A `*2` list or `lodo-v1-C` / `pcmcl-v1-D` with "scheduler NOT RUNNING" and no `all jobs finished` line, or a machine
+  with an empty "training now" while its active list has units left.
+- A dispatcher PID missing on A before its log says `ALL DONE`; a dispatcher log line with `Traceback`, `ended with units
+  missing` or `restarting`.
+- `ssh failed` twice in a row for a machine (power cut or network).
+- Disk free below 20 GB on any machine; done counts that do not grow for 3 hours.
+- Milestones to report: PC-MCL done (20/10 about 11:30) and the C+D split line in `logs/lodo-v1-share-CD.log`; A+B+E
+  done (about 20/10 18:00); C+D done (about 21/10 02:30); `ALL DONE` lines.
+
 ## 3. What each run contains
 
-- `lodo-v1` on A/B (no SC, Amendment 4): 11 cells x 4 held-out devices (Meditron, LittC2SE, Litt3200, AKGC417L) x
+- `lodo-v1` on A/B/E (no SC, Amendment 4): 11 cells x 4 held-out devices (Meditron, LittC2SE, Litt3200, AKGC417L) x
   seeds 0-4: AST ce, pafa, patchmix_cl; HTS-AT ce, patchmix_cl, sg_scl; BEATs ce, patchmix_cl, sg_scl, pafa, qlung.
   Cell names `<grid cell>+lodo_<dev>`; recipe = grid config; fixed last epoch (50; BEATs pafa 100).
-- `lodo-v1` on C (trained SC, static bound, Amendment 4): 7 cells (AST patchmix_cl, pafa; HTS-AT patchmix_cl,
+- `lodo-v1` on C, shared with D after PC-MCL (trained SC, static bound, Amendment 4): 7 cells (AST patchmix_cl, pafa; HTS-AT patchmix_cl,
   sg_scl; BEATs patchmix_cl, pafa, sg_scl), official split seeds 0-4 + the 4 LODO folds. Cells `<cell>+sc+sc_static`
   and `<cell>+sc+sc_static+lodo_<dev>`. Dynamic bound later:
   `PYTHONPATH=. .venv-train/bin/python scripts/grid.py lodo-jobs --smoke logs/grid_smoke_B.json --names C --sc-cells <7 cells> --sc-mode dynamic --run <run>`
@@ -97,16 +121,13 @@ Consolidated report with plan, timeline and grid results: `report.md` (v3.0, 19/
 ## 5. Next steps (in order)
 
 1. Resolve the C memory issue with the user (section 2).
-2. Monitor (no monitor session runs now). `scripts/grid_status.sh` and `scripts/grid.py audit` hard-code `grid-v1` and
-   machines A/B: parametrise them by run and add C and D before handing to a monitor, or check by hand:
-   per machine, count `outputs/train/<run>/<cell>/seed<s>/report.json` for the list's units, `grep -c FAILED` and
-   `grep -c 'out of memory'` in the sweep log, `tail logs/gpu-<M>.csv`, free disk (A has about 80 GB).
+2. Monitor: section 2a (`scripts/grid_status.sh` covers every machine and both dispatchers).
 3. When D is done: table for `pcmcl-v1` (Sp, Se, Score, HS, 2-class, worst device, coverage; last and best epoch),
    paired against grid `beats+ft+pafa` and `beats+ft+ce`; apply the Amendment 5 rule.
-4. When A/B are done (L1): L2 inference arms with `src.evaluation.lodo_ttsc` (test-time SC static and dynamic, A2,
+4. When A/B/E are done (L1): L2 inference arms with `src.evaluation.lodo_ttsc` (test-time SC static and dynamic, A2,
    TTA-EQ); L3 analysis with `src.evaluation.lodo` (H2 statistics, set size next to |Delta|) and per-fold Sp/Se/Score
    tables, method vs ce on the same encoder; report in `docs/reports/lodo-v1-results.md`.
-5. When C is done: SC vs no-SC paired by seed (official split vs grid units; LODO vs A/B units); then SC dynamic.
+5. When C is done: SC vs no-SC paired by seed (official split vs grid units; LODO vs A/B/E units); then SC dynamic.
 6. Optional: ensembles E1-E4 (rules fixed in Amendment 4: equal-weight softmax mean per fold and seed; needs a small
    `src/evaluation/ensemble.py` writing unit-format outputs), distillation only if E1 beats the best single cell.
 7. Choose the final AuscultTrust configuration with the user; then KAUH positive controls, screening view, phantom.
