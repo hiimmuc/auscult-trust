@@ -1,91 +1,53 @@
-# Handoff: monitoring the grid-v1 sweep (from 15/10/2026)
+# Handoff (19/10/2026): grid v1 done, LODO v1 next
 
-This file is for the session that monitors training. Read it fully before acting. The plan is in
-`docs/updates/stage-plan-v1.md`; the previous handoff is `docs/handoff/HANDOFF_2026-10-14.md` (those campaigns were stopped).
+For the next working session. Read this, then `docs/updates/lodo-plan-v1.md`. Repo rules are in `CLAUDE.md`.
+The grid monitoring handoff is archived as `docs/handoff/HANDOFF_2026-10-15-grid.md`.
 
-## What runs
+## Where things are
 
-- Run `grid-v1`: 70 cells (method x encoder x fine-tuned/frozen) x seeds 0-4 = 350 training units on the ICBHI official
-  60/40 split.
-- Two machines, each with one sweep that starts up to 4 jobs at a time on its GPU. The repo path is
-  `~/Workspace/Personal/KHKT-CVA-2026/auscult-trust` on both.
-  - **A** (this machine, RTX 5000 Ada): job list `logs/campaigns/grid-v1-A.txt` (120 units since 16/10), sweep log `logs/grid-v1-A.log`,
-    one log per job in `logs/grid-v1-A/<n>.log`.
-  - **B** (`ssh namdp15@10.148.183.8`, RTX 5090): `logs/campaigns/grid-v1-B.txt` (230 units since 16/10), `logs/grid-v1-B.log`,
-    `logs/grid-v1-B/<n>.log`.
-- Order on both machines: the AST cells and PAFA on BEATs first, then BEATs, HTS-AT and OPERA-CT, then DASS last. DASS
-  fine-tuning runs take 2.5-3.5 h each; the others take 0.1-1.5 h.
-- Expected end: about 19/10/2026 evening (lists rebalanced 16/10; the job logs before that are in
-  `logs/grid-v1-{A,B}.v1/`).
-- A unit is finished when `outputs/train/grid-v1/<cell>/seed<s>/report.json` exists. An interrupted unit resumes from
-  `checkpoints/train/grid-v1/<cell>/seed<s>/last.pth` on the same machine.
+- Grid v1 (70 method x encoder cells, 350 units, ICBHI official split) is complete and audited.
+  Report: `docs/reports/grid-v1-results.md`. Tables: `outputs/train/grid-v1/table_{last,best_test}.md`.
+  Plan of record for the grid: `docs/updates/stage-plan-v1.md`.
+- Both machines are idle. No sweep, dispatcher or monitor runs.
+  - A: this machine, RTX 5000 Ada 32 GB. B: `ssh namdp15@10.148.183.8`, RTX 5090 32 GB. Repo path
+    `~/Workspace/Personal/KHKT-CVA-2026/auscult-trust` on both. A holds all grid outputs (B's synced); checkpoints stay on
+    the machine that trained them.
+- Code synced to B with: `rsync -a --exclude __pycache__ src experiments scripts tests namdp15@10.148.183.8:Workspace/Personal/KHKT-CVA-2026/auscult-trust/`
+- Tests: `MPLBACKEND=Agg PYTHONPATH=. .venv-train/bin/python -m pytest -q tests` (50 pass). DASS runs in `.venv-dass`
+  (grid job lines carry the interpreter).
 
-## Each check (every 30-60 minutes)
+## Decisions taken by the user
 
-1. Run `bash scripts/grid_status.sh` on A. It prints, for both machines:
-   - units done / total
-   - whether the sweep is alive
-   - the units running now
-   - jobs the sweep gave up on (FAILED) and out-of-memory requeues
-   - job logs with a NaN loss or Score
-   - GPU use and free disk
-2. Every 3rd check, also run the audit on both machines (read-only, seconds):
-   `PYTHONPATH=. .venv-train/bin/python scripts/grid.py audit --list logs/campaigns/grid-v1-<M>.txt` (B through ssh in its
-   repo). Report any line other than `... 0 problems` to the user.
-3. If everything is normal, write one line in `docs/handoff/monitor_log.md`: date and time, done counts A/B, anything odd.
-   Do nothing else.
+- LODO cells (11): AST ce, pafa, patchmix_cl; HTS-AT ce, patchmix_cl, sg_scl; BEATs patchmix_cl, sg_scl, pafa,
+  ce_pafa_cfg, qlung. No DASS, no OPERA-CT. BEATs CE not included (open).
+- Ensemble rule fixed before LODO: E1 = equal-weight mean softmax of the 11 cells per fold and seed (primary); E2 BEATs
+  5; E3/E4 AST 3, HTS-AT 3. Then distillation into one BEATs model.
 
-## Allowed actions (only these)
+## Next steps (stage L0 of `docs/updates/lodo-plan-v1.md`)
 
-- **A sweep is not running and its units are not all done.** Restart it with the same command. Finished units are
-  skipped and interrupted ones resume.
-  - A: `cd ~/Workspace/Personal/KHKT-CVA-2026/auscult-trust && RUN_ID=grid-v1 SWEEP_TAG=-A setsid nohup .venv-train/bin/python scripts/sweep.py logs/campaigns/grid-v1-A.txt --workers 4 --ram-gb 6 > logs/grid-v1-A.log 2>&1 < /dev/null &`
-  - B (run on B through ssh): same command with `-B` and `grid-v1-B.txt` / `grid-v1-B.log`.
-  - Before restarting, copy the old sweep log to `logs/grid-v1-<M>.<date>.log` so it is not overwritten.
-- **A job is FAILED.** Read the last 30 lines of its job log (the job number is in the FAILED line).
-  - If the cause is memory (`out of memory`, exit 137) or a lost connection: restart that machine's sweep once all its
-    other jobs have finished. The restart picks up unfinished units.
-  - Any other error: do not retry. Report it to the user with the exact error line.
-- **Reruns and the end of the grid are automatic.** 13 units were resumed from `last.pth` after interruptions, so they
-  are rerun without interruption under run `grid-v1-rerun` (lists `logs/campaigns/grid-v1-rerun-{A,B}.txt`). A dispatcher
-  on A, `scripts/grid_rerun.py` (log `logs/grid-v1-rerun-dispatch.log`), waits until one machine's grid units are all done,
-  splits the reruns between the machines (plan in `logs/campaigns/grid-v1-rerun-plan.json`), starts them, then moves the
-  resumed units to `grid-v1-resumed/`, copies the reruns in, audits, syncs B to A and builds the tables. Its last line is
-  `ALL DONE` when the tables exist. Do not run the audit/rsync/table steps yourself and do not start rerun sweeps by hand.
-  - Each check: the dispatcher must be alive (`ps -eo pid,args | grep [g]rid_rerun.py` on A). If it is not and its log does
-    not end with `ALL DONE`, restart it (it resumes from the saved plan):
-    `cd ~/Workspace/Personal/KHKT-CVA-2026/auscult-trust && setsid nohup .venv-train/bin/python scripts/grid_rerun.py >> logs/grid-v1-rerun-dispatch.log 2>&1 < /dev/null &`
-  - A grid sweep that is not running while its grid units are all done is normal from then on; do not restart it.
-  - The rerun sweeps log to `logs/grid-v1-rerun-{A,B}.log`, job logs in `logs/grid-v1-rerun-{A,B}/`.
-  - The log ends with an error line ("audit found problems", "not clean", a traceback): report it to the user and stop.
-  - `ALL DONE`: tell the user. Do not choose the "best" cells: the user decides the rule.
+1. Write the LODO job lists: per cell, the grid job line (`scripts/grid.py` `cells()` gives configs and extra args) with
+   `experiments/train/lodo_<dev>.yaml` appended to `--config`, cell `<cell>+lodo_<dev>`, `RUN_ID=lodo-v1`, seeds 0-4,
+   `--selection fixed --report_epochs <last epoch>`. Balance A/B by `logs/grid_smoke_{A,B}.json` run hours x fold factor
+   (Meditron 0.83, LittC2SE 0.94, Litt3200 0.94, AKGC417L 0.70) and measured speed (A 1.17, B 1.73). A small `grid.py`
+   subcommand is the natural place (reuse `write_jobs`).
+2. Smoke: one epoch (`--stop_epoch 1`) of one cell per encoder and method family on each fold, on both machines. Check
+   PAFA (patient ids), SG-SCL (3 source devices), QLung (quality cache on the LODO split), 5 s cycles, `cal_preds.npz`.
+3. Start the GPU logger on both machines (command in the plan), then the sweeps:
+   `RUN_ID=lodo-v1 SWEEP_TAG=-<M> setsid nohup .venv-train/bin/python scripts/sweep.py logs/campaigns/lodo-v1-<M>.txt --workers 4 --ram-gb 6 > logs/lodo-v1-<M>.log 2>&1 < /dev/null &`
+4. Monitoring: adapt `scripts/grid_status.sh` and `scripts/grid.py audit` to run `lodo-v1` (both hard-code `grid-v1`),
+   or pass the run as an argument. A Haiku monitor can follow the archived grid handoff with those names.
+5. After L1: stages L2-L6 of the plan.
 
-## Never
+## Gotchas learned in the grid
 
-- Never edit anything in `src/`, `experiments/`, `scripts/` or the job lists, and never start other training.
-- Never kill processes by pattern (`pkill -f`, `killall`). Over ssh the pattern matches the ssh shell itself. If a process
-  must stop, kill it by PID, and only after asking the user.
-- Never delete outputs, checkpoints or logs.
-- Never run two sweeps of the same job list at once (check the sweep pid in the status output first).
-
-## Report to the user, without acting
-
-- A FAILED job that is not out of memory.
-- Any out-of-memory requeue (count above 0 in the status output). The memory reservations should prevent them.
-- A collapsed job log (status line "job logs collapsed"): test Se below 1% from epoch 3 on, i.e. the model predicts one
-  class. Seen with SG-SCL on BEATs under the reference reversal schedule; the grid now uses the ramp.
-- A NaN loss or NaN Score in a job log. QLung handles silent frames, but report it anyway.
-- The same sweep dying twice.
-- Less than 30 GB free disk on either machine.
-- B unreachable for more than 2 checks in a row.
-- Progress far slower than expected: fewer than about 60 units done per machine by 17/10 evening.
-
-## Context the monitor may need
-
-- The 2-class Sp equals the 4-class Sp by construction; it is not a bug.
-- The sweep only starts a job when its reservation (per-job `MEM_GB=` prefix, smoke peak x 1.25 + 1.5 GB) plus the
-  reservations of all units running now fit in the GPU total minus 1 GB, and that much memory is free. Since 15/10 evening
-  no out-of-memory is expected; report any `out of memory` line to the user (the sweep still requeues it). Jobs waiting
-  while the GPU is busy, and fewer than 4 jobs running, are normal.
-- QLung reference bug: in the reference code, 71 AKGC417L cycles (14 train, 57 test) get a NaN quality score. Those
-  recordings start with 4,096 digital-zero samples. Our port leaves the silent frames out, so no NaN is expected.
+- Kill processes by PID only (never `pkill -f`: over ssh the pattern matches the ssh shell). Never edit a running bash
+  script in place. Never reuse a unit with another config (`check_same_config` asserts).
+- The sweep starts a job only when the summed `MEM_GB` reservations fit the GPU (`--gpu-gb`, default total - 1 GB).
+  `MEM_GB = max(4, smoke peak x 1.25 + 1.5)`. Fewer than 4 jobs running is normal.
+- Sweeps do not survive a reboot. After a power cut: back up `logs/<run>-<M>.log`, restart the same command; units
+  resume from `last.pth`. Resume does not restore the RNG state: rerun resumed units cleanly if exact runs matter
+  (`scripts/grid_rerun.py` did this for the grid).
+- SG-SCL uses `grl_schedule: progress` (the reference schedule collapses BEATs). QLung skips silent frames (reference NaN).
+- Frozen PAFA = frozen CE (projector-only losses).
+- `report.json` is written before `last.pth` is removed; its history carries train loss and accuracy per epoch.
+- No test-set tuning except in columns labelled optimistic. Claims in docs use [Fact]/[Interpretation]/... tags.
