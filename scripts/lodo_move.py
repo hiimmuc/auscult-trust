@@ -5,12 +5,13 @@ outputs on A. Runs on A, drives the other machines through ssh; safe to restart 
     setsid nohup .venv-train/bin/python scripts/lodo_move.py --src A:lodo-v1-A B:lodo-v1-B --to A B E \
         >> logs/lodo-v1-share-ABE.log 2>&1 < /dev/null &
     # trained SC moved from C to D once D's pcmcl-v1 sweep has ended (C only finishes the jobs it is running):
-    setsid nohup .venv-train/bin/python scripts/lodo_move.py --src C:lodo-v1-C --to D --after D:pcmcl-v1 \
+    setsid nohup .venv-train/bin/python scripts/lodo_move.py --src C:lodo-v1-C --to D --after D:pcmcl-v1-D \
         >> logs/lodo-v1-share-D.log 2>&1 < /dev/null &
     # plan only (D busy for 10 more hours), nothing changed:
     .venv-train/bin/python scripts/lodo_move.py --src C:lodo-v1-C --to D --dry --delay D=10
 
-1. With `--after M:RUN`: wait until M's sweep of RUN has stopped with all its units done (or its final line written).
+1. With `--after M:list ...`: wait until each of these sweeps has stopped with all its units done (or its final line
+   written). `--tag` names the new lists `<run>-<M><tag>` (default 2) so that a second re-split does not reuse names.
 2. Stop the source schedulers by PID. Their running jobs go on and finish on their machine. Interrupted units (job log
    or last.pth, no report.json, not running) are moved aside to `<outputs|checkpoints>/train/<run>-interrupted/` and
    rerun from epoch 0 (a resume would not restore the RNG state). A source machine not in `--to` only drains.
@@ -162,7 +163,8 @@ def main():
     ap.add_argument("--run", default="lodo-v1")
     ap.add_argument("--src", nargs="+", required=True, help="M:list of the running sweeps whose units are re-split")
     ap.add_argument("--to", nargs="+", required=True, help="machines that share the units")
-    ap.add_argument("--after", default=None, help="M:RUN, start once M's sweep of RUN has ended")
+    ap.add_argument("--after", nargs="*", default=[], help="M:list ..., start once all these sweeps have ended")
+    ap.add_argument("--tag", default="2", help="new lists are <run>-<M><tag>")
     ap.add_argument("--speed", nargs="*", default=[], help="M=x: throughput of a machine without history")
     ap.add_argument("--delay", nargs="*", default=[], help="M=h: hours until M is free (dry run)")
     ap.add_argument("--dry", action="store_true")
@@ -170,19 +172,19 @@ def main():
     run, src = a.run, dict(s.split(":") for s in a.src)
     speeds = {k: float(v) for k, v in (s.split("=") for s in a.speed)}
     delay = {k: float(v) for k, v in (s.split("=") for s in a.delay)}
-    new = {m: f"{run}-{m}2" for m in a.to}
-    saved = REPO / CAMP / f"{run}-share-{''.join(a.to)}.json"
+    new = {m: f"{run}-{m}{a.tag}" for m in a.to}
+    saved = REPO / CAMP / f"{run}-share{'' if a.tag == '2' else a.tag}-{''.join(a.to)}.json"
     if a.dry:
         keep, _, sp, end = plan(run, src, a.to, speeds, delay)
         print(json.dumps({"speed": sp, "end_h": end, "units": {m: len(v) for m, v in keep.items()}}, indent=1))
         return
     if not saved.exists():
-        if a.after:
-            m, r = a.after.split(":")
-            while sweep_pids(m, f"{r}-{m}") or not ({unit(l) for l in lines(m, f"{r}-{m}")} <= done(m, r)
-                                                    or "all jobs finished" in sh(m, f"tail -1 logs/{r}-{m}.log")):
+        for m, lst in (s.split(":") for s in a.after):
+            r = lst.rsplit("-", 1)[0]
+            while sweep_pids(m, lst) or not ({unit(l) for l in lines(m, lst)} <= done(m, r)
+                                             or "all jobs finished" in sh(m, f"tail -1 logs/{lst}.log")):
                 time.sleep(300)
-            log(f"{m}: {r} ended")
+            log(f"{m}: {lst} ended")
         for m, lst in src.items():
             for pid in sweep_pids(m, lst):
                 sh(m, f"kill {pid}", check=True)

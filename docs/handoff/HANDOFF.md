@@ -28,24 +28,23 @@ SSH from A by key to all. Logs per job list `<L>`: scheduler `logs/<L>.log`, job
 | A | local | RTX 5000 Ada 32 GB | `lodo-v1-A2` (no SC); starts when A's last old job ends | 36 | about 20/10 18:00 |
 | B | `namdp15@10.148.183.8` | RTX 5090 32 GB | `lodo-v1-B2` (no SC); starts when B's old jobs end | 89 | about 20/10 18:00 |
 | E | `namdp15@10.148.182.179` | RTX 5090 32 GB | `lodo-v1-E2` (no SC, units from A/B lists) | 88 | about 20/10 18:00 |
-| C | `namdp15@10.148.183.119` | RTX PRO 6000 96 GB | `lodo-v1-C2` (trained SC static, C's share of `lodo-v1-C`), up to 5 jobs, 58 GB | 101 | about 21/10 02:00 |
-| D | `namdp15@10.148.183.171` | RTX 5090 32 GB | `lodo-v1-D2` (trained SC static, D's share of `lodo-v1-C`); `pcmcl-v1` done | 60 | about 21/10 04:00 |
+| C | `namdp15@10.148.183.119` | RTX PRO 6000 96 GB | **not used** (our jobs killed 3 times by its user; last 20/10 12:10); 14 SC units done there, copied to A | - | - |
+| D | `namdp15@10.148.183.171` | RTX 5090 32 GB | `lodo-v1-D3` = D2 + all of C2 (trained SC static); from about 18:00 its share `lodo-v1-D4` | 161 (2 done at 12:40) | about 21/10 05:30 |
 
-Old lists `lodo-v1-A.txt`, `lodo-v1-B.txt`, `lodo-v1-C.txt` are kept but their schedulers were stopped on purpose:
-their unfinished units are in the `*2` lists. Their last running jobs ("old jobs") finish normally. LODO without SC ends
-about 20/10 18:00; trained SC about 21/10 04:00 (±20%).
+Old lists `lodo-v1-A`, `-B`, `-C`, `-C2`, `-D2` are kept but their schedulers were stopped on purpose (marked by
+`*2.txt` or `<list>.moved`); their unfinished units are in the newer lists. LODO without SC ends about 20/10 18:00;
+trained SC about 21/10 05:30 (±20%).
 
-**SC on C and D (20/10 10:45, user decisions).** PC-MCL ended on D (10/10, 0 failed; results in
-`docs/reports/pcmcl-v1-results.md`: neither cell passes the Amendment 5 rule, so the SC cell list is unchanged). The
-user sent SC back to C (up to 60% of its GPU, after `anhdh35`'s job ended) and gave D the next job. C's 161 unfinished
-units were split once (`/home/namdp15/.claude/jobs/14a45349/tmp/split_cd.py`, `lodo_move.plan` with C 3.5 and D 1.95
-B-smoke h/h): `lodo-v1-C2` 101 units on C, `lodo-v1-D2` 60 units on D (copies of both lists on A). Code check: D = A;
-C's code is the commit before the PC-MCL port (identical on every path the SC cells use). HTS-AT weights copied to D;
-1-epoch SC smoke on D (`smoke-sc-d`: BEATs, AST, HTS-AT units) passed with `sc_state.npz`. D2 started 10:44
-(`--workers 4`, log `logs/lodo-v1-D2.log`). On C a watcher on A waited for `anhdh35`'s PID 222490, set aside any cut-off
-unit and started `lodo-v1-C2` at 10:44 (`--workers 5 --gpu-gb 58`, log `logs/lodo-v1-C2.log`). No dispatcher keeps C2
-and D2 alive: after a crash or kill, restart with the hand restart command (tags C2, D2) after setting cut-off units
-aside (they rerun from epoch 0). At the end copy C's and D's `outputs|checkpoints/train/lodo-v1/` to A.
+**SC after C's third kill (20/10 12:40, user decision: "move all to D, then distribute to A, B, E").** C's jobs were
+killed at about 12:10 (4 cut-off units, set aside on C; 0 of C2 done; `lodo-v1-C2.moved` written; C2 job logs copied
+to A). D's scheduler was switched from `lodo-v1-D2` to `lodo-v1-D3` (D2's 60 lines + C2's 101 lines; D2's running jobs
+continued, the new scheduler skips them). Dispatcher PID 37600 (log `logs/lodo-v1-share4-DABE.log`, command in
+`~/.claude/jobs/14a45349/tmp/launch_share4.sh`): `scripts/lodo_move.py --src D:lodo-v1-D3 --to D A B E --tag 4
+--after A:lodo-v1-A2 B:lodo-v1-B2 E:lodo-v1-E2 --speed D=1.95 A=0.8 B=1.94 E=1.96`. When A2, B2 and E2 have all ended
+(about 18:00) it stops D3's scheduler, sets aside interrupted units, splits D3's unstarted units longest first over
+D, A, B, E (`lodo-v1-<M>4`; dry run at 12:45: D 53, A 18, B 44, E 44), starts A4, B4, E4 at once and D4 when D's
+running jobs end, keeps them alive and rsyncs D, B, E outputs to A at the end. SC smoke passed on D (BEATs, AST,
+HTS-AT), B and E (HTS-AT, `smoke-sc-b`, `smoke-sc-e`); A ran SC smoke on 19/10.
 
 **C dropped (20/10 02:00; superseded at 10:40, history).** Our scheduler and jobs on C were killed twice by the machine's user
 (`anhdh35`, hostname `VMO-ANHDH35-D`): 19/10 23:52 and 20/10 01:30. Nothing of ours runs there. The C+D dispatcher
@@ -65,7 +64,7 @@ scheduler (tag -<M>2) only after that machine's old jobs have ended, restart a s
 line, and rsync the other machines' `outputs/train/lodo-v1/` to A at the end. Plan saved in
 `logs/campaigns/lodo-v1-share-<machines>.json`; rerunning the same command resumes from it.
 - A+B+E (LODO no SC): PID 3011935, log `logs/lodo-v1-share-ABE.log`, plan applied 19/10 18:42 (A 36, B 89, E 88).
-- No SC dispatcher runs: SC lists C2 and D2 were split once (see "SC on C and D"). Earlier C plans never acted.
+- SC dispatcher: PID 37600 (see "SC after C's third kill"). Earlier C plans never acted.
 - The A+B+E dispatcher was started from the identical copy in `.claude/worktrees/rebalance/scripts/` with
   `AT_REPO=<this repo>`; restart it (after a power cut on A) with the command in the docstring of `scripts/lodo_move.py`.
 
@@ -94,7 +93,8 @@ one line per run to `docs/handoff/monitor_log.md` (`dd/mm/yyyy HH:MM | ...`). `g
 Normal, no action:
 - `lodo-v1-A`, `lodo-v1-B` "superseded ... stopped on purpose"; `lodo-v1-A2`/`B2` "not started yet" while that
   machine still trains old units (shown under "training now").
-- `lodo-v1-C` "superseded ... stopped on purpose" (14 done): its units are in `lodo-v1-C2` (C) and `lodo-v1-D2` (D).
+- `lodo-v1-C`, `lodo-v1-C2`, `lodo-v1-D2` "units moved ... stopped on purpose": expected. C is not used.
+- `lodo-v1-A4`/`B4`/`E4`/`D4` absent until A2, B2, E2 all end (about 18:00); then `lodo-v1-D3` shows "units moved".
 - `pcmcl-v1-D` "NOT RUNNING" after its final line `all jobs finished, 0 failed` (finished 20/10).
 - Do not restart anything on C yourself; report if C's scheduler stops without its final line (our jobs were killed
   there twice) or if our jobs on C pass about 58 GB.
@@ -108,7 +108,8 @@ Report to the user at once (do not fix, do not kill, do not restart anything you
   missing` or `restarting`.
 - `ssh failed` twice in a row for a machine (power cut or network).
 - Disk free below 20 GB on any machine; done counts that do not grow for 3 hours.
-- Milestones to report: A+B+E done (about 20/10 18:00); C2 done (about 21/10 02:00); D2 done (about 21/10 04:00);
+- Milestones to report: A+B+E LODO done and the plan line in `logs/lodo-v1-share4-DABE.log` (about 20/10 18:00);
+  SC done (about 21/10 05:30);
   `ALL DONE` lines. Our processes on C or any machine killed by
   someone else (scheduler missing, no final line): report at once.
 
