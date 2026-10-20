@@ -163,6 +163,12 @@ Report to the user at once (do not fix, do not kill, do not restart anything you
 - PC-MCL and PAFA + PC-MCL on BEATs on D now (not after LODO).
 - Deleted on request (A and B): checkpoints of smoke-*, screen-ast-cv5, grid-v1-rerun, grid-v1-resumed,
   grid-v1-sgscl-ref, repro-wave1*, lung-srad (outputs kept).
+- Deleted on request 20/10 (about 175 GB, outputs kept): checkpoints of smoke-* (all machines), lodo-v1-interrupted
+  (A, C), screen-ast and screen-ast-c0 (A, B), the pcmcl-v1 duplicate on D (checksummed copy on A); all Phase 0
+  feature caches in `data/cache/` except `train_images` (A, B; the archived Phase 0 code would have to re-extract);
+  `train_images` caches of CLAP, DASS, OPERA-CT, HeAR, the fold0 screening and BEATs 10 s (rebuilt on demand). Kept:
+  grid-v1 checkpoints (all cells), lodo-v1, lodo-ast, lodo-bench, pcmcl-v1 on A, the AST/BEATs/HTS-AT 5 s and 8 s
+  and quality caches.
 
 ## 7. Gotchas
 
