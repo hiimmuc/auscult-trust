@@ -21,8 +21,8 @@ best encoder (BEATs PAFA 61.7 ± 0.7 at the last epoch; BEATs Patch-Mix CL 63.6 
 user treats the old AST AuscultTrust as stale: the final AuscultTrust (encoder + method + SC) is chosen after LODO v1 and
 the trained-SC arms (BEATs so far). Running now: LODO without SC (machines A, B; D joins when PC-MCL ends), trained SC
 static (C), PC-MCL trials (D). On 19/10 machine E joined: LODO without SC is shared by A, B and E (end about 20/10
-18:00); machine C was dropped on 20/10 (our jobs killed twice by its user) with 14 of 175 SC units done; the
-remaining SC units are paused until the SC cell list is confirmed after the LODO and PC-MCL results (section 3).
+18:00). PC-MCL finished on 20/10 and does not enter LODO/SC (`docs/reports/pcmcl-v1-results.md`). Trained SC (14 of
+175 done before two kills on C) continues on C and D since 20/10 10:44 (end about 21/10 04:00) (section 3).
 
 ## 2. Overall plan
 
@@ -35,8 +35,8 @@ then the final configuration; ensembles and distillation are optional. Phantom t
 | 1 | Registered core (v9) | Gate G on AST Patch-Mix CL vs AuscultTrust (AST + SC); LODO on AST (baseline, Freq-MixStyle, trained and test-time SC, A2, TTA-EQ); KAUH control A | Done 09/10 (section 4) |
 | 2 | Grid v1 | 5 encoders x 14 methods (8 fine-tuned, 6 frozen) x 5 seeds, official split | Done 18/10 (section 5) |
 | 3 | LODO v1 without SC (L1, Amendment 4) | 11 cells x 4 held-out devices x 5 seeds = 220 units | Running on A, B, E |
-| 4 | Trained SC, static bound (Amendment 4) | 7 cells, official split + 4 LODO folds, 175 units | 14 done on C (dropped 20/10); paused until the user confirms the cell list after stages 3 and 5 |
-| 5 | PC-MCL (Amendment 5) | BEATs PC-MCL and PAFA + PC-MCL, official split, 10 units | Running on D; enters LODO/SC only if its last-epoch Score beats BEATs PAFA by more than one seed SD |
+| 4 | Trained SC, static bound (Amendment 4) | 7 cells, official split + 4 LODO folds, 175 units | Running on C (101 units) and D (60 units) since 20/10 10:44; 14 done before |
+| 5 | PC-MCL (Amendment 5) | BEATs PC-MCL and PAFA + PC-MCL, official split, 10 units | Done 20/10: last-epoch Score 60.9 / 61.3 vs PAFA 61.7, rule not met, not carried on (`docs/reports/pcmcl-v1-results.md`) |
 | 6 | Inference arms (L2) | Test-time SC (static, dynamic), A2, TTA-EQ on every LODO unit | [Pending], hours, after stage 3 |
 | 7 | Analysis (L3) | Per-fold Sp/Se/Score/HS/2c; method vs CE on the same encoder; H2 statistics (prior-matched coverage, null gate, two-level bootstrap) with set size beside abs(Delta); SC vs no SC paired by seed | [Pending], about 1 day; report `docs/reports/lodo-v1-results.md` |
 | 8 | Trained SC, dynamic bound | Same 7 cells | [Pending], after stage 4 |
@@ -55,8 +55,8 @@ first; C limited to 30% of its GPU; PC-MCL on D now; ensembles and distillation 
 | A | RTX 5000 Ada 32 GB | `lodo-v1` no SC, list `lodo-v1-A2` | 36 | about 20/10 18:00 |
 | B | RTX 5090 32 GB | `lodo-v1` no SC, list `lodo-v1-B2` | 89 | about 20/10 18:00 |
 | E | RTX 5090 32 GB (`10.148.182.179`) | `lodo-v1` no SC, list `lodo-v1-E2` | 88 | about 20/10 18:00 |
-| C | RTX PRO 6000 96 GB | dropped 20/10 02:00; `lodo-v1` trained SC static stopped (14 of 175 done, copied to A) | - | - |
-| D | RTX 5090 32 GB | `pcmcl-v1` (10 units) | 5 at 20/10 02:00 | about 20/10 10:45 |
+| C | RTX PRO 6000 96 GB | `lodo-v1-C2` trained SC static, up to 5 jobs, 58 GB (60% of the card) | 101 | about 21/10 02:00 |
+| D | RTX 5090 32 GB | `pcmcl-v1` done (10/10); `lodo-v1-D2` trained SC static | 60 | about 21/10 04:00 |
 
 - [Fact] Machine E joined on 19/10 (data, weights, caches, code and venv copied from A; 1-epoch smoke of one AST, HTS-AT
   and BEATs LODO unit passed with all outputs). LODO without SC is shared by A, B and E.
@@ -68,9 +68,9 @@ first; C limited to 30% of its GPU; PC-MCL on D now; ensembles and distillation 
 - [Fact] Machine C: our jobs were killed by its user at 19/10 23:52 and again at 20/10 01:30; C was dropped. Its 14
   finished SC units (outputs and checkpoints) were copied to A and verified by checksum; the 5 cut-off partial runs are
   kept in `<outputs|checkpoints>/train/lodo-v1-interrupted/` and their units will rerun from epoch 0.
-- [Pending] Trained SC: 161 units left, paused until the user confirms the SC cell list after the LODO and PC-MCL
-  results. Agreed plan: D after PC-MCL, then A, B and E once their LODO lists end (about 21/10 05:00 for the current
-  list).
+- [Fact] Trained SC: the 161 units left were split once on 20/10 10:44 between C (101, started when the machine user's
+  job ended) and D (60, after PC-MCL). D runs the current code; C the commit before the PC-MCL port (identical on every
+  SC path). A 1-epoch SC smoke on D passed. Cut-off units rerun from epoch 0.
 - [Fact] Throughput in B-smoke hours (one job alone on B) per wall hour: A 0.80, B 1.94, E 1.96 (measured); D assumed
   equal to E (same GPU). PC-MCL: about 1.9 h per unit, one at a time (a job takes about 19 GB).
 - [Assumption] ±20% on every estimate; A and B idle partly while their last old jobs drain.

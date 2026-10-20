@@ -28,15 +28,26 @@ SSH from A by key to all. Logs per job list `<L>`: scheduler `logs/<L>.log`, job
 | A | local | RTX 5000 Ada 32 GB | `lodo-v1-A2` (no SC); starts when A's last old job ends | 36 | about 20/10 18:00 |
 | B | `namdp15@10.148.183.8` | RTX 5090 32 GB | `lodo-v1-B2` (no SC); starts when B's old jobs end | 89 | about 20/10 18:00 |
 | E | `namdp15@10.148.182.179` | RTX 5090 32 GB | `lodo-v1-E2` (no SC, units from A/B lists) | 88 | about 20/10 18:00 |
-| C | `namdp15@10.148.183.119` | RTX PRO 6000 96 GB | **dropped 20/10 02:00** (see "C dropped" below); `lodo-v1-C` stopped, 14 of 175 SC units done | 14 | - |
-| D | `namdp15@10.148.183.171` | RTX 5090 32 GB | `pcmcl-v1-D` (run `pcmcl-v1`) | 10 | about 20/10 10:45 |
+| C | `namdp15@10.148.183.119` | RTX PRO 6000 96 GB | `lodo-v1-C2` (trained SC static, C's share of `lodo-v1-C`), up to 5 jobs, 58 GB | 101 | about 21/10 02:00 |
+| D | `namdp15@10.148.183.171` | RTX 5090 32 GB | `lodo-v1-D2` (trained SC static, D's share of `lodo-v1-C`); `pcmcl-v1` done | 60 | about 21/10 04:00 |
 
-Old lists `lodo-v1-A.txt`, `lodo-v1-B.txt` are kept but their schedulers were stopped on purpose: their unfinished units
-are in the `*2` lists. Their last running jobs ("old jobs") finish normally. LODO without SC ends about 20/10 18:00
-(±20%). Trained SC (161 units left) is paused until the user confirms the SC cell list after the LODO and PC-MCL
-results.
+Old lists `lodo-v1-A.txt`, `lodo-v1-B.txt`, `lodo-v1-C.txt` are kept but their schedulers were stopped on purpose:
+their unfinished units are in the `*2` lists. Their last running jobs ("old jobs") finish normally. LODO without SC ends
+about 20/10 18:00; trained SC about 21/10 04:00 (±20%).
 
-**C dropped (20/10 02:00, user decision).** Our scheduler and jobs on C were killed twice by the machine's user
+**SC on C and D (20/10 10:45, user decisions).** PC-MCL ended on D (10/10, 0 failed; results in
+`docs/reports/pcmcl-v1-results.md`: neither cell passes the Amendment 5 rule, so the SC cell list is unchanged). The
+user sent SC back to C (up to 60% of its GPU, after `anhdh35`'s job ended) and gave D the next job. C's 161 unfinished
+units were split once (`/home/namdp15/.claude/jobs/14a45349/tmp/split_cd.py`, `lodo_move.plan` with C 3.5 and D 1.95
+B-smoke h/h): `lodo-v1-C2` 101 units on C, `lodo-v1-D2` 60 units on D (copies of both lists on A). Code check: D = A;
+C's code is the commit before the PC-MCL port (identical on every path the SC cells use). HTS-AT weights copied to D;
+1-epoch SC smoke on D (`smoke-sc-d`: BEATs, AST, HTS-AT units) passed with `sc_state.npz`. D2 started 10:44
+(`--workers 4`, log `logs/lodo-v1-D2.log`). On C a watcher on A waited for `anhdh35`'s PID 222490, set aside any cut-off
+unit and started `lodo-v1-C2` at 10:44 (`--workers 5 --gpu-gb 58`, log `logs/lodo-v1-C2.log`). No dispatcher keeps C2
+and D2 alive: after a crash or kill, restart with the hand restart command (tags C2, D2) after setting cut-off units
+aside (they rerun from epoch 0). At the end copy C's and D's `outputs|checkpoints/train/lodo-v1/` to A.
+
+**C dropped (20/10 02:00; superseded at 10:40, history).** Our scheduler and jobs on C were killed twice by the machine's user
 (`anhdh35`, hostname `VMO-ANHDH35-D`): 19/10 23:52 and 20/10 01:30. Nothing of ours runs there. The C+D dispatcher
 (PID 3446984) was stopped before it acted. On C the 5 cut-off units (3 of the second kill) were moved to
 `<outputs|checkpoints>/train/lodo-v1-interrupted/` and `logs/campaigns/lodo-v1-C.moved` written. C's 14 finished SC
@@ -54,7 +65,7 @@ scheduler (tag -<M>2) only after that machine's old jobs have ended, restart a s
 line, and rsync the other machines' `outputs/train/lodo-v1/` to A at the end. Plan saved in
 `logs/campaigns/lodo-v1-share-<machines>.json`; rerunning the same command resumes from it.
 - A+B+E (LODO no SC): PID 3011935, log `logs/lodo-v1-share-ABE.log`, plan applied 19/10 18:42 (A 36, B 89, E 88).
-- No SC dispatcher runs (C dropped; SC paused, see above). Earlier C plans (C+D share, move all to D) never acted.
+- No SC dispatcher runs: SC lists C2 and D2 were split once (see "SC on C and D"). Earlier C plans never acted.
 - The A+B+E dispatcher was started from the identical copy in `.claude/worktrees/rebalance/scripts/` with
   `AT_REPO=<this repo>`; restart it (after a power cut on A) with the command in the docstring of `scripts/lodo_move.py`.
 
@@ -62,15 +73,14 @@ line, and rsync the other machines' `outputs/train/lodo-v1/` to A at the end. Pl
 the full GPU (scheduler budget 30.8 GB). 1-epoch smoke of one unit per encoder (`smoke-lodo-e`) passed.
 
 **Scheduler restart by hand** (only if a dispatcher is not running; the dispatchers do it themselves):
-`RUN_ID=<run> SWEEP_TAG=-<tag> setsid nohup .venv-train/bin/python scripts/sweep.py logs/campaigns/<run>-<tag>.txt --workers 4 [--gpu-gb 34 on C] --ram-gb 6 >> logs/<run>-<tag>.log 2>&1 < /dev/null &`
+`RUN_ID=<run> SWEEP_TAG=-<tag> setsid nohup .venv-train/bin/python scripts/sweep.py logs/campaigns/<run>-<tag>.txt --workers 4 [--workers 5 --gpu-gb 58 on C] --ram-gb 6 >> logs/<run>-<tag>.log 2>&1 < /dev/null &`
 (`<tag>` = A2, B2, C2, D2, E2; `pcmcl-v1-D`: `--workers 2`). Over ssh start it with `ssh host 'bash -s' < script.sh`, else
 the ssh client stays attached. Finished units are skipped; interrupted ones resume from `last.pth` (RNG state not
 restored: rerun such units cleanly at the end if exact runs matter, as `scripts/grid_rerun.py` did for the grid).
 
-**C's GPU share:** the user allows about 30% of C's 96 GB (3-4 jobs). Since 20/10 01:20 C's scheduler runs
-`--workers 4 --gpu-gb 34` (reservations: 3 BEATs jobs at 11 GB, or 4 with HTS-AT units); actual use about 8.3 GB per BEATs
-job (3 jobs about 25 GB). No hard per-process cap: on 19/10 16:49 one job grew to 35.6 GB, so check `logs/gpu-C.csv`
-(report if our jobs together pass about 35 GB).
+**C's GPU share:** from 20/10 the user allows up to 60% of C's 96 GB: `--workers 5 --gpu-gb 58` (reservations: 5 BEATs
+jobs at 10-11 GB, more units only if smaller); actual use about 8.3 GB per BEATs job. No hard per-process cap: on 19/10
+16:49 one job grew to 35.6 GB, so check `logs/gpu-C.csv` (report if our jobs together pass about 58 GB).
 
 **D note:** one PC-MCL job uses about 19 GB, so `pcmcl-v1-D` runs one job at a time (about 1.9 h per unit).
 
@@ -84,21 +94,22 @@ one line per run to `docs/handoff/monitor_log.md` (`dd/mm/yyyy HH:MM | ...`). `g
 Normal, no action:
 - `lodo-v1-A`, `lodo-v1-B` "superseded ... stopped on purpose"; `lodo-v1-A2`/`B2` "not started yet" while that
   machine still trains old units (shown under "training now").
-- `lodo-v1-C` "units moved ... stopped on purpose" with 14 done: C is dropped, no SC runs until the user confirms.
-  Do not restart anything on C. `pcmcl-v1-D` "NOT RUNNING" after its final line: D idles until then (expected).
-- `pcmcl-v1-D` "NOT RUNNING" after its final line `all jobs finished, 0 failed`.
+- `lodo-v1-C` "superseded ... stopped on purpose" (14 done): its units are in `lodo-v1-C2` (C) and `lodo-v1-D2` (D).
+- `pcmcl-v1-D` "NOT RUNNING" after its final line `all jobs finished, 0 failed` (finished 20/10).
+- Do not restart anything on C yourself; report if C's scheduler stops without its final line (our jobs were killed
+  there twice) or if our jobs on C pass about 58 GB.
 - Out-of-memory requeues: the scheduler retries them; report the count only.
 
 Report to the user at once (do not fix, do not kill, do not restart anything yourself):
 - `FAILED` > 0 in any list; any NaN or collapsed job log.
-- A `*2` list or `lodo-v1-C` / `pcmcl-v1-D` with "scheduler NOT RUNNING" and no `all jobs finished` line, or a machine
+- A `*2` list with "scheduler NOT RUNNING" and no `all jobs finished` line, or a machine
   with an empty "training now" while its active list has units left.
 - A dispatcher PID missing on A before its log says `ALL DONE`; a dispatcher log line with `Traceback`, `ended with units
   missing` or `restarting`.
 - `ssh failed` twice in a row for a machine (power cut or network).
 - Disk free below 20 GB on any machine; done counts that do not grow for 3 hours.
-- Milestones to report: PC-MCL done (about 20/10 10:45; then ask the user about the SC cell list); A+B+E done
-  (about 20/10 18:00); `ALL DONE` lines. Our processes on C or any machine killed by
+- Milestones to report: A+B+E done (about 20/10 18:00); C2 done (about 21/10 02:00); D2 done (about 21/10 04:00);
+  `ALL DONE` lines. Our processes on C or any machine killed by
   someone else (scheduler missing, no final line): report at once.
 
 ## 3. What each run contains
