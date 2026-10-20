@@ -1,7 +1,7 @@
 # AuscultTrust: consolidated results report
 
 | | |
-|---|---|
+| --- | --- |
 | Report version | 4.0 (supersedes 3.0 of 2026-10-19, kept in git history; 2.0 is `docs/reports/report_archive_2026-10-07.md`) |
 | Datetime | 2026-10-20 14:50 (+07) |
 | Proposal / prereg | v9 (`docs/updates/research-proposal-v9-en.md`); `docs/updates/prereg-v8.md` with Amendments 1-5 (`docs/updates/prereg-v9-amendment*.md`) |
@@ -23,7 +23,7 @@ and the trained-SC arms; the old AST AuscultTrust is treated as stale.
 At 20/10 14:30:
 
 | Run | What | Done | Where | Expected end |
-|---|---|---|---|---|
+| --- | --- | --- | --- | --- |
 | `lodo-v1`, no SC (Amendment 4) | 11 cells x 4 held-out devices x 5 seeds = 220 units | 119 (54%) | A, B, E | about 20/10 18:00 |
 | `lodo-v1`, trained SC static (Amendment 4) | 7 cells x (official split + 4 folds) x 5 seeds = 175 units | 20 (14 on C, 6 on D) | D now; D, A, B, E from about 18:00 | about 21/10 05:30 |
 | `pcmcl-v1` (Amendment 5) | 2 cells x 5 seeds | 10 (100%) | D | done 20/10 |
@@ -37,7 +37,7 @@ test-time SC on the LODO models), then the final configuration; ensembles and di
 the screening view and the phantom tests close the project.
 
 | # | Stage | What | Status |
-|---|---|---|---|
+| --- | --- | --- | --- |
 | 0 | Phase 0 (v4-v8) | Frozen-encoder ladders, Part II shift study, Stage-1 screening of device variants | Done; `docs/reports/report_archive_2026-10-07.md` |
 | 1 | Registered core (v9) | Gate G on AST Patch-Mix CL vs AuscultTrust (AST + SC); LODO on AST (baseline, Freq-MixStyle, trained and test-time SC, A2, TTA-EQ); KAUH control A | Done 09/10 (section 5) |
 | 2 | Grid v1 | 5 encoders x 14 methods (8 fine-tuned, 6 frozen) x 5 seeds, official split | Done 18/10 (section 6) |
@@ -55,7 +55,7 @@ the screening view and the phantom tests close the project.
 ## 3. Decisions of the user
 
 | Date | Decision |
-|---|---|
+| --- | --- |
 | 15/10 | Stop earlier campaigns; run the method x encoder grid (Lung-SRAD as a reference row only, no noise arm). |
 | 16/10 | SG-SCL with the DANN ramp (`grl_schedule: progress`) after the reference schedule collapsed BEATs. |
 | 17/10 | After the power cut, rerun the 13 resumed units cleanly and swap them in. |
@@ -72,7 +72,7 @@ the screening view and the phantom tests close the project.
 ### 4.1 Machines (20/10 14:30)
 
 | Machine | GPU | Now | Next |
-|---|---|---|---|
+| --- | --- | --- | --- |
 | A (local) | RTX 5000 Ada 32 GB | LODO no SC, `lodo-v1-A2` (25 of 36) | SC share `lodo-v1-A4` from about 18:00 |
 | B | RTX 5090 32 GB | LODO no SC, `lodo-v1-B2` (45 of 89) | SC share `lodo-v1-B4` |
 | E | RTX 5090 32 GB | LODO no SC, `lodo-v1-E2` (42 of 88) | SC share `lodo-v1-E4` |
@@ -101,7 +101,7 @@ the screening view and the phantom tests close the project.
 ## 5. Registered core (v9, AST), from `docs/reports/report_2026-10-09.md`
 
 | Item | Result |
-|---|---|
+| --- | --- |
 | Patch-Mix CL reproduction (AST, best epoch on test) | 61.49 ± 0.91 vs 62.37 ± 0.61 published; last epoch 59.59 ± 0.47 |
 | Refit at the CV epoch (seeds 0-4) | AuscultTrust (SC) 58.31 ± 1.08; baseline 56.80 ± 1.49; SC + random gain 59.72 (not selected by the registered rule) |
 | Gate G (10 seeds) | Paired difference +1.91, 95% CI [+0.31, +3.50]: passes (lower bound > -1.5). Superiority not shown (patient bootstrap [-0.83, +4.84]) |
@@ -131,7 +131,7 @@ the screening view and the phantom tests close the project.
 ### 6.2 Best cell per encoder, last epoch
 
 | Encoder | Cell | Sp | Se | Score | HS | 2c Se | 2c Score | 2c HS | Worst-dev Score | Cov | Worst-dev Cov | Set size |
-|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | BEATs | ft pafa | 73.2 ± 2.7 | 50.2 ± 2.9 | **61.7 ± 0.7** | 59.5 ± 1.3 | 65.4 ± 3.8 | 69.3 ± 1.1 | 69.0 ± 1.4 | 58.9 ± 0.5 | 89.8 ± 0.3 | 85.4 ± 1.0 | 2.47 ± 0.16 |
 | HTS-AT | ft sg_scl | 72.4 ± 2.2 | 46.9 ± 1.2 | 59.6 ± 0.5 | 56.9 ± 0.2 | 62.3 ± 1.5 | 67.3 ± 0.6 | 66.9 ± 0.5 | 49.9 ± 2.8 | 90.1 ± 0.1 | 88.4 ± 0.3 | 2.38 ± 0.05 |
 | DASS | ft patchmix | 70.6 ± 2.8 | 48.8 ± 1.2 | 59.7 ± 0.9 | 57.7 ± 0.4 | 61.8 ± 1.9 | 66.2 ± 0.8 | 65.9 ± 0.7 | 49.8 ± 3.4 | 89.7 ± 0.3 | 87.6 ± 0.3 | 2.15 ± 0.06 |
@@ -146,7 +146,7 @@ the screening view and the phantom tests close the project.
 ### 6.3 Top 5, best epoch on test (optimistic)
 
 | Rank | Cell | Sp | Se | Score | HS | 2c Se | 2c Score | 2c HS | Worst-dev Score | Cov | Worst-dev Cov | Set size |
-|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | 1 | beats+ft+patchmix_cl | 76.4 ± 3.8 | 50.9 ± 3.4 | 63.6 ± 0.8 | 60.9 ± 1.4 | 65.5 ± 3.2 | 70.9 ± 1.0 | 70.4 ± 0.9 | 57.8 ± 3.8 | 89.2 ± 0.3 | 86.2 ± 0.7 | 1.95 ± 0.12 |
 | 2 | beats+ft+sg_scl | 78.6 ± 4.5 | 47.9 ± 3.3 | 63.2 ± 0.7 | 59.3 ± 1.3 | 62.4 ± 3.5 | 70.5 ± 0.7 | 69.4 ± 0.5 | 56.2 ± 2.9 | 89.5 ± 0.4 | 87.0 ± 0.4 | 1.99 ± 0.09 |
 | 3 | beats+ft+pafa | 75.5 ± 2.9 | 51.0 ± 2.8 | 63.2 ± 0.6 | 60.8 ± 1.2 | 65.8 ± 3.2 | 70.6 ± 0.4 | 70.2 ± 0.6 | 60.0 ± 0.9 | 89.7 ± 0.2 | 86.0 ± 0.8 | 2.16 ± 0.28 |
@@ -164,7 +164,7 @@ last epoch. [Interpretation] Both epoch rules put BEATs first; the method order 
 LODO without SC: all 11 rows (section 8). Trained SC: rows marked SC (section 9).
 
 | Cell | SC | Sp | Se | Score | HS | 2c Se | 2c Score | 2c HS | Worst-dev Score | Cov | Worst-dev Cov | Set size |
-|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | ast+ft+ce | | 68.4 ± 2.3 | 46.8 ± 2.5 | 57.6 ± 1.0 | 55.5 ± 1.4 | 64.5 ± 3.6 | 66.5 ± 1.2 | 66.3 ± 1.3 | 44.7 ± 0.9 | 89.5 ± 0.2 | 86.7 ± 0.4 | 2.35 ± 0.05 |
 | ast+ft+patchmix_cl | SC | 71.7 ± 4.1 | 44.7 ± 1.7 | 58.2 ± 1.3 | 55.0 ± 0.5 | 60.7 ± 2.5 | 66.2 ± 0.9 | 65.7 ± 0.4 | 47.1 ± 3.2 | 89.3 ± 0.3 | 86.9 ± 0.4 | 2.25 ± 0.03 |
 | ast+ft+pafa | SC | 69.3 ± 1.0 | 47.4 ± 1.2 | 58.3 ± 0.9 | 56.3 ± 1.0 | 63.2 ± 1.7 | 66.2 ± 1.1 | 66.1 ± 1.1 | 47.4 ± 1.9 | 89.7 ± 0.2 | 86.1 ± 0.7 | 2.34 ± 0.05 |
@@ -182,7 +182,7 @@ LODO without SC: all 11 rows (section 8). Trained SC: rows marked SC (section 9)
 Only the rows with abs(mean) > SD on Score, plus the LODO cells; full table in `docs/reports/grid-v1-results.md`.
 
 | Encoder | Method | ΔSp | ΔSe | ΔScore | ΔHS | Δ2c Score | ΔWorst-dev Score |
-|---|---|---|---|---|---|---|---|
+| --- | --- | --- | --- | --- | --- | --- | --- |
 | BEATs | pafa | +7.5 ± 2.9 | -2.4 ± 2.4 | **+2.6 ± 1.4** | +1.1 ± 1.6 | +1.6 ± 1.8 | **+8.5 ± 2.9** |
 | BEATs | sg_scl | +6.3 ± 7.2 | -2.4 ± 2.2 | +1.9 ± 2.7 | +0.7 ± 1.5 | +1.2 ± 2.3 | +2.5 ± 8.7 |
 | BEATs | patchmix_cl | -1.5 ± 5.1 | +2.5 ± 2.9 | +0.5 ± 2.0 | +0.9 ± 1.7 | +0.6 ± 1.6 | +1.7 ± 6.0 |
@@ -210,7 +210,7 @@ Only the rows with abs(mean) > SD on Score, plus the LODO cells; full table in `
 ### 6.6 Per-class recall and ensembles (BEATs, last epoch)
 
 | Cell | Normal (= Sp) | Crackle | Wheeze | Both | Se | Score |
-|---|---|---|---|---|---|---|
+| --- | --- | --- | --- | --- | --- | --- |
 | beats+ft+ce | 65.7 | 62.3 | 42.6 | 35.8 | 52.7 | 59.2 |
 | beats+ft+pafa | 73.2 | 60.4 | 38.7 | 35.1 | 50.2 | 61.7 |
 | beats+ft+sg_scl | 71.9 | 60.6 | 39.0 | 33.6 | 50.2 | 61.1 |
@@ -222,7 +222,7 @@ Only the rows with abs(mean) > SD on Score, plus the LODO cells; full table in `
 Ensembles = mean softmax at the last epoch, same seed. [test-picked] = members chosen after seeing test results.
 
 | Ensemble (members) | Sp | Se | Score | HS | 2c Se | 2c Score | 2c HS | Worst-dev Score | Cov | Worst-dev Cov | Set size |
-|---|---|---|---|---|---|---|---|---|---|---|---|
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | beats+ft+pafa alone (reference) | 73.2 ± 2.7 | 50.2 ± 2.9 | 61.7 ± 0.7 | 59.5 ± 1.3 | 65.4 ± 3.8 | 69.3 ± 1.1 | 69.0 ± 1.4 | 58.9 ± 0.5 | 89.8 ± 0.3 | 85.4 ± 1.0 | 2.47 ± 0.16 |
 | 8 fine-tuned methods on BEATs (8) | 70.6 ± 1.4 | 53.3 ± 1.2 | 62.0 ± 0.2 | 60.8 ± 0.3 | 68.6 ± 1.3 | 69.6 ± 0.2 | 69.6 ± 0.2 | 55.2 ± 1.2 | 89.3 ± 0.2 | 86.3 ± 0.4 | 1.95 ± 0.03 |
 | CE on AST, HTS-AT, BEATs, DASS (4) | 70.4 ± 2.1 | 50.4 ± 1.0 | 60.4 ± 0.8 | 58.7 ± 0.5 | 64.6 ± 1.5 | 67.5 ± 0.6 | 67.4 ± 0.6 | 48.6 ± 2.6 | 89.6 ± 0.2 | 87.0 ± 0.6 | 1.94 ± 0.01 |
@@ -254,7 +254,7 @@ Ensembles = mean softmax at the last epoch, same seed. [test-picked] = members c
 Official split, seeds 0-4, 100 epochs, run `pcmcl-v1` (machine D, 10 of 10 units, 0 failed).
 
 | Cell | Epoch | Sp | Se | Score | HS | 2c Score | Worst-dev Score | Cov | Worst-dev Cov | Set size |
-|---|---|---|---|---|---|---|---|---|---|---|
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | beats+ft+pcmcl | last | 69.3 ± 1.7 | 52.6 ± 1.5 | 60.9 ± 0.6 | 59.7 ± 0.7 | 69.3 ± 0.4 | 57.2 ± 2.6 | 89.2 ± 0.1 | 86.6 ± 0.4 | 1.95 ± 0.02 |
 | beats+ft+pafa_pcmcl | last | 74.0 ± 1.7 | 48.6 ± 0.7 | 61.3 ± 1.0 | 58.6 ± 0.8 | 69.7 ± 0.9 | 58.8 ± 1.0 | 89.8 ± 0.2 | 86.8 ± 0.2 | 2.07 ± 0.05 |
 | beats+ft+pafa (grid) | last | 73.2 ± 2.7 | 50.2 ± 2.9 | 61.7 ± 0.7 | 59.5 ± 1.3 | 69.3 ± 1.1 | 58.9 ± 0.5 | 89.8 ± 0.3 | 85.4 ± 1.0 | 2.47 ± 0.16 |
@@ -274,7 +274,7 @@ the prior-matched coverage (positive = under-coverage). Cells missing from a fol
 the full analysis (null gate, H2 bootstrap, method effects) waits for all 220 units.
 
 | Held-out device | Cell | Seeds | Sp | Se | Score | HS | Coverage | Delta | Set size |
-|---|---|---|---|---|---|---|---|---|---|
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | Meditron | ast+ft+ce | 1 | 81.1 | 28.9 | 55.0 | 42.6 | 0.942 | +0.011 | 2.80 |
 | Meditron | ast+ft+patchmix_cl | 5 | 79.7 | 31.6 | 55.6 | 45.2 | 0.944 | -0.009 | 2.59 |
 | Meditron | beats+ft+ce | 5 | 78.7 | 36.5 | 57.6 | 49.8 | 0.951 | -0.018 | 2.74 |
@@ -312,12 +312,12 @@ Patch-Mix CL 60.1 (59.7), SG-SCL 59.0 (61.1), QLung 59.7 (59.3); without the AKG
 ## 9. Trained SC (static bound) [Preliminary]
 
 | Cell, official split, last epoch | Seeds | Sp | Se | Score | HS | Worst-dev Score | Cov | Worst-dev Cov | Set size | Paired Score vs grid no-SC |
-|---|---|---|---|---|---|---|---|---|---|---|
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | beats+ft+patchmix_cl+sc+sc_static | 5 | 67.4 | 52.2 | 59.8 | 58.8 | 52.0 | 89.2 | 86.2 | 2.30 | +0.1 ± 1.2 |
 | beats+ft+sg_scl+sc+sc_static | 2 | 73.7 | 49.0 | 61.3 | 58.8 | 53.5 | 89.8 | 87.6 | 2.46 | +0.6 ± 1.1 |
 
 | Held-out device | Cell | Seeds | Sp | Se | Score | HS | Coverage | Delta | Set size |
-|---|---|---|---|---|---|---|---|---|---|
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | Meditron | beats+ft+patchmix_cl+sc+sc_static | 3 | 64.9 | 47.6 | 56.3 | 54.5 | 0.936 | -0.020 | 2.74 |
 | LittC2SE | beats+ft+patchmix_cl+sc+sc_static | 5 | 92.2 | 44.8 | 68.5 | 60.0 | 0.949 | +0.003 | 2.38 |
 | Litt3200 | beats+ft+patchmix_cl+sc+sc_static | 5 | 52.5 | 62.0 | 57.2 | 53.7 | 0.996 | -0.092 | 3.75 |
