@@ -88,12 +88,19 @@ Consolidated report with plan, timeline and grid results: `report.md` (v3.0, 19/
 **State 21/10 15:45 (supersedes the run tables above for the current runs).** LODO without SC 220/220, inference arms
 880/880, trained SC static 175/175, PC-MCL 10/10: all done, outputs on A. Analysis done: `docs/reports/lodo-v1-results.md`
 (regenerate with `bash scripts/lodo_h2_all.sh` and `PYTHONPATH=. .venv-train/bin/python scripts/lodo_tables.py`);
-`report.md` v4.1. Now running, stage 8, trained SC with the dynamic bound: cells `<cell>+sc` (7 cells x 25 units),
-lists `logs/campaigns/lodo-v1-{A5,B5,D5,E5}.txt` (17/52/52/54 units, from `scripts/grid.py lodo-jobs --sc-mode dynamic
---names A5 B5 D5 E5`), schedulers `RUN_ID=lodo-v1 SWEEP_TAG=-<M>5 --workers 4` (start script
-`~/.claude/jobs/14a45349/tmp/start5.sh <M>`), started 21/10 15:15, about 17 h, end about 22/10 08:00. 1-epoch smoke of
-the dynamic bound passed on D (`smoke-scdyn-d`). When done: copy B's, D's and E's `outputs/train/lodo-v1/` to A, add
-`<cell>+sc` to the arms in `scripts/lodo_h2_all.sh` and the tables, and update the reports. Inference-arm incidents:
+`report.md` v4.2 (results and findings by plan stage). Now running, stage 8 (user decision 21/10 17:00): trained SC
+with the dynamic bound only on BEATs PAFA, SG-SCL, Patch-Mix CL (cells `<cell>+sc`, 75 units) plus BEATs PAFA + PC-MCL
+with trained SC static and dynamic (`beats+ft+pafa_pcmcl+sc+sc_static`, `beats+ft+pafa_pcmcl+sc`, 50 units; SC on
+PC-MCL's concatenated cycles = every part corrected with its device's coefficient, `sc_part` in
+`src/training/patchmix_cl/pcmcl.py`, test in `tests/test_pcmcl.py`). The first lists `lodo-v1-<M>5` (7 cells) were
+stopped by PID (their running BEATs units finished or continue as orphans; marked `.moved`) and replaced by
+`logs/campaigns/lodo-v1-{A6,B6,D6,E6}.txt` (14/44/30/31 units; PC-MCL units only on A, D, E because B's code predates
+PC-MCL; BEATs units first in each list), written by `~/.claude/jobs/14a45349/tmp/split6.py`, schedulers
+`RUN_ID=lodo-v1 SWEEP_TAG=-<M>6 --workers 4` (start script `~/.claude/jobs/14a45349/tmp/start6.sh <M>`), started 21/10
+17:10; BEATs units about 22/10 02:00, all about 22/10 15:00 (one PC-MCL job takes about 19 GB, `MEM_GB=20`). Smokes:
+dynamic bound on D (`smoke-scdyn-d`), PAFA + PC-MCL with SC on A (`smoke-pcmclsc-a`, batch 8). When done: copy B's,
+D's and E's `outputs/train/lodo-v1/` to A, add the new arms to `scripts/lodo_h2_all.sh` and `scripts/lodo_tables.py`,
+update the reports. AST and HTS-AT dynamic-SC units were dropped. Inference-arm incidents:
 the first start failed on `--num_workers` (lines now end with `&& :`); 20 QLung units failed on `class_nums` (fixed in
 `src/evaluation/lodo_ttsc.py`, rerun with lists `lodo-v1-l2q-<M>`).
 

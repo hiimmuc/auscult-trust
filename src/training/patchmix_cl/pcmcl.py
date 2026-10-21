@@ -15,6 +15,8 @@ import numpy as np
 import torch
 from torch.utils.data import Dataset
 
+from src.processing.correction import apply_spectrum_correction
+
 from .cycles import cut_pad, individual_cycles, read_annotations
 
 # (parts, 3-label result) of the reference "additive" strategy; 4-class ids: 0 normal, 1 crackle, 2 wheeze, 3 both
@@ -36,6 +38,11 @@ def four_class_probs(logits):
     return torch.stack([(1 - c) * (1 - w), c * (1 - w), (1 - c) * w, c * w], 1)
 
 
+def sc_part(wave, coef):
+    """(1, n) raw cycle -> spectrum-corrected (1, n) cycle (same correction as the dataset's SC on whole cycles)."""
+    return torch.from_numpy(apply_spectrum_correction(wave.numpy()[0], coef).astype(np.float32))[None]
+
+
 def four_class(target):
     """(n, 3) multi-hot targets -> 4-class id (normal unless crackle or wheeze)."""
     return (target[:, 1] > 0.5).long() + 2 * (target[:, 2] > 0.5).long()
@@ -49,13 +56,16 @@ class PCMCLTrain(Dataset):
     """
 
     def __init__(self, ds, idx, args):
-        assert not args.spectrum_correction, "pcmcl: SC on concatenated cycles is not implemented"
+        assert getattr(args, "sc_only_device", None) is None, "pcmcl: --sc_only_device is not supported"
         self.ds, self.idx, self.args = ds, np.asarray(idx), args
         wav_dir = f"{args.data_folder}/audio_test_data"
         ann = read_annotations(wav_dir)
         raw = [w for f in ds.filenames for w, _ in individual_cycles(ann[f], wav_dir, f, args, raw=True)]
         assert len(raw) == len(ds.labels), (len(raw), len(ds.labels))
-        self.raw = {i: raw[i] for i in self.idx}
+        # SC: every part is corrected with its own device's coefficient before concatenation (single cycles come from the
+        # dataset's images, which are already corrected)
+        coef = ds.sc["coefficients"] if args.spectrum_correction else None
+        self.raw = {i: raw[i] if coef is None else sc_part(raw[i], coef[ds.devices[i]]) for i in self.idx}
         labels = np.asarray(ds.labels)
         half = args.desired_length * args.sample_rate // 2
         self.short = {k: [i for i in self.idx if labels[i] == k and self.raw[i].shape[-1] < half] for k in range(4)}

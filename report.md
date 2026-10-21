@@ -2,8 +2,8 @@
 
 | | |
 | --- | --- |
-| Report version | 4.1 (4.0 of 2026-10-20 and 3.0 in git history; 2.0 is `docs/reports/report_archive_2026-10-07.md`) |
-| Datetime | 2026-10-21 15:45 (+07) |
+| Report version | 4.2 (4.1, 4.0 and 3.0 in git history; 2.0 is `docs/reports/report_archive_2026-10-07.md`) |
+| Datetime | 2026-10-21 17:20 (+07) |
 | Proposal / prereg | v9 (`docs/updates/research-proposal-v9-en.md`); `docs/updates/prereg-v8.md` with Amendments 1-5 (`docs/updates/prereg-v9-amendment*.md`) |
 | Plans | `docs/updates/stage-plan-v1.md` (grid), `docs/updates/lodo-plan-v1.md` (LODO, ensembles; Amendment 4 wins where they differ) |
 | Detailed sources | `docs/reports/report_2026-10-09.md` (registered core), `docs/reports/grid-v1-results.md` (grid, every cell), `docs/reports/pcmcl-v1-results.md` (PC-MCL), `docs/reports/lodo-v1-results.md` (LODO v1, SC), `docs/handoff/HANDOFF.md` (machines, commands, incidents) |
@@ -12,16 +12,20 @@ Tags: [Fact] measured in the repo, [Interpretation] reasoned, [Assumption], [Pen
 the units finished so far (may change; no verdict). Score = (Sp + Se) / 2 on ICBHI 4-class, official split unless
 stated. All numbers are mean ± SD over seeds 0-4 unless a seed count is given.
 
-## 1. Status
+## 1. Status and key findings
 
-[Fact] The registered core of proposal v9 is done on AST (report of 09/10): gate G passed, H2 partly met (Litt3200 fold
-only, sets grew), H1 and H3 wait for the phantom. The method x encoder grid (70 cells, 350 units, 18/10) made BEATs the
-reference encoder: BEATs PAFA 61.7 ± 0.7 at the last epoch, BEATs Patch-Mix CL 63.6 ± 0.8 at the test-selected epoch.
-PC-MCL (20/10) did not pass its registered rule. LODO v1 (220 units), its inference arms (880) and trained SC with
-the static bound (175) are complete and analysed (section 8, `docs/reports/lodo-v1-results.md`): H2 cannot be tested
-(no fold passes the null gate), test-time SC raises Score on the hardest device for every cell, and trained SC raises
-the LODO macro Score for 6 of 7 cells at no cost on the official split. Best candidate so far: BEATs PAFA + trained SC
-(official split 62.3 ± 0.9, LODO macro about 60.3). The final AuscultTrust is the user's choice (section 9).
+Results and findings are reported per stage of the plan (sections 5-16, numbering as in section 2). Key findings:
+
+1. [Fact] Encoder choice dominates method choice: BEATs leads on the official split (stage 2) and under device shift
+   (stage 3); most methods stay within one seed SD of CE on the same encoder.
+2. [Fact] BEATs PAFA is the one consistent method gain (+2.6 Score, +8.5 worst-device Score over BEATs CE on the official
+   split) and the best cell on the hardest unseen device (Litt3200).
+3. [Fact] H2 cannot be tested in LODO v1: no held-out device shows a coverage error above chance once models are trained
+   to their last epoch (stage 7). The registered AST study (models stopped at epoch 2) did show one.
+4. [Fact] SC helps Score, not coverage: test-time SC raises Litt3200 Score for every cell (stage 6); trained SC raises
+   the LODO macro Score for 6 of 7 cells at no cost on the official split (stage 4).
+5. [Fact] Leading candidate for the final AuscultTrust: BEATs PAFA + trained SC static, 62.3 ± 0.9 on the official split
+   (best last-epoch Score so far) and about 60.3 macro in LODO (stage 10). The choice is the user's.
 
 At 21/10 15:45:
 
@@ -30,7 +34,7 @@ At 21/10 15:45:
 | `lodo-v1`, no SC | 11 cells x 4 held-out devices x 5 seeds | 220 / 220 | A, B, E | done 21/10 00:17 |
 | `lodo-v1`, inference arms | test-time SC static and dynamic, A2, TTA-EQ on every no-SC unit | 880 / 880 | A, B, E | done 21/10 15:05 |
 | `lodo-v1`, trained SC static | 7 cells x (official split + 4 folds) x 5 seeds | 175 / 175 | C, D, A, B, E | done 21/10 13:25 |
-| `lodo-v1`, trained SC dynamic | same 7 cells (cells `<cell>+sc`) | started 21/10 15:15 | A, B, D, E | about 22/10 08:00 |
+| `lodo-v1`, trained SC dynamic + PC-MCL SC | BEATs PAFA, SG-SCL, Patch-Mix CL (dynamic, 75 units) + BEATs PAFA + PC-MCL (static and dynamic, 50 units) | 6 of 125 at 17:15 | A, B, D, E (PC-MCL: A, D, E) | BEATs about 22/10 02:00; all about 22/10 15:00 |
 | `pcmcl-v1` | 2 cells x 5 seeds | 10 / 10 | D | done 20/10 |
 
 Machine C is not used any more: our jobs there were killed three times by its user (section 4.2).
@@ -43,18 +47,18 @@ the screening view and the phantom tests close the project.
 
 | # | Stage | What | Status |
 | --- | --- | --- | --- |
-| 0 | Phase 0 (v4-v8) | Frozen-encoder ladders, Part II shift study, Stage-1 screening of device variants | Done; `docs/reports/report_archive_2026-10-07.md` |
-| 1 | Registered core (v9) | Gate G on AST Patch-Mix CL vs AuscultTrust (AST + SC); LODO on AST (baseline, Freq-MixStyle, trained and test-time SC, A2, TTA-EQ); KAUH control A | Done 09/10 (section 5) |
-| 2 | Grid v1 | 5 encoders x 14 methods (8 fine-tuned, 6 frozen) x 5 seeds, official split | Done 18/10 (section 6) |
+| 0 | Phase 0 (v4-v8) | Frozen-encoder ladders, Part II shift study, Stage-1 screening of device variants | Done (section 5); `docs/reports/report_archive_2026-10-07.md` |
+| 1 | Registered core (v9) | Gate G on AST Patch-Mix CL vs AuscultTrust (AST + SC); LODO on AST (baseline, Freq-MixStyle, trained and test-time SC, A2, TTA-EQ); KAUH control A | Done 09/10 (section 6) |
+| 2 | Grid v1 | 5 encoders x 14 methods (8 fine-tuned, 6 frozen) x 5 seeds, official split | Done 18/10 (section 7) |
 | 3 | LODO v1 without SC (L1) | 11 cells x 4 held-out devices x 5 seeds = 220 units | Done 21/10 (section 8) |
-| 4 | Trained SC, static bound | 7 cells, official split + 4 LODO folds, 175 units | Done 21/10 (section 8) |
-| 5 | PC-MCL (Amendment 5) | BEATs PC-MCL and PAFA + PC-MCL, official split | Done 20/10; rule not met, not carried on (section 7) |
-| 6 | Inference arms (L2) | Test-time SC (static, dynamic), A2, TTA-EQ on every LODO unit (`src.evaluation.lodo_ttsc`) | Done 21/10 (section 8) |
-| 7 | Analysis (L3) | Per-fold Sp/Se/Score/HS/2c; method vs CE; H2 (prior-matched coverage, null gate, two-level bootstrap) with set size beside abs(Delta); SC vs no SC paired by seed | Done 21/10: `docs/reports/lodo-v1-results.md` |
-| 8 | Trained SC, dynamic bound | Same 7 cells, 175 units | Running since 21/10 15:15, about 22/10 08:00 |
-| 9 | Ensembles E1-E4, distillation | E1 = equal-weight mean softmax of the 11 cells per fold and seed; distil only if E1 beats the best single cell | [Pending], optional |
-| 10 | Final AuscultTrust | Choose encoder + method + SC with the user | Candidates in section 9; after stage 8 |
-| 11 | After LODO | KAUH positive controls on the final model, screening view (recording level), phantom tests (H1, H3) | [Pending]; phantom depends on hardware |
+| 4 | Trained SC, static bound | 7 cells, official split + 4 LODO folds, 175 units | Done 21/10 (section 9) |
+| 5 | PC-MCL (Amendment 5) | BEATs PC-MCL and PAFA + PC-MCL, official split | Done 20/10; rule not met (section 10); its PAFA variant now also with SC (stage 8) |
+| 6 | Inference arms (L2) | Test-time SC (static, dynamic), A2, TTA-EQ on every LODO unit (`src.evaluation.lodo_ttsc`) | Done 21/10 (section 11) |
+| 7 | Analysis (L3) | Per-fold Sp/Se/Score/HS/2c; method vs CE; H2 (prior-matched coverage, null gate, two-level bootstrap) with set size beside abs(Delta); SC vs no SC paired by seed | Done 21/10: H2 not testable (section 12); `docs/reports/lodo-v1-results.md` |
+| 8 | Trained SC, dynamic bound | BEATs PAFA, SG-SCL, Patch-Mix CL (75 units) + BEATs PAFA + PC-MCL with SC static and dynamic (50 units) | Running (section 13); BEATs about 22/10 02:00, all about 22/10 15:00 |
+| 9 | Ensembles E1-E4, distillation | E1 = equal-weight mean softmax of the 11 cells per fold and seed; distil only if E1 beats the best single cell | [Pending], optional (section 14) |
+| 10 | Final AuscultTrust | Choose encoder + method + SC with the user | Candidates in section 15; after stage 8 |
+| 11 | After LODO | KAUH positive controls on the final model, screening view (recording level), phantom tests (H1, H3) | [Pending] (section 16); phantom depends on hardware |
 | - | Demo app (`app/`, another session) | FastAPI + web demo comparing SC vs no SC on BEATs Patch-Mix CL units | Built 20/10; public tunnel blocked (port 7844, domain not delegated) |
 
 ## 3. Decisions of the user
@@ -72,23 +76,25 @@ the screening view and the phantom tests close the project.
 | 20/10 | Machine C: 30%, then 60% of its GPU; after the third kill C is dropped. Remaining SC units: all to D, then shared by D, A, B and E once their LODO units end. Cut-off units always rerun from epoch 0 (no resume, no RNG mismatch). |
 | 20/10 | Cleanup: unused checkpoints and caches deleted (about 175 GB); grid-v1, lodo-v1, lodo-ast, lodo-bench checkpoints and all outputs kept. |
 | 21/10 | Start the inference arms on all LODO units; then the next steps (analysis, trained SC with the dynamic bound); fix and retry any failure at once. |
+| 21/10 | Dynamic-bound SC only on BEATs PAFA, SG-SCL, Patch-Mix CL; add BEATs PAFA + PC-MCL with SC static and dynamic (SC on PC-MCL's concatenated cycles implemented: each part corrected with its device's coefficient). Report reorganised by plan stage. |
 
 ## 4. Compute, timeline and incidents
 
-### 4.1 Machines (21/10 15:45)
+### 4.1 Machines (21/10 17:15)
 
 | Machine | GPU | Now |
 | --- | --- | --- |
-| A (local) | RTX 5000 Ada 32 GB | trained SC dynamic, `lodo-v1-A5` (17 units) |
-| B | RTX 5090 32 GB | trained SC dynamic, `lodo-v1-B5` (52 units) |
-| D | RTX 5090 32 GB | trained SC dynamic, `lodo-v1-D5` (52 units) |
-| E | RTX 5090 32 GB | trained SC dynamic, `lodo-v1-E5` (54 units) |
+| A (local) | RTX 5000 Ada 32 GB | `lodo-v1-A6`: BEATs SC dynamic + PAFA + PC-MCL SC (14 units) |
+| B | RTX 5090 32 GB | `lodo-v1-B6`: BEATs SC dynamic (44 units) |
+| D | RTX 5090 32 GB | `lodo-v1-D6`: BEATs SC dynamic + PAFA + PC-MCL SC (30 units) |
+| E | RTX 5090 32 GB | `lodo-v1-E6`: BEATs SC dynamic + PAFA + PC-MCL SC (33 units) |
 | C | RTX PRO 6000 96 GB | not used |
 
 - [Fact] `scripts/lodo_move.py` moved the remaining static-SC units between machines (stop a scheduler by PID while its
   jobs finish, set cut-off units aside to rerun from epoch 0, split by measured throughput, keep schedulers alive, copy
-  outputs to A). The dynamic-SC lists come from `scripts/grid.py lodo-jobs --sc-mode dynamic` (about 17 h each); a
-  1-epoch smoke of the dynamic bound on BEATs, AST and HTS-AT passed on D.
+  outputs to A). The first dynamic-SC lists (`lodo-v1-<M>5`, 7 cells) were stopped at 17:00 by PID (their running BEATs units
+  continued) and replaced by `lodo-v1-<M>6` (BEATs cells + PC-MCL SC; BEATs units first in each list). 1-epoch smokes of
+  the dynamic bound (BEATs, AST, HTS-AT, on D) and of PAFA + PC-MCL with SC (on A) passed.
 - [Fact] Throughput in B-smoke hours per wall hour: A 0.80, B 1.94, E 1.96; B, D and E ran the last static-SC units at
   1.57-1.73.
 - [Assumption] ±20% on every estimate.
@@ -110,7 +116,14 @@ the screening view and the phantom tests close the project.
 - [Fact] A's GPU log (`logs/gpu-A.csv`) has a gap on 21/10 11:40-11:50 (logger stopped by mistake, restarted).
 - [Fact] 0 failed training units and 0 NaN or collapsed runs in every LODO, SC and PC-MCL list.
 
-## 5. Registered core (v9, AST), from `docs/reports/report_2026-10-09.md`
+## 5. Stage 0: Phase 0 (before v9)
+
+Frozen-encoder ladders, fine-tuning ladders, Part II shift study and the Stage-1 screening of device variants (P0-P8)
+are in `docs/reports/report_archive_2026-10-07.md`. Main findings: the early weak base model was the encoder;
+fine-tuning did not raise decodability or the coverage deficit (F4); no device variant separated from the baseline in
+3-fold CV.
+
+## 6. Stage 1: Registered core (v9, AST), from `docs/reports/report_2026-10-09.md`
 
 | Item | Result |
 | --- | --- |
@@ -124,9 +137,9 @@ the screening view and the phantom tests close the project.
 [Interpretation] H2 failed only on set size, so the LODO v1 analysis reads set size next to abs(Delta), and ensembles
 (sharper softmax) may shrink sets.
 
-## 6. Grid v1: method x encoder on the official split
+## 7. Stage 2: Grid v1, method x encoder on the official split
 
-### 6.1 Setup
+### 7.1 Setup
 
 - 70 cells x 5 seeds = 350 units, finished 18/10 23:49. Audit (`scripts/grid.py audit`): 0 problems; SHA-256 of the
   split file and every checkpoint in `outputs/train/grid-v1/provenance_grid-v1-final-{A,B}.json`.
@@ -140,7 +153,7 @@ the screening view and the phantom tests close the project.
   coverage at 90% over 20 device-stratified calibration/evaluation halves of the test patients; set size = mean labels
   per set (of 4).
 
-### 6.2 Best cell per encoder, last epoch
+### 7.2 Best cell per encoder, last epoch
 
 | Encoder | Cell | Sp | Se | Score | HS | 2c Se | 2c Score | 2c HS | Worst-dev Score | Cov | Worst-dev Cov | Set size |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -155,7 +168,7 @@ the screening view and the phantom tests close the project.
 | BEATs | frozen patchmix | 67.3 ± 1.4 | 36.3 ± 1.2 | 51.8 ± 0.3 | 47.2 ± 0.7 | 50.7 ± 1.8 | 59.0 ± 0.4 | 57.8 ± 0.7 | 45.8 ± 1.0 | 89.6 ± 0.1 | 86.4 ± 0.5 | 2.22 ± 0.02 |
 | OPERA-CT | frozen patchmix | 79.6 ± 2.3 | 18.6 ± 1.8 | 49.1 ± 0.5 | 30.1 ± 2.2 | 25.7 ± 2.0 | 52.6 ± 0.5 | 38.7 ± 2.1 | 43.1 ± 1.3 | 89.5 ± 0.1 | 87.5 ± 0.1 | 2.50 ± 0.02 |
 
-### 6.3 Top 5, best epoch on test (optimistic)
+### 7.3 Top 5, best epoch on test (optimistic)
 
 | Rank | Cell | Sp | Se | Score | HS | 2c Se | 2c Score | 2c HS | Worst-dev Score | Cov | Worst-dev Cov | Set size |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -171,9 +184,9 @@ the screening view and the phantom tests close the project.
 Patch-Mix CL 62.1, DASS Patch-Mix 61.7, AST CE 61.3, OPERA-CT CE 52.6. Best-epoch selection adds 0.6-4.4 Score over the
 last epoch. [Interpretation] Both epoch rules put BEATs first; the method order inside BEATs is within noise.
 
-### 6.4 Cells carried into LODO v1 and the trained-SC arms (last epoch)
+### 7.4 Cells carried into LODO v1 and the trained-SC arms (last epoch)
 
-LODO without SC: all 11 rows (section 8). Trained SC: rows marked SC (section 9).
+LODO without SC: all 11 rows (stage 3). Trained SC: rows marked SC (stage 4).
 
 | Cell | SC | Sp | Se | Score | HS | 2c Se | 2c Score | 2c HS | Worst-dev Score | Cov | Worst-dev Cov | Set size |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -189,7 +202,7 @@ LODO without SC: all 11 rows (section 8). Trained SC: rows marked SC (section 9)
 | beats+ft+sg_scl | SC | 71.9 ± 4.1 | 50.2 ± 1.5 | 61.1 ± 1.3 | 59.1 ± 0.5 | 65.8 ± 2.3 | 68.9 ± 1.0 | 68.6 ± 0.8 | 52.9 ± 6.4 | 89.7 ± 0.1 | 86.6 ± 0.6 | 2.59 ± 0.21 |
 | beats+ft+qlung | | 67.4 ± 2.1 | 51.2 ± 1.4 | 59.3 ± 0.8 | 58.2 ± 0.7 | 67.5 ± 1.6 | 67.4 ± 0.7 | 67.4 ± 0.7 | 51.8 ± 6.9 | 89.6 ± 0.3 | 86.9 ± 0.4 | 2.40 ± 0.05 |
 
-### 6.5 Method effects (paired difference to CE on the same encoder and seed, last epoch)
+### 7.5 Method effects (paired difference to CE on the same encoder and seed, last epoch)
 
 Only the rows with abs(mean) > SD on Score, plus the LODO cells; full table in `docs/reports/grid-v1-results.md`.
 
@@ -219,7 +232,7 @@ Only the rows with abs(mean) > SD on Score, plus the LODO cells; full table in `
 - [Fact] Frozen PAFA equals frozen ce_pafa_cfg within 0.2 Score on every encoder: its losses train a projector the
   classifier does not use. Frozen OPERA-CT nearly ignores abnormal sounds (Se 19-25%).
 
-### 6.6 Per-class recall and ensembles (BEATs, last epoch)
+### 7.6 Per-class recall and ensembles (BEATs, last epoch)
 
 | Cell | Normal (= Sp) | Crackle | Wheeze | Both | Se | Score |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -249,48 +262,37 @@ Ensembles = mean softmax at the last epoch, same seed. [test-picked] = members c
 - [Note] The LODO-set ensemble above includes ce_pafa_cfg; LODO v1 runs BEATs CE in its place (user decision 19/10), so
   the registered E1 has the same 11-cell size with BEATs CE.
 
-### 6.7 Coverage, published numbers, incidents
+### 7.7 Coverage, published numbers, incidents
 
 - [Fact] Pooled coverage is at nominal (88.2-90.5%) in every cell; the worst device (Littmann 3200 in 343 of 350 units)
   falls to 85-88% in most fine-tuned cells and 67-82% in many frozen cells.
 - [Fact] AST best epoch on test vs published: Patch-Mix CL 61.1 ± 0.4 vs 62.37; QLung 61.0 ± 0.9 vs 62.01; ADD-RSC
   59.6 ± 0.5 vs 65.53 (the reference resizes AST input to 1024 x 256 with its own AST; here the denoising layer runs on
-  each encoder's own input). Published BEATs PC-MCL: 65.37 ± 0.73 (best epoch on test; ours in section 7).
+  each encoder's own input). Published BEATs PC-MCL: 65.37 ± 0.73 (best epoch on test; ours in stage 5, section 10).
 - Incidents: QLung's reference quality score is NaN on 71 AKGC417L cycles (leading silence), our port skips silent
   frames; SG-SCL's reference reversal schedule collapsed BEATs in 3 of 4 seeds, all SG-SCL cells use the DANN ramp;
   power cut 17/10 10:43 (9.6 h), 13 resumed units rerun cleanly and swapped in (resumed vs rerun Score: mean abs 0.61,
   largest 2.5).
 
-## 7. PC-MCL on BEATs (Amendment 5), from `docs/reports/pcmcl-v1-results.md`
+### 7.8 Findings (stage 2)
 
-Official split, seeds 0-4, 100 epochs, run `pcmcl-v1` (machine D, 10 of 10 units, 0 failed).
+- [Fact] Encoder choice dominates method choice: fine-tuned Score BEATs 58.9-61.7, HTS-AT 56.3-59.6, DASS 57.5-59.7,
+  AST 56.9-59.0, OPERA-CT 49.3-51.7; most methods differ from CE on the same encoder by less than one seed SD.
+- [Fact] BEATs PAFA is the one large consistent method gain (+2.6 Score, +8.5 worst-device Score), mostly through Sp;
+  PAFA and SG-SCL push Sp up and Se down, Patch-Mix CL the other way.
+- [Fact] Averaging methods helps more than any single method: 8 BEATs methods 62.0 ± 0.2 (SD 0.2 vs 0.7-1.5 for single
+  cells) with smaller sets (1.95 vs 2.47 labels).
+- [Fact] Test-selected epochs inflate Score by 0.6-4.4 points.
+- [Fact] Littmann 3200 is the worst device in 343 of 350 units; pooled coverage stays at nominal while the worst device
+  drops to 85-88% (fine-tuned) and 67-82% (frozen).
 
-| Cell | Epoch | Sp | Se | Score | HS | 2c Score | Worst-dev Score | Cov | Worst-dev Cov | Set size |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| beats+ft+pcmcl | last | 69.3 ± 1.7 | 52.6 ± 1.5 | 60.9 ± 0.6 | 59.7 ± 0.7 | 69.3 ± 0.4 | 57.2 ± 2.6 | 89.2 ± 0.1 | 86.6 ± 0.4 | 1.95 ± 0.02 |
-| beats+ft+pafa_pcmcl | last | 74.0 ± 1.7 | 48.6 ± 0.7 | 61.3 ± 1.0 | 58.6 ± 0.8 | 69.7 ± 0.9 | 58.8 ± 1.0 | 89.8 ± 0.2 | 86.8 ± 0.2 | 2.07 ± 0.05 |
-| beats+ft+pafa (grid) | last | 73.2 ± 2.7 | 50.2 ± 2.9 | 61.7 ± 0.7 | 59.5 ± 1.3 | 69.3 ± 1.1 | 58.9 ± 0.5 | 89.8 ± 0.3 | 85.4 ± 1.0 | 2.47 ± 0.16 |
-| beats+ft+pcmcl | best on test (optimistic) | 77.0 ± 2.8 | 51.7 ± 3.0 | 64.3 ± 1.0 | 61.8 ± 1.6 | 71.9 ± 1.4 | 58.8 ± 3.6 | 89.2 ± 0.2 | 85.5 ± 0.5 | 1.85 ± 0.03 |
-| beats+ft+pafa_pcmcl | best on test (optimistic) | 80.2 ± 4.0 | 46.9 ± 2.3 | 63.6 ± 1.1 | 59.1 ± 1.1 | 71.0 ± 0.8 | 59.3 ± 2.6 | 89.4 ± 0.3 | 84.5 ± 1.7 | 2.02 ± 0.06 |
+## 8. Stage 3: LODO v1 without SC, from `docs/reports/lodo-v1-results.md`
 
-- [Fact] Paired by seed against BEATs PAFA at the last epoch: PC-MCL -0.8 ± 0.9, PAFA + PC-MCL -0.4 ± 1.1. The
-  registered rule (last-epoch Score above PAFA by more than one seed SD) is not met by either cell.
-- [Fact] PC-MCL's best epochs on test are 4-6 of 100 (64.3, published 65.37 ± 0.73 with the same test-selected rule); it
-  loses about 3.4 Score by the last epoch. It gives the smallest conformal sets of the BEATs cells (1.95).
+220 units (11 cells x 4 held-out devices x 5 seeds), fixed last epoch; test = every cycle of the held-out device;
+conformal LAC at 90% calibrated on the calibration patients of the source devices; Delta = 0.90 minus prior-matched
+coverage.
 
-## 8. LODO v1, inference arms and trained SC, from `docs/reports/lodo-v1-results.md`
-
-All 220 no-SC units, 880 inference-arm units and 175 trained static-SC units; fixed last epoch; conformal LAC at 90%
-calibrated on the calibration patients of the source devices. Delta = 0.90 minus prior-matched coverage.
-
-### 8.1 Null gate: H2 not testable
-
-[Fact] For all 11 cells and all 4 held-out devices the baseline |Delta| stays below the 95th percentile of |Delta| under
-exchangeable re-splits of the calibration patients (closest: BEATs Patch-Mix CL on Litt3200, 0.090 vs 0.091). No fold
-is tested, so the H2 statistic is not computed for any arm. The registered AST LODO (models stopped at epoch 2) did
-have an under-covered Litt3200 fold (0.670); the converged models of LODO v1 do not.
-
-### 8.2 Score and coverage per held-out device (no SC, 5 seeds)
+### 8.1 Score and coverage per held-out device (5 seeds)
 
 | Cell | Meditron | LittC2SE | Litt3200 | AKGC417L | Macro Score | Macro w/o AKGC417L | Litt3200 Cov / set | AKGC417L Cov / set |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -310,20 +312,33 @@ Sp, Se and HS per fold, and coverage on every fold, are in the detailed report. 
 for every cell; Sp falls to 33-63% there except for BEATs PAFA (88.5%). On AKGC417L raw coverage is 74-85% but the
 prior-matched |Delta| is 0.03-0.06: the shortfall is class mix.
 
-### 8.3 Arms vs the source cell (paired by seed; range over the cells)
+### 8.2 Method vs CE on the same encoder (paired by seed)
 
-| Arm | dScore macro | dScore Litt3200 | Litt3200 coverage change | Set size change (macro) |
+| Encoder | Method | dScore macro | dScore w/o AKGC417L | dScore Litt3200 |
 | --- | --- | --- | --- | --- |
-| Test-time SC, static bound | -0.8 to +1.1 | AST +3.4 to +4.6, HTS-AT +2.1 to +2.8, BEATs +0.6 to +2.4 | +0.1 to +2.5 points | -0.06 to +0.12 |
-| Test-time SC, dynamic bound | -1.4 to +1.1 | AST +4.1 to +5.3, HTS-AT +1.9 to +3.7, BEATs +0.7 to +2.2 | 0.0 to +2.9 | -0.05 to +0.19 |
-| A2 | -6.1 to +0.8 (BEATs -4.0 to -6.1) | BEATs -4.8 to -11.6, HTS-AT +5.0 to +5.2 | -2.7 to +5.2 | -0.07 to +0.35 |
-| TTA-EQ (8 views) | 0.0 to +0.5 | -0.4 to +0.6 | -1.1 to -4.6 | -0.07 to -0.32 |
-| Trained SC, static bound (7 cells) | -0.0 to +1.5 (6 of 7 positive) | -0.4 to +2.9 | -1.4 to +1.7 | -0.29 to 0.00 |
+| AST | pafa | +0.7 ± 2.3 | +0.2 ± 3.2 | +0.3 ± 7.5 |
+| AST | patchmix_cl | +0.0 ± 1.7 | -0.0 ± 1.7 | +2.6 ± 4.4 |
+| HTS-AT | patchmix_cl | +0.8 ± 1.5 | +1.0 ± 1.9 | +2.3 ± 4.4 |
+| HTS-AT | sg_scl | +0.5 ± 1.4 | +0.8 ± 1.8 | +1.5 ± 3.4 |
+| BEATs | patchmix_cl | +1.0 ± 1.4 | +1.1 ± 1.8 | +1.2 ± 3.8 |
+| BEATs | sg_scl | -0.1 ± 1.5 | -0.1 ± 2.0 | -1.4 ± 4.4 |
+| BEATs | pafa | -0.3 ± 1.5 | +0.1 ± 1.3 | +3.3 ± 2.9 |
+| BEATs | qlung | +0.6 ± 0.9 | +0.8 ± 1.5 | +0.8 ± 6.9 |
 
-Trained SC static per cell, macro dScore in LODO: AST PAFA +1.4 ± 0.7, AST Patch-Mix CL +0.3 ± 1.5, HTS-AT Patch-Mix CL
-+1.2 ± 1.5, HTS-AT SG-SCL +1.5 ± 1.4, BEATs Patch-Mix CL -0.0 ± 1.4, BEATs PAFA +1.5 ± 1.2, BEATs SG-SCL +1.5 ± 1.1.
+### 8.3 Findings (stage 3)
 
-### 8.4 Trained SC (static) on the official split vs no SC (same cell and seed, last epoch)
+- [Fact] The encoder order holds under device shift: macro Score BEATs 58.8-60.1, AST 56.3-57.0, HTS-AT 56.1-56.9,
+  about the official-split level for BEATs.
+- [Fact] Litt3200 is the hardest held-out device for every cell (Score 47.3-59.7, Sp 33-63%); BEATs PAFA is best there
+  (59.7, Sp 88.5%).
+- [Fact] Methods vs CE stay within seed SD in LODO (macro -0.3 to +1.0); BEATs PAFA gains on Litt3200 (+3.3 ± 2.9).
+- [Fact] Raw coverage on AKGC417L is 74-85%, but the prior-matched |Delta| is 0.03-0.06: the shortfall is class mix.
+
+## 9. Stage 4: Trained SC, static bound
+
+175 units: 7 cells x (official split + 4 held-out devices) x 5 seeds, paired by seed with the no-SC units.
+
+### 9.1 Official split vs no SC (same cell and seed, last epoch)
 
 | Cell | Sp | Se | Score | HS | 2c Score | Worst-dev Score | Cov | Worst-dev Cov | Set size | dScore vs no SC | dWorst-dev Score |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -335,7 +350,93 @@ Trained SC static per cell, macro dScore in LODO: AST PAFA +1.4 ± 0.7, AST Patc
 | beats+ft+pafa | 75.6 ± 3.1 | 48.9 ± 2.9 | **62.3 ± 0.9** | 59.3 ± 1.3 | 69.5 ± 0.7 | 58.9 ± 1.4 | 89.6 ± 0.3 | 85.6 ± 0.7 | 2.33 ± 0.13 | +0.5 ± 1.5 | -0.1 ± 1.2 |
 | beats+ft+sg_scl | 72.0 ± 2.9 | 49.4 ± 1.1 | 60.7 ± 1.0 | 58.6 ± 0.6 | 68.5 ± 0.8 | 51.8 ± 5.5 | 89.8 ± 0.2 | 87.5 ± 0.2 | 2.43 ± 0.16 | -0.4 ± 1.6 | -1.1 ± 6.8 |
 
-## 9. Candidates for the final AuscultTrust
+### 9.2 LODO vs no SC (paired by seed)
+
+| Arm | dScore macro | dScore Litt3200 | Litt3200 coverage change | Set size change (macro) |
+| --- | --- | --- | --- | --- |
+| Trained SC, static bound (7 cells) | -0.0 to +1.5 (6 of 7 positive) | -0.4 to +2.9 | -1.4 to +1.7 | -0.29 to 0.00 |
+
+Trained SC static per cell, macro dScore in LODO: AST PAFA +1.4 ± 0.7, AST Patch-Mix CL +0.3 ± 1.5, HTS-AT Patch-Mix CL
++1.2 ± 1.5, HTS-AT SG-SCL +1.5 ± 1.4, BEATs Patch-Mix CL -0.0 ± 1.4, BEATs PAFA +1.5 ± 1.2, BEATs SG-SCL +1.5 ± 1.1.
+
+### 9.3 Findings (stage 4)
+
+- [Fact] Trained SC costs nothing on the official split (-0.6 to +0.7 Score) and raises the LODO macro Score for 6 of 7
+  cells (+1.2 to +1.5 for AST PAFA, HTS-AT both, BEATs PAFA and SG-SCL; +0.3 AST Patch-Mix CL; -0.0 BEATs Patch-Mix CL).
+- [Fact] BEATs PAFA + trained SC reaches 62.3 ± 0.9 on the official split (best last-epoch Score so far) and about 60.3
+  macro in LODO, 61.6 on Litt3200.
+- [Fact] Coverage and set size barely move with trained SC (Litt3200 coverage -1.4 to +1.7 points, sets -0.29 to 0.00).
+
+## 10. Stage 5: PC-MCL on BEATs (Amendment 5), from `docs/reports/pcmcl-v1-results.md`
+
+Official split, seeds 0-4, 100 epochs, run `pcmcl-v1` (machine D, 10 of 10 units, 0 failed).
+
+| Cell | Epoch | Sp | Se | Score | HS | 2c Score | Worst-dev Score | Cov | Worst-dev Cov | Set size |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| beats+ft+pcmcl | last | 69.3 ± 1.7 | 52.6 ± 1.5 | 60.9 ± 0.6 | 59.7 ± 0.7 | 69.3 ± 0.4 | 57.2 ± 2.6 | 89.2 ± 0.1 | 86.6 ± 0.4 | 1.95 ± 0.02 |
+| beats+ft+pafa_pcmcl | last | 74.0 ± 1.7 | 48.6 ± 0.7 | 61.3 ± 1.0 | 58.6 ± 0.8 | 69.7 ± 0.9 | 58.8 ± 1.0 | 89.8 ± 0.2 | 86.8 ± 0.2 | 2.07 ± 0.05 |
+| beats+ft+pafa (grid) | last | 73.2 ± 2.7 | 50.2 ± 2.9 | 61.7 ± 0.7 | 59.5 ± 1.3 | 69.3 ± 1.1 | 58.9 ± 0.5 | 89.8 ± 0.3 | 85.4 ± 1.0 | 2.47 ± 0.16 |
+| beats+ft+pcmcl | best on test (optimistic) | 77.0 ± 2.8 | 51.7 ± 3.0 | 64.3 ± 1.0 | 61.8 ± 1.6 | 71.9 ± 1.4 | 58.8 ± 3.6 | 89.2 ± 0.2 | 85.5 ± 0.5 | 1.85 ± 0.03 |
+| beats+ft+pafa_pcmcl | best on test (optimistic) | 80.2 ± 4.0 | 46.9 ± 2.3 | 63.6 ± 1.1 | 59.1 ± 1.1 | 71.0 ± 0.8 | 59.3 ± 2.6 | 89.4 ± 0.3 | 84.5 ± 1.7 | 2.02 ± 0.06 |
+
+- [Fact] Paired by seed against BEATs PAFA at the last epoch: PC-MCL -0.8 ± 0.9, PAFA + PC-MCL -0.4 ± 1.1. The
+  registered rule (last-epoch Score above PAFA by more than one seed SD) is not met by either cell.
+- [Fact] PC-MCL's best epochs on test are 4-6 of 100 (64.3, published 65.37 ± 0.73 with the same test-selected rule); it
+  loses about 3.4 Score by the last epoch. It gives the smallest conformal sets of the BEATs cells (1.95).
+- [Fact] Following the user (21/10), PAFA + PC-MCL is now also trained with SC (static and dynamic bound) in stage 8.
+
+## 11. Stage 6: Inference arms on the LODO units
+
+880 units: four arms on each of the 220 no-SC LODO units (`src.evaluation.lodo_ttsc`), paired by seed with the source
+unit; ranges over the 11 cells. Test-time SC corrects only the held-out device towards the source devices' mean spectrum,
+from its unlabelled cycles. A2 maps the per-bin mean and SD of the held-out spectrograms onto the training statistics.
+TTA-EQ averages the softmax over 8 random smooth per-bin gain views.
+
+| Arm | dScore macro | dScore Litt3200 | Litt3200 coverage change | Set size change (macro) |
+| --- | --- | --- | --- | --- |
+| Test-time SC, static bound | -0.8 to +1.1 | AST +3.4 to +4.6, HTS-AT +2.1 to +2.8, BEATs +0.6 to +2.4 | +0.1 to +2.5 points | -0.06 to +0.12 |
+| Test-time SC, dynamic bound | -1.4 to +1.1 | AST +4.1 to +5.3, HTS-AT +1.9 to +3.7, BEATs +0.7 to +2.2 | 0.0 to +2.9 | -0.05 to +0.19 |
+| A2 | -6.1 to +0.8 (BEATs -4.0 to -6.1) | BEATs -4.8 to -11.6, HTS-AT +5.0 to +5.2 | -2.7 to +5.2 | -0.07 to +0.35 |
+| TTA-EQ (8 views) | 0.0 to +0.5 | -0.4 to +0.6 | -1.1 to -4.6 | -0.07 to -0.32 |
+
+### 11.1 Findings (stage 6)
+
+- [Fact] Test-time SC raises Litt3200 Score for every cell (AST +3.4 to +5.3, HTS-AT +1.9 to +3.7, BEATs +0.6 to
+  +2.4); the macro change is small (-1.4 to +1.1); coverage and set size barely move. Static and dynamic bounds are close.
+- [Fact] A2 hurts every BEATs cell (macro -4.0 to -6.1; Litt3200 -4.8 to -11.6) and AST PAFA (-2.6), and helps HTS-AT on
+  Litt3200 (+5). [Interpretation] Matching whole-device statistics removes the held-out device's class mix along with
+  its spectrum.
+- [Fact] TTA-EQ changes Score by 0.0 to +0.5 and shrinks sets by 0.07-0.32 labels (Litt3200 over-coverage down 1-5
+  points).
+
+## 12. Stage 7: Coverage under device shift (H2)
+
+[Fact] For all 11 cells and all 4 held-out devices the baseline |Delta| stays below the 95th percentile of |Delta| under
+exchangeable re-splits of the calibration patients (closest: BEATs Patch-Mix CL on Litt3200, 0.090 vs 0.091). No fold
+is tested, so the H2 statistic is not computed for any arm. The registered AST LODO (models stopped at epoch 2) did
+have an under-covered Litt3200 fold (0.670); the converged models of LODO v1 do not.
+
+### 12.1 Findings (stage 7)
+
+- [Fact] H2 cannot be tested in LODO v1: no fold of any cell has a baseline coverage error above chance, so no H2
+  statistic is computed for test-time SC, trained SC, A2 or TTA-EQ.
+- [Fact] Coverage on an unseen device stays near nominal through large sets on Litt3200 (2.6-3.5 of 4 labels) and class
+  mix on AKGC417L.
+- [Interpretation] A coverage claim for SC now needs the phantom data, earlier-epoch models or another dataset.
+
+## 13. Stage 8: Trained SC, dynamic bound [Running]
+
+BEATs PAFA, SG-SCL and Patch-Mix CL (cells `<cell>+sc`, 75 units) and BEATs PAFA + PC-MCL with trained SC static and
+dynamic (cells `beats+ft+pafa_pcmcl+sc+sc_static`, `beats+ft+pafa_pcmcl+sc`, 50 units). BEATs units about 22/10 02:00,
+all about 22/10 15:00. AST and HTS-AT dynamic units were dropped (user decision 21/10); 4 BEATs Patch-Mix CL dynamic
+units finished before the switch.
+
+## 14. Stage 9: Ensembles and distillation [Pending, optional]
+
+Official-split ensembles are in section 7.6 (8 BEATs methods 62.0 ± 0.2). The registered LODO ensembles E1-E4 (equal-
+weight mean softmax per fold and seed) are not run yet; distillation only if E1 beats the best single cell.
+
+## 15. Stage 10: Candidates for the final AuscultTrust
 
 Official split = last epoch, 5 seeds; LODO = macro Score over the 4 held-out devices (arm = source + paired change).
 
@@ -350,30 +451,12 @@ Official split = last epoch, 5 seeds; LODO = macro Score over the 4 held-out dev
 SC is the only one that is first or close to first on all three. The dynamic-bound SC arms (stage 8) may change the
 choice; the decision is the user's.
 
-## 10. Findings so far
+## 16. Stage 11: After LODO [Pending]
 
-1. [Fact] Encoder choice dominates method choice on the official split: BEATs leads under both epoch rules; most
-   methods differ from CE on the same encoder by less than one seed SD (section 6).
-2. [Fact] BEATs PAFA is the one large consistent method gain (+2.6 Score, +8.5 worst-device Score over BEATs CE), mostly
-   through Sp; PAFA, SG-SCL and PC-MCL+PAFA push Sp up and Se down, Patch-Mix CL the other way.
-3. [Fact] Averaging methods helps more than any single method: 8 BEATs methods 62.0 ± 0.2 (SD 0.2 vs 0.7-1.5 for single
-   cells) with smaller sets (1.95 vs 2.47 labels).
-4. [Fact] Test-selected epochs inflate Score by 0.6-4.4 points; PC-MCL's published-style number (64.3) comes from epochs
-   4-6 and falls to 60.9 at its fixed last epoch, below PAFA.
-5. [Fact] Littmann 3200 is the worst device in 343 of 350 grid units; pooled conformal coverage stays at nominal while
-   the worst device drops to 85-88% (fine-tuned) and 67-82% (frozen).
-6. [Fact] Under device shift (LODO v1) the encoder order holds: macro Score BEATs 58.8-60.1, AST 56.3-57.0, HTS-AT
-   56.1-56.9. Litt3200 is the hardest held-out device (47.3-59.7); BEATs PAFA is best there (59.7, Sp 88.5%). Methods vs
-   CE on the same encoder stay within seed SD (macro -0.3 to +1.0).
-7. [Fact] H2 cannot be tested in LODO v1: no fold of any cell has a baseline coverage error above chance. Coverage on an
-   unseen device stays near nominal at the fixed last epoch, through large sets on Litt3200 (2.6-3.5 of 4 labels) and
-   class mix on AKGC417L. The registered AST LODO (epoch 2) found a real Litt3200 deficit; converged models do not.
-8. [Fact] Test-time SC raises Score on Litt3200 for every cell (AST +3.4 to +5.3, HTS-AT +1.9 to +3.7, BEATs +0.6 to
-   +2.4) with coverage and set size almost unchanged; trained SC (static) raises the LODO macro Score for 6 of 7 cells
-   (up to +1.5) and costs nothing on the official split, where BEATs PAFA + SC reaches 62.3 ± 0.9 (best last-epoch
-   Score so far). A2 hurts BEATs (-4 to -6 macro); TTA-EQ only shrinks sets slightly.
+KAUH positive controls on the final model, screening view (recording level), demo app update, phantom tests (H1, H3)
+once the hardware is ready.
 
-## 11. Caveats
+## 17. Caveats
 
 - One split and 5 seeds: a 1-point difference is within seed noise for most cells. The last epoch is the reference
   schedule's, not a validated epoch; best-epoch numbers are test-selected.
@@ -389,20 +472,14 @@ choice; the decision is the user's.
 - SC units ran on three code states (C: commit before the PC-MCL port; D, A, E: current; B: older), identical on every
   path the SC cells use (checked by file hashes and diff).
 
-## 12. Next steps
+## 18. Next steps
 
-1. Trained SC with the dynamic bound (running, about 22/10 08:00): then the same comparisons as section 8.4 and the
-   LODO arms table (`bash scripts/lodo_h2_all.sh` with the `+sc` arm, `scripts/lodo_tables.py`).
-2. Choose the final AuscultTrust with the user (section 9; BEATs PAFA + trained SC is the leading candidate).
+1. Stage 8 (running; BEATs about 22/10 02:00, PAFA + PC-MCL about 22/10 15:00): then the comparisons of section 9 for
+   the dynamic bound and for PAFA + PC-MCL with SC (`bash scripts/lodo_h2_all.sh` with the new arms,
+   `scripts/lodo_tables.py`).
+2. Choose the final AuscultTrust with the user (section 15; BEATs PAFA + trained SC is the leading candidate).
 3. Optional ensembles E1-E4 (fixed rules of Amendment 4) on the stored softmax outputs, about 2 h; distillation only if
    E1 beats the best single cell.
 4. With the final model: KAUH positive controls, screening view (recording level), update the demo app; phantom tests
    (H1, H3) once the hardware is ready. A coverage test of SC (H2) now needs the phantom data, earlier-epoch models or
    another dataset, since LODO v1 has no tested fold.
-
-## 13. Phase 0 (before v9)
-
-Frozen-encoder ladders, fine-tuning ladders, Part II shift study and the Stage-1 screening of device variants (P0-P8)
-are in `docs/reports/report_archive_2026-10-07.md`. Main findings: the early weak base model was the encoder;
-fine-tuning did not raise decodability or the coverage deficit (F4); no device variant separated from the baseline in
-3-fold CV.
