@@ -100,7 +100,7 @@ PC-MCL; BEATs units first in each list), written by `~/.claude/jobs/14a45349/tmp
 17:10; BEATs units about 22/10 02:00, all about 22/10 15:00 (one PC-MCL job takes about 19 GB, `MEM_GB=20`). Smokes:
 dynamic bound on D (`smoke-scdyn-d`), PAFA + PC-MCL with SC on A (`smoke-pcmclsc-a`, batch 8). When done: copy B's,
 D's and E's `outputs/train/lodo-v1/` to A, add the new arms to `scripts/lodo_h2_all.sh` and `scripts/lodo_tables.py`,
-update the reports. AST and HTS-AT dynamic-SC units were dropped. **Open check (21/10 17:40):** the PC-MCL + SC smoke
+update the reports. AST and HTS-AT dynamic-SC units were dropped. **Check closed (21/10 17:55): the LODO smoke `smoke-pcmclsc-a2` passed (0 failed; cal_preds.npz, test_preds.npz written).** Earlier note (21/10 17:40): the PC-MCL + SC smoke
 passed on the official split (`smoke-pcmclsc-a`, report and test_preds written); its LODO unit was cut off by a shell
 timeout at step 730/1065 of epoch 1 (no error) and is being rerun as `smoke-pcmclsc-a2` on A (log
 `logs/smoke-pcmclsc-a2.log`, job log `logs/smoke-pcmclsc-a2/0.log`). Confirm it ends with `all jobs finished, 0 failed`
