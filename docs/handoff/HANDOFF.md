@@ -85,6 +85,18 @@ jobs at 10-11 GB, more units only if smaller); actual use about 8.3 GB per BEATs
 
 Consolidated report with plan, timeline and grid results: `report.md` (v3.0, 19/10).
 
+**Stage 6, inference arms on the LODO units (21/10 11:50, user go).** LODO without SC finished 21/10 00:17 (220/220,
+0 failed). `src.evaluation.lodo_ttsc` runs four arms on every no-SC LODO unit, on the machine that holds its
+checkpoint: `<cell>+ttsc_static` (`target:static`), `<cell>+ttsc_dynamic` (`target:dynamic`), `<cell>+a2` (`none:a2`),
+`<cell>+tta8` (`none:tta8`), written to `outputs/train/lodo-v1/<arm cell>+lodo_<dev>/seed<s>/`. Lists
+`logs/campaigns/lodo-v1-l2-{A,B,E}.txt` (one line per source cell and device; A 37, B 95, E 88 units), schedulers with
+`RUN_ID=lodo-v1-l2 SWEEP_TAG=-<M>` (A 3 workers; B, E 1 worker while their SC training runs; restart command in
+`~/.claude/jobs/14a45349/tmp/l2_start.sh <M> <workers>`), logs `logs/lodo-v1-l2-<M>.log` and `logs/lodo-v1-l2-<M>/`.
+Lines end with `&& :` because the scheduler appends `--num_workers`, which `lodo_ttsc` does not take (the first start
+failed on that; its logs are in `logs/lodo-v1-l2-<M>.failed-args*`). A rerun skips arms already written. About 1 min
+and 3.5 GB GPU, 11 GB RAM per unit. Expected end: A about 12:15, B and E about 13:30. `scripts/grid_status.sh` does not
+count these lists: check `grep -c FAILED logs/lodo-v1-l2-<M>.log` and the number of `*+tta8+lodo_*/seed*/report.json`.
+
 ## 2a. Monitoring (for the monitor session)
 
 Run `bash scripts/grid_status.sh` on A (read-only; covers A-E and both dispatchers; about 1 min) every hour and append
