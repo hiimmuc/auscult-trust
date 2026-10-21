@@ -7,7 +7,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 Main line: **proposal v9** (`docs/updates/research-proposal-v9-en.md`, 07/10/2026). Registered title (fixed): *Nghiên cứu giải pháp cải thiện độ tin cậy của mô hình phân loại âm thanh phổi dưới sự dịch chuyển thiết bị bằng hiệu chỉnh phổ và dự đoán Conformal cho hỗ trợ sàng lọc bệnh đường hô hấp*. v8 and earlier (A+B, H, v4) are superseded; their results stay in `report.md` as Phase 0.
 Pre-registration: `docs/updates/prereg-v8.md`, amended 07/10/2026 (`docs/updates/prereg-v9-amendment.md`, appended to the end of `prereg-v8.md`; registered, no Stage-1 run preceded it).
 Data in `../data/raw/`: ICBHI (920 wav, 6898 cycles, 126 patients), HF_Lung_V1 (9765 wav, not used in v9 core), KAUH (336 wav = 112 patients x 3 filters). Reference repos in `../repos` (read-only): OPERA, patch-mix_contrastive_learning, SG-SCL.
-Model name: **AuscultTrust** = SC front end + AST (Patch-Mix CL recipe) + split-conformal layer (cycle 4-class view + recording-level screening view).
+Model name: **AuscultTrust** = BEATs + PAFA, fine-tuned (user decision 22/10/2026; SC variant chosen after the dynamic-bound SC runs) + split-conformal layer (cycle 4-class view + recording-level screening view). The registered v9 core below used SC front end + AST (Patch-Mix CL recipe).
 Dates: school round 17/10/2026 (10-min talk + poster, results report required); research cut-off 31/01/2027.
 
 ## Project (v9)
