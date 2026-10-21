@@ -84,6 +84,7 @@ class Pipeline:
             j = self.used[i : i + 256]
             self.clip_spec[j] = clip_spectra_torch(self.waves[j].cuda().double()).cpu().numpy()
         self.ckpt = runs.twin_dir(self.unit, "checkpoints") / "report_epoch_{}.pth".format(self.epoch)
+        self.args.class_nums = np.bincount(self.labels[self.tr], minlength=self.args.n_cls)  # QLung margin, as in training
         self.model, self.classifier, _, _, _ = build_model(self.args)
         ck = torch.load(self.ckpt, map_location="cpu", weights_only=False)
         if ck["model"] is not None:

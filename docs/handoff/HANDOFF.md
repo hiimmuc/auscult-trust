@@ -85,7 +85,19 @@ jobs at 10-11 GB, more units only if smaller); actual use about 8.3 GB per BEATs
 
 Consolidated report with plan, timeline and grid results: `report.md` (v3.0, 19/10).
 
-**Stage 6, inference arms on the LODO units (21/10 11:50, user go).** LODO without SC finished 21/10 00:17 (220/220,
+**State 21/10 15:45 (supersedes the run tables above for the current runs).** LODO without SC 220/220, inference arms
+880/880, trained SC static 175/175, PC-MCL 10/10: all done, outputs on A. Analysis done: `docs/reports/lodo-v1-results.md`
+(regenerate with `bash scripts/lodo_h2_all.sh` and `PYTHONPATH=. .venv-train/bin/python scripts/lodo_tables.py`);
+`report.md` v4.1. Now running, stage 8, trained SC with the dynamic bound: cells `<cell>+sc` (7 cells x 25 units),
+lists `logs/campaigns/lodo-v1-{A5,B5,D5,E5}.txt` (17/52/52/54 units, from `scripts/grid.py lodo-jobs --sc-mode dynamic
+--names A5 B5 D5 E5`), schedulers `RUN_ID=lodo-v1 SWEEP_TAG=-<M>5 --workers 4` (start script
+`~/.claude/jobs/14a45349/tmp/start5.sh <M>`), started 21/10 15:15, about 17 h, end about 22/10 08:00. 1-epoch smoke of
+the dynamic bound passed on D (`smoke-scdyn-d`). When done: copy B's, D's and E's `outputs/train/lodo-v1/` to A, add
+`<cell>+sc` to the arms in `scripts/lodo_h2_all.sh` and the tables, and update the reports. Inference-arm incidents:
+the first start failed on `--num_workers` (lines now end with `&& :`); 20 QLung units failed on `class_nums` (fixed in
+`src/evaluation/lodo_ttsc.py`, rerun with lists `lodo-v1-l2q-<M>`).
+
+**Stage 6, inference arms on the LODO units (21/10 11:50, user go; done 15:05).** LODO without SC finished 21/10 00:17 (220/220,
 0 failed). `src.evaluation.lodo_ttsc` runs four arms on every no-SC LODO unit, on the machine that holds its
 checkpoint: `<cell>+ttsc_static` (`target:static`), `<cell>+ttsc_dynamic` (`target:dynamic`), `<cell>+a2` (`none:a2`),
 `<cell>+tta8` (`none:tta8`), written to `outputs/train/lodo-v1/<arm cell>+lodo_<dev>/seed<s>/`. Lists
