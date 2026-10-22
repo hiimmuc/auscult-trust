@@ -1,0 +1,18 @@
+# CPU build of the model stack; versions as in the training environment (.venv-train).
+--extra-index-url https://download.pytorch.org/whl/cpu
+torch==2.9.1
+torchvision==0.24.1
+torchaudio==2.9.1
+timm==0.4.5
+wget
+numpy==2.2.6
+scipy==1.15.3
+pandas==2.3.3
+matplotlib
+pyyaml
+librosa==0.11.0
+soundfile==0.14.0
+huggingface_hub
+fastapi==0.150.0
+uvicorn==0.54.0
+python-multipart==0.0.32

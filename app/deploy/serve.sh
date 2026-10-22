@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# Run the demo on this host, detached: API (127.0.0.1:8000), static web build (127.0.0.1:8090), Cloudflare tunnel.
+# Run the API on this host, detached (127.0.0.1:8000). Start a tunnel separately (see app/README.md).
 #   bash app/deploy/serve.sh start|stop|status
-# Reads app/deploy/.env (AT_APP_TOKEN, AT_APP_ORIGINS). Logs: logs/app-{api,web,tunnel}.log. PIDs: logs/app.pids.
+# Reads app/deploy/.env (AT_APP_TOKEN, AT_APP_ORIGINS). Log: logs/app-api.log. PIDs: logs/app.pids.
 set -euo pipefail
 cd "$(dirname "$0")/../.."
 PIDS=logs/app.pids
@@ -15,12 +15,8 @@ start() {
   stop
   mkdir -p logs
   set -a; source app/deploy/.env; set +a
-  PYTHONPATH=. setsid nohup .venv-train/bin/uvicorn app.api.server:app --host 127.0.0.1 --port 8000 \
+  PYTHONPATH=. setsid nohup .venv-train/bin/uvicorn api.main:app --host 127.0.0.1 --port 8000 \
     > logs/app-api.log 2>&1 < /dev/null & echo $! >> "$PIDS"
-  setsid nohup .venv-train/bin/python -m http.server 8090 --bind 127.0.0.1 --directory app/web/dist \
-    > logs/app-web.log 2>&1 < /dev/null & echo $! >> "$PIDS"
-  setsid nohup cloudflared --config app/deploy/cloudflared.yml tunnel run \
-    > logs/app-tunnel.log 2>&1 < /dev/null & echo $! >> "$PIDS"
   echo "started: $(tr '\n' ' ' < "$PIDS")"
 }
 
