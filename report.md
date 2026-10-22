@@ -2,8 +2,8 @@
 
 | | |
 | --- | --- |
-| Report version | 4.4 (4.3, 4.2, 4.1, 4.0 and 3.0 in git history; 2.0 is `docs/reports/report_archive_2026-10-07.md`) |
-| Datetime | 2026-10-22 04:30 (+07) |
+| Report version | 4.5 (4.4, 4.3, 4.2, 4.1, 4.0 and 3.0 in git history; 2.0 is `docs/reports/report_archive_2026-10-07.md`) |
+| Datetime | 2026-10-22 06:00 (+07) |
 | Proposal / prereg | v9 (`docs/updates/research-proposal-v9-en.md`); `docs/updates/prereg-v8.md` with Amendments 1-5 (`docs/updates/prereg-v9-amendment*.md`) |
 | Plans | `docs/updates/stage-plan-v1.md` (grid), `docs/updates/lodo-plan-v1.md` (LODO, ensembles; Amendment 4 wins where they differ) |
 | Detailed sources | `docs/reports/report_2026-10-09.md` (registered core), `docs/reports/grid-v1-results.md` (grid, every cell), `docs/reports/pcmcl-v1-results.md` (PC-MCL), `docs/reports/lodo-v1-results.md` (LODO v1, SC), `docs/reports/ensemble-v1-results.md` (ensembles by encoder group), `docs/handoff/HANDOFF.md` (machines, commands, incidents) |
@@ -27,8 +27,9 @@ Results and findings are reported per stage of the plan (sections 5-16, numberin
 5. [Fact] Final AuscultTrust (user decision 22/10): BEATs + PAFA, fine-tuned. With trained SC static it scores 62.3 ±
    0.9 on the official split (best last-epoch Score so far) and 60.3 ± 0.8 macro in LODO; the SC variant (none, trained
    static, trained dynamic, test-time) is still open until stage 8 ends (section 15).
-6. [Fact] Equal-weight ensembles of BEATs (+ HTS-AT) cells beat BEATs PAFA alone by 1.5-2 Score (official split and
-   LODO macro, no SC) but lose on Litt3200 and the worst device; weights learned on calibration data never beat equal
+6. [Fact] Ensembles raise Se at PAFA's Sp only with a target-side anchor: equal-weight E1+E3 (BEATs + HTS-AT) or E1
+   (BEATs) with a label-free rule that calls as many cycles normal as PAFA does on the same unlabelled cycles keep Sp and
+   gain 1.4-3.1 Se (+1.1 to +2.1 Score) on the official split and in LODO; learned member weights never beat equal
    weights (stage 9).
 
 At 22/10 02:50 (stage 8 row); other rows at 21/10 15:45:
@@ -82,6 +83,7 @@ the screening view and the phantom tests close the project.
 | 21/10 | Start the inference arms on all LODO units; then the next steps (analysis, trained SC with the dynamic bound); fix and retry any failure at once. |
 | 21/10 | Dynamic-bound SC only on BEATs PAFA, SG-SCL, Patch-Mix CL; add BEATs PAFA + PC-MCL with SC static and dynamic (SC on PC-MCL's concatenated cycles implemented: each part corrected with its device's coefficient). Report reorganised by plan stage. |
 | 22/10 | After the review of stages 0-4: the final AuscultTrust is BEATs + PAFA, fine-tuned (replaces the AST Patch-Mix CL definition of v9). |
+| 22/10 | Ensembles: report best epoch on test as an optimistic column; goal = raise Se while keeping Sp. |
 | 22/10 | Re-evaluate ensembles by encoder group, with weights (trainable if useful): E1 BEATs PAFA, SG-SCL, Patch-Mix CL; E2 AST Patch-Mix CL, PAFA; E3 HTS-AT Patch-Mix CL, SG-SCL; cross-group E1+E2, E1+E3, E2+E3, E1+E2+E3. |
 
 ## 4. Compute, timeline and incidents
@@ -451,13 +453,20 @@ the mean LODO weights). d = paired by seed vs BEATs PAFA alone in the same arm.
 | E1+E2 | 62.3 ± 0.6 | +0.5 ± 1.2 | 56.6 | 1.92 | 60.5 ± 1.5 | +1.7 ± 0.9 | 57.8 | 64.5 / 51.0 |
 | E1+E3 | 63.4 ± 0.3 | +1.7 ± 0.5 | 57.2 | 1.90 | 60.9 ± 1.5 | +2.1 ± 1.5 | 58.6 | 62.2 / 55.0 |
 | E1+E2+E3 | 63.2 ± 0.3 | +1.5 ± 0.4 | 56.5 | 1.87 | 60.7 ± 1.4 | +1.9 ± 1.0 | 57.8 | 59.5 / 56.0 |
+| E2 AST | 59.9 ± 0.4 | -1.8 ± 0.9 | 49.7 | 2.14 | 58.1 ± 0.7 | -0.7 ± 1.3 | 52.5 | 52.7 / 52.2 |
+| E3 HTS-AT | 60.1 ± 1.0 | -1.7 ± 1.0 | 48.3 | 2.18 | 57.2 ± 1.8 | -1.6 ± 2.4 | 50.0 | 40.5 / 59.5 |
+| E2+E3 | 60.8 ± 0.9 | -0.9 ± 1.0 | 48.5 | 1.98 | 58.8 ± 1.6 | -0.0 ± 1.9 | 51.9 | 46.7 / 57.1 |
 | BEATs PAFA alone, trained SC static | 62.3 ± 0.9 | | 58.9 | 2.33 | 60.3 ± 0.8 | | 61.5 | 88.2 / 34.8 |
 | E1 BEATs, SC static | 63.1 ± 0.6 | +0.9 ± 1.1 | 58.0 | 2.06 | 61.9 ± 1.1 | +1.6 ± 1.1 | 61.0 | 72.1 / 49.8 |
+| E1+E2, SC static | 62.7 ± 0.3 | +0.5 ± 1.0 | 57.6 | 1.88 | 61.6 ± 1.1 | +1.3 ± 0.9 | 60.4 | 72.4 / 48.3 |
 | E1+E3, SC static | 63.2 ± 0.7 | +0.9 ± 1.4 | 57.7 | 1.89 | 62.0 ± 0.7 | +1.7 ± 1.1 | 58.5 | 62.5 / 54.6 |
 | E1+E2+E3, SC static | 63.0 ± 0.7 | +0.7 ± 1.1 | 55.9 | 1.85 | 62.1 ± 0.9 | +1.8 ± 0.9 | 59.4 | 65.1 / 53.8 |
+| E2 AST, SC static | 60.2 ± 0.7 | -2.1 ± 0.4 | 52.2 | 2.11 | 58.7 ± 0.9 | -1.6 ± 1.2 | 55.8 | 65.6 / 46.1 |
+| E3 HTS-AT, SC static | 59.5 ± 0.8 | -2.7 ± 1.4 | 47.9 | 2.20 | 58.7 ± 0.9 | -1.6 ± 1.6 | 50.1 | 39.6 / 60.5 |
+| E2+E3, SC static | 60.9 ± 0.4 | -1.4 ± 0.7 | 49.8 | 1.96 | 59.9 ± 0.8 | -0.4 ± 1.4 | 54.2 | 53.2 / 55.1 |
 
-E2, E3 and E2+E3 alone are below BEATs PAFA or level with it everywhere (official -0.7 to -2.8, LODO macro 0.0 to -2.3,
-Litt3200 -5.7 to -11.6); full tables, fitted weights and per-device Scores in the detailed report.
+E2, E3 and E2+E3 are below BEATs PAFA or level with it everywhere (official -0.7 to -2.8, LODO macro 0.0 to -2.3,
+Litt3200 -5.7 to -11.6); fitted-weight rows, fitted weights and per-device Scores in the detailed report.
 
 ### 14.1 Findings (stage 9)
 
@@ -472,6 +481,37 @@ Litt3200 -5.7 to -11.6); full tables, fitted weights and per-device Scores in th
 - [Fact] Ensembles give smaller conformal sets at the same coverage (1.85-2.18 vs 2.33-2.47 labels on the official split).
 - [Assumption] Exploratory: members and groups were chosen after seeing test results. The registered E1-E4 and
   distillation are not run.
+
+### 14.2 Raising Se while keeping Sp; best epoch on test (optimistic)
+
+Rule `k rate` (label-free): the normal probability is scaled so that the ensemble calls the same fraction of the
+unlabelled test cycles normal as BEATs PAFA alone does on the same cycles (transductive, like SC). d = paired by seed vs
+PAFA alone (Sp and Se in points). Best epoch on test = every member at its own best epoch on test, plain argmax
+[optimistic]. Other rules (Sp matched on source-device calibration, oracle on test labels): detailed report, section 5.
+
+| Ensemble (equal, `k rate`) | Official Score | dSp / dSe | LODO macro | dSp / dSe | Litt3200 Sp / Se | Best epoch on test [optimistic] (Sp / Se) |
+| --- | --- | --- | --- | --- | --- | --- |
+| BEATs PAFA alone, no SC | 61.7 ± 0.7 | | 58.8 ± 1.4 | | 88.5 / 30.9 | 63.2 ± 0.6 (75.5 / 51.0) |
+| E1 BEATs | 62.8 ± 0.7 | +0.7 / +1.5 | 60.5 ± 0.9 | +0.9 / +2.6 | 88.2 / 30.2 | 65.1 ± 0.3 (80.1 / 50.1) |
+| E1+E2 | 62.4 ± 0.6 | +0.4 / +0.8 | 60.7 ± 1.1 | +1.2 / +2.6 | 88.1 / 29.0 | 65.3 ± 0.5 (83.2 / 47.5) |
+| E1+E3 | 63.2 ± 0.4 | +0.6 / +2.3 | 60.9 ± 1.1 | +1.2 / +3.1 | 88.1 / 29.5 | 65.8 ± 0.7 (81.9 / 49.7) |
+| E1+E2+E3 | 62.9 ± 0.3 | +0.5 / +1.8 | 61.0 ± 1.1 | +1.4 / +3.1 | 88.0 / 29.1 | 65.8 ± 0.5 (84.0 / 47.6) |
+| E2+E3 | 60.7 ± 0.8 | -1.3 / -0.8 | 59.8 ± 1.5 | +0.6 / +1.5 | 86.5 / 26.4 | 64.4 ± 0.7 (83.5 / 45.2) |
+| BEATs PAFA alone, trained SC static | 62.3 ± 0.9 | | 60.3 ± 0.8 | | 88.2 / 34.8 | 64.6 ± 0.4 (85.1 / 44.2) |
+| E1 BEATs, SC static | 63.4 ± 0.5 | +0.9 / +1.4 | 62.0 ± 0.6 | +1.1 / +2.4 | 88.4 / 36.0 | 65.8 ± 0.5 (84.8 / 46.8) |
+| E1+E3, SC static | 63.4 ± 0.4 | +0.6 / +1.6 | 62.4 ± 0.8 | +1.2 / +2.9 | 87.8 / 34.3 | 66.1 ± 0.5 (85.6 / 46.5) |
+| E1+E2+E3, SC static | 63.1 ± 0.5 | +0.4 / +1.1 | 62.1 ± 0.6 | +1.0 / +2.5 | 86.9 / 31.8 | 65.8 ± 0.4 (86.1 / 45.6) |
+| E2+E3, SC static | 60.8 ± 0.9 | -1.5 / -1.4 | 60.3 ± 0.6 | -0.1 / +0.1 | 84.8 / 26.8 | 64.3 ± 0.5 (82.9 / 45.7) |
+
+- [Fact] With `k rate`, E1, E1+E3 and E1+E2+E3 keep PAFA's Sp (dSp +0.4 to +1.4) and raise Se on both splits (official
+  +1.1 to +2.3, LODO macro +2.4 to +3.1); best: E1+E3, LODO Score +2.1 (no SC: 60.9; trained SC: 62.4).
+- [Fact] Plain argmax (section 14 table) trades Sp for Se under shift (LODO macro Sp -3 to -6, Litt3200 Sp 59-72); Sp
+  matched on source-device calibration does not transfer (held-out Sp -7 to -18). Only the target-side anchor holds Sp.
+- [Fact] Litt3200 is the exception: no ensemble raises Se there at PAFA's Sp, except E1 with trained SC (36.0 vs 34.8).
+- [Fact] Best epoch on test [optimistic]: E1+E3 65.8 ± 0.7 (no SC) and 66.1 ± 0.5 (trained SC); published BEATs PC-MCL
+  65.37 ± 0.73 on the same rule. The test-picked epochs raise Sp, not Se.
+- [Assumption] `k rate` needs a batch of unlabelled target cycles and PAFA running beside the ensemble; its behaviour with
+  few cycles is not measured.
 
 ## 15. Stage 10: Candidates for the final AuscultTrust
 
@@ -537,9 +577,9 @@ once the hardware is ready.
    `scripts/lodo_tables.py`).
 2. Final AuscultTrust = BEATs + PAFA, fine-tuned (user decision 22/10); choose its SC variant with the user after stage
    8 (section 15).
-3. Ensembles by encoder group done (section 14): equal weights beat learned weights; an ensemble raises Score but
-   lowers Litt3200 and worst-device Score. Optional: the registered E1-E4, weights fitted on a held-out source device,
-   or distillation of an equal-weight ensemble into one BEATs model.
+3. Ensembles by encoder group done (section 14): equal weights beat learned weights; with the label-free `k rate` rule,
+   E1 or E1+E3 raise Se at PAFA's Sp. Open: whether the final AuscultTrust becomes such an ensemble (decision of the
+   user), `k rate` with few target cycles, the registered E1-E4, distillation into one BEATs model.
 4. With the final model: KAUH positive controls, screening view (recording level), update the demo app; phantom tests
    (H1, H3) once the hardware is ready. A coverage test of SC (H2) now needs the phantom data, earlier-epoch models or
    another dataset, since LODO v1 has no tested fold.
