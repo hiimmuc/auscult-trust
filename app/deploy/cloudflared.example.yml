@@ -1,0 +1,13 @@
+# Named Cloudflare Tunnel from the GPU host to the inference API (HTTPS terminates at Cloudflare).
+#   cloudflared tunnel login
+#   cloudflared tunnel create auscult-api              # writes the credentials file below
+#   cloudflared tunnel route dns auscult-api api.example.org
+#   cloudflared tunnel --config app/deploy/cloudflared.yml run auscult-api
+tunnel: auscult-api
+credentials-file: /home/USER/.cloudflared/TUNNEL-ID.json
+ingress:
+  - hostname: api.example.org
+    service: http://127.0.0.1:8000
+    originRequest:
+      connectTimeout: 10s
+  - service: http_status:404

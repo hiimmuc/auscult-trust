@@ -1,0 +1,6 @@
+# Added to .venv-train (which already has torch, torchaudio, soundfile, librosa, scipy, numpy, pandas)
+fastapi==0.150.0
+uvicorn==0.54.0
+python-multipart==0.0.32
+httpx  # FastAPI TestClient, for app/api/test_api.py
+pytest==9.1.1

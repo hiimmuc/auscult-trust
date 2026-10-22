@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>AuscultTrust</title>
+    <link rel="icon" href="data:," />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  </head>
+  <body>
+    <header class="top">
+      <div class="brand">
+        <svg class="mark" viewBox="0 0 34 22" aria-hidden="true"><path d="M1 11h7l3-8 4 16 4-13 3 9 2-4h9" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        <span class="brand-text"><span class="wordmark">AuscultTrust</span>
+        <span class="tagline">Lung-sound classification</span></span>
+      </div>
+      <nav class="modes" role="tablist" aria-label="Mode">
+        <button role="tab" id="tab-real" aria-controls="view-real" aria-selected="true">Analyse a recording</button>
+        <button role="tab" id="tab-demo" aria-controls="view-demo" aria-selected="false" tabindex="-1">Speaker → microphone demo</button>
+      </nav>
+      <button class="theme-btn" id="theme" type="button" title="Switch between light, dark and the system theme"></button>
+      <button class="api-status" id="api-status" aria-haspopup="dialog" aria-controls="settings">
+        <span class="dot" aria-hidden="true"></span><span class="txt">API</span>
+      </button>
+    </header>
+
+    <dialog id="settings" aria-labelledby="settings-title">
+      <form method="dialog" class="settings-form">
+        <h2 id="settings-title">Connection</h2>
+        <label>API address <input name="base" type="url" required placeholder="https://api.example.org" /></label>
+        <label>Access token <input name="token" type="password" autocomplete="off" placeholder="Leave empty if the API has none" /></label>
+        <p class="hint" id="settings-msg"></p>
+        <div class="row end">
+          <button value="cancel" class="btn ghost">Close</button>
+          <button value="save" class="btn primary">Save and test</button>
+        </div>
+      </form>
+    </dialog>
+
+    <main>
+      <section id="view-real" role="tabpanel" aria-labelledby="tab-real"></section>
+      <section id="view-demo" role="tabpanel" aria-labelledby="tab-demo" hidden></section>
+    </main>
+    <div id="tooltip" role="tooltip" hidden></div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

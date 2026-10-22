@@ -23,3 +23,9 @@ data/*
 .env
 .DS_Store
 CODE_COMMIT
+# demo app: built bundle (weights referenced, ICBHI samples copied), web build output
+app/bundle/
+app/web/node_modules/
+app/web/dist/
+.taste-skill/
+app/web/.vite/
