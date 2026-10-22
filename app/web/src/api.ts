@@ -1,4 +1,4 @@
-// Client for the inference API. Types mirror the JSON written by app/api/engine.py and app/api/server.py.
+// Client for the inference API. Types mirror the JSON written by api/engine.py and api/main.py.
 
 export type Class4 = "normal" | "crackle" | "wheeze" | "both";
 export type Class2 = "normal" | "abnormal";
@@ -90,10 +90,19 @@ export function connection(): { base: string; token: string } {
 
 export function saveConnection(c: { base: string; token: string }) {
   try { localStorage.setItem(KEY, JSON.stringify(c)); } catch { /* not persisted */ }
+  active = "";
 }
 
-async function call(path: string, init: RequestInit = {}, timeoutMs = 30000, signal?: AbortSignal): Promise<Response> {
-  const { base, token } = connection();
+/** The base in use: the chosen API, or the fallback after the chosen one failed to answer. */
+let active = "";
+export const activeBase = () => active || connection().base;
+export const useBase = (base: string) => (active = base);
+/** The chosen API first, then the build's fallback (VITE_API_FALLBACK), when there is one. */
+export const candidateBases = () => [...new Set([connection().base, import.meta.env.VITE_API_FALLBACK].filter(Boolean) as string[])];
+export const onFallback = () => active !== "" && active !== connection().base;
+
+async function call(path: string, init: RequestInit = {}, timeoutMs = 30000, signal?: AbortSignal, baseOverride?: string): Promise<Response> {
+  const base = baseOverride ?? activeBase(), { token } = connection();
   const ctl = new AbortController();
   const timer = setTimeout(() => ctl.abort("timeout"), timeoutMs);
   signal?.addEventListener("abort", () => ctl.abort("cancelled"));
@@ -120,7 +129,8 @@ async function call(path: string, init: RequestInit = {}, timeoutMs = 30000, sig
 }
 
 export const api = {
-  health: async () => (await call("/v1/health", {}, 5000)).json() as Promise<{ status: string; pipelines: string[]; gpu: boolean }>,
+  // 60 s: a free host sleeping after idle needs about a minute to wake
+  health: async (base?: string) => (await call("/v1/health", {}, 60000, undefined, base)).json() as Promise<{ status: "ok" | "unavailable"; pipelines: string[]; gpu: boolean; reason?: string }>,
   model: async () => (await call("/v1/model")).json() as Promise<ModelInfo>,
   samples: async () => ((await (await call("/v1/samples")).json()).samples as Sample[]),
   sampleAudio: async (id: string, signal?: AbortSignal) => (await call(`/v1/samples/${encodeURIComponent(id)}/audio`, {}, 30000, signal)).arrayBuffer(),

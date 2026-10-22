@@ -287,7 +287,8 @@ export const pipelineSwitch = (host: HTMLElement, m: ModelInfo, value: string, o
 
 export function errorBox(e: any) {
   const rid = e?.requestId ? ` <span class="muted">Request ${esc(e.requestId)}</span>` : "";
-  return `<div class="alert error" role="alert"><b>${esc(e?.code === "network" ? "Connection problem" : "Something failed")}</b> ${esc(e?.message ?? e)}${rid}</div>`;
+  const title = e?.code === "network" ? "Connection problem" : e?.code === "model_unavailable" ? "Model unavailable" : "Something failed";
+  return `<div class="alert error" role="alert"><b>${esc(title)}</b> ${esc(e?.message ?? e)}${rid}</div>`;
 }
 
 export const truthOf = (segs: Segment[]) => segs.filter((s) => s.truth4).map((s) => ({ start: s.start, end: s.end, label: s.truth4 as Class4 }));
