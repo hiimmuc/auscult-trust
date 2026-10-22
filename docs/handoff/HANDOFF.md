@@ -110,6 +110,14 @@ ahead of them in each list). Inference-arm incidents:
 the first start failed on `--num_workers` (lines now end with `&& :`); 20 QLung units failed on `class_nums` (fixed in
 `src/evaluation/lodo_ttsc.py`, rerun with lists `lodo-v1-l2q-<M>`).
 
+**State 22/10 15:25 (stage 8 rebalanced).** E rebooted about 14:40 (cause unknown): `lodo-v1-E6` died; the cut-off unit
+`beats+ft+pafa_pcmcl+sc+lodo_littc2se/seed2` was moved to `<outputs|checkpoints>/train/lodo-v1-interrupted/...seed2.reboot-2210`
+and reruns from epoch 0. B was idle: code synced to B (`tests/test_pcmcl.py` passes there). Schedulers A6, D6, E6 were
+stopped by PID (their running jobs continue as orphans; `<list>.moved` written) and replaced by `lodo-v1-{A7,B7,D7,E7}`
+(A keeps 2 waiting units, D 7, E 7, B gets 7: A line 14, D lines 29-30, E lines 28-31 of the tag-6 lists). Start script
+`~/.claude/jobs/4309162c/tmp/start7.sh <M>` (over ssh: `ssh host 'bash -s <M>' < start7.sh`). One PC-MCL unit takes about
+4.7 h on A and 1.9 h on B, D, E (one at a time, `MEM_GB=20`). Expected end of stage 8: about 23/10 07:00.
+
 **Stage 6, inference arms on the LODO units (21/10 11:50, user go; done 15:05).** LODO without SC finished 21/10 00:17 (220/220,
 0 failed). `src.evaluation.lodo_ttsc` runs four arms on every no-SC LODO unit, on the machine that holds its
 checkpoint: `<cell>+ttsc_static` (`target:static`), `<cell>+ttsc_dynamic` (`target:dynamic`), `<cell>+a2` (`none:a2`),
