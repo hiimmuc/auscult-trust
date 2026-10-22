@@ -1,9 +1,12 @@
 """Inference API for the AuscultTrust demo.
 
-    PYTHONPATH=. .venv-train/bin/uvicorn app.api.server:app --host 127.0.0.1 --port 8000
+    PYTHONPATH=. .venv-train/bin/uvicorn api.main:app --host 127.0.0.1 --port 8000
+
+Without a bundle or checkpoints the service still starts: `/v1/health` says `unavailable` with the reason
+and every route that needs the model answers 503 `model_unavailable`. It never returns a prediction it did not compute.
 
 Environment:
-    AT_APP_BUNDLE   bundle directory from `app.api.bundle` (default app/bundle)
+    AT_APP_BUNDLE   bundle directory from `api.bundle` (default app/bundle)
     AT_APP_TOKEN    shared access token; when set, every /v1 route except /v1/health needs `Authorization: Bearer <token>`
     AT_APP_ORIGINS  comma-separated CORS origins (default: the Vite dev server on localhost and 127.0.0.1)
 """
@@ -12,6 +15,7 @@ import asyncio
 import hashlib
 import hmac
 import json
+import logging
 import os
 import time
 import uuid
@@ -19,14 +23,14 @@ from collections import OrderedDict
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-import torch
 from fastapi import Depends, FastAPI, File, Form, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from starlette.concurrency import run_in_threadpool
 
-from app.api.engine import SR, AudioError, Engine, gcc_phat_lag, read_wav, shift, to_model_rate
-from src.processing.icbhi import CLASSES
+from api import engine as E
+
+log = logging.getLogger("uvicorn.error")
 
 BUNDLE = Path(os.environ.get("AT_APP_BUNDLE", "app/bundle"))
 TOKEN = os.environ.get("AT_APP_TOKEN", "")
@@ -41,6 +45,13 @@ ALIGN_MIN_SCORE = 12.0
 state = {}
 
 
+def reset():
+    state.update(engine=None, manifest=None, samples={}, pending=0, cache=OrderedDict(), unavailable="Starting.")
+
+
+reset()
+
+
 class ApiError(Exception):
     def __init__(self, status, code, message):
         self.status, self.code, self.message = status, code, message
@@ -48,13 +59,19 @@ class ApiError(Exception):
 
 @asynccontextmanager
 async def lifespan(app):
-    manifest = json.loads((BUNDLE / "manifest.json").read_text())
-    state.update(manifest=manifest, engine=Engine(manifest, BUNDLE), pending=0, cache=OrderedDict(),
-                 samples={s["id"]: s for s in manifest["samples"]})
+    reset()
+    try:
+        manifest = json.loads((BUNDLE / "manifest.json").read_text())
+        state.update(manifest=manifest, engine=E.Engine(manifest, BUNDLE), unavailable=None,
+                     samples={s["id"]: s for s in manifest["samples"]})
+    except Exception as e:
+        log.exception("model not loaded")
+        state["unavailable"] = ("No model bundle found." if isinstance(e, FileNotFoundError) and "manifest" in str(e)
+                                else "The model failed to load ({}).".format(type(e).__name__))
     yield
 
 
-app = FastAPI(title="AuscultTrust inference API", version="1.0", lifespan=lifespan)
+app = FastAPI(title="AuscultTrust inference API", version="1.1", lifespan=lifespan)
 app.add_middleware(CORSMiddleware, allow_origins=ORIGINS, allow_methods=["GET", "POST"],
                    allow_headers=["Authorization", "Content-Type"], expose_headers=["X-Request-ID"], max_age=600)
 
@@ -72,8 +89,8 @@ async def api_error(request: Request, e: ApiError):
     return JSONResponse({"error": {"code": e.code, "message": e.message}, "request_id": request.state.rid}, e.status)
 
 
-@app.exception_handler(AudioError)
-async def audio_error(request: Request, e: AudioError):
+@app.exception_handler(E.AudioError)
+async def audio_error(request: Request, e: E.AudioError):
     return await api_error(request, ApiError(422, e.code, str(e)))
 
 
@@ -85,6 +102,12 @@ def auth(request: Request):
         raise ApiError(401, "unauthorized", "Missing or wrong access token.")
 
 
+def ready():
+    """503 unless the model is loaded. Never falls back to a made-up answer."""
+    if state["engine"] is None:
+        raise ApiError(503, "model_unavailable", state["unavailable"])
+
+
 async def guarded(fn, *args):
     """Run blocking inference in a worker thread, with a queue bound and a time limit."""
     if state["pending"] >= MAX_PENDING:
@@ -94,6 +117,11 @@ async def guarded(fn, *args):
         return await asyncio.wait_for(run_in_threadpool(fn, *args), TIMEOUT_SEC)
     except asyncio.TimeoutError:
         raise ApiError(504, "timeout", "Inference took longer than {} s.".format(TIMEOUT_SEC))
+    except (ApiError, E.AudioError):
+        raise
+    except Exception:
+        log.exception("inference failed")
+        raise ApiError(500, "internal", "Inference failed. Nothing was computed.")
     finally:
         state["pending"] -= 1
 
@@ -110,6 +138,7 @@ def cached(key, fn):
 
 
 def sample(sid):
+    ready()
     if sid not in state["samples"]:
         raise ApiError(404, "unknown_sample", "No demo sample '{}'.".format(sid))
     return state["samples"][sid]
@@ -130,7 +159,7 @@ def parse_annotation(text):
             raise ApiError(422, "bad_annotation", "Annotation line {} is not 'start end crackle wheeze'.".format(i + 1))
         if not (0 <= s < e and c in (0, 1) and w in (0, 1)):
             raise ApiError(422, "bad_annotation", "Annotation line {} has invalid values.".format(i + 1))
-        out.append((s, e, CLASSES[c + 2 * w]))
+        out.append((s, e, state["manifest"]["classes"][c + 2 * w]))
     return out
 
 
@@ -146,12 +175,15 @@ def parse_cycles(text):
 
 @app.get("/v1/health")
 def health():
-    return {"status": "ok" if "engine" in state else "loading", "pipelines": list(state.get("engine").pipelines) if "engine" in state else [],
-            "gpu": torch.cuda.is_available(), "pending": state.get("pending", 0)}
+    up = state["engine"] is not None
+    return {"status": "ok" if up else "unavailable", "pipelines": list(state["engine"].pipelines) if up else [],
+            "gpu": up and E.torch.cuda.is_available(), "pending": state["pending"],
+            **({} if up else {"reason": state["unavailable"]})}
 
 
 @app.get("/v1/model", dependencies=[Depends(auth)])
 def model():
+    ready()
     m = state["manifest"]
     keep = ("label", "checkpoint_sha256", "epoch", "encoder", "method", "spectrum_correction", "thresholds", "calibration")
     return {
@@ -159,13 +191,14 @@ def model():
         "preprocessing": m["preprocessing"],
         "pipelines": {n: {**{k: p[k] for k in keep}, **({"sc": {k: v for k, v in p["sc"].items() if k != "state"}} if "sc" in p else {})}
                       for n, p in m["pipelines"].items()},
-        "limits": {"max_bytes": MAX_BYTES, "min_sec": 2.0, "max_sec": 90.0, "sample_rate": [4000, 48000], "channels": [1, 2]},
-        "sc_freqs_hz": [i * SR / 1024 for i in range(513)],
+        "limits": {"max_bytes": MAX_BYTES, "min_sec": E.MIN_SEC, "max_sec": E.MAX_SEC, "sample_rate": [E.MIN_SR, E.MAX_SR], "channels": [1, 2]},
+        "sc_freqs_hz": [i * E.SR / 1024 for i in range(513)],
     }
 
 
 @app.get("/v1/samples", dependencies=[Depends(auth)])
 def samples():
+    ready()
     return {"samples": [{k: v for k, v in s.items() if k != "file"} for s in state["manifest"]["samples"]]}
 
 
@@ -179,10 +212,10 @@ async def sample_result(request: Request, sid: str):
     s = sample(sid)
 
     def run():
-        x, meta = read_wav((BUNDLE / s["file"]).read_bytes())
+        x, meta = E.read_wav((BUNDLE / s["file"]).read_bytes())
         return {"audio": {**meta, "filename": s["id"] + ".wav", "sha256": s["sha256"]},
                 "device": {"declared": s["device"]},
-                **state["engine"].infer(to_model_rate(x, meta["sample_rate"]), meta["duration_sec"], s["device"], sample_cycles(s))}
+                **state["engine"].infer(E.to_model_rate(x, meta["sample_rate"]), meta["duration_sec"], s["device"], sample_cycles(s))}
 
     t0 = time.perf_counter()
     hit = ("sample", sid) in state["cache"]
@@ -202,6 +235,7 @@ async def infer(
     window_sec: float = Form(8.0),
     hop_sec: float = Form(4.0),
 ):
+    ready()
     data = await file.read(MAX_BYTES + 1)
     if len(data) > MAX_BYTES:
         raise ApiError(413, "too_large", "File is larger than {} MB.".format(MAX_BYTES >> 20))
@@ -212,24 +246,20 @@ async def infer(
     ref = sample(reference_sample) if reference_sample else None
     cyc = parse_annotation((await annotation.read(1 << 20)).decode("utf-8", "replace")) if annotation and annotation.filename else (
         parse_cycles(cycles) if cycles else None)
-    x, meta = read_wav(data)
+    x, meta = E.read_wav(data)
     sha = hashlib.sha256(data).hexdigest()
 
     def run():
-        x16 = to_model_rate(x, meta["sample_rate"])
+        x16 = E.to_model_rate(x, meta["sample_rate"])
         out = {"audio": {**meta, "filename": file.filename, "sha256": sha}, "device": {"declared": device or None}}
         segs = cyc
         if ref is not None:  # demo: align the microphone take to the reference, reuse the reference cycles
-            r, rmeta = read_wav((BUNDLE / ref["file"]).read_bytes())
-            r16 = to_model_rate(r, rmeta["sample_rate"])
-            lag, score = gcc_phat_lag(r16[0].numpy(), x16[0].numpy())
-            x16 = shift(x16, lag)[:, : r16.shape[1]]
-            if x16.shape[1] < r16.shape[1]:
-                x16 = torch.nn.functional.pad(x16, (0, r16.shape[1] - x16.shape[1]))
+            r, rmeta = E.read_wav((BUNDLE / ref["file"]).read_bytes())
+            x16, lag, score = E.align(E.to_model_rate(r, rmeta["sample_rate"]), x16)
             out["alignment"] = {"reference_sample": ref["id"], "lag_sec": round(lag, 4), "peak_score": round(score, 2),
                                 "reliable": score >= ALIGN_MIN_SCORE, "trimmed_to_sec": rmeta["duration_sec"]}
             segs = sample_cycles(ref)
-        duration = x16.shape[1] / SR
+        duration = x16.shape[1] / E.SR
         return {**out, **state["engine"].infer(x16, duration, device or None, segs, window_sec, hop_sec)}
 
     t0 = time.perf_counter()
