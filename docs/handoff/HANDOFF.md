@@ -118,6 +118,12 @@ stopped by PID (their running jobs continue as orphans; `<list>.moved` written) 
 `~/.claude/jobs/4309162c/tmp/start7.sh <M>` (over ssh: `ssh host 'bash -s <M>' < start7.sh`). One PC-MCL unit takes about
 4.7 h on A and 1.9 h on B, D, E (one at a time, `MEM_GB=20`). Expected end of stage 8: about 23/10 07:00.
 
+**State 22/10 23:25 (second rebalance).** D7 and E7 stopped by PID (running jobs continue; `.moved` written) and replaced
+by `lodo-v1-{D8,E8}`; B got `lodo-v1-B8` (D7 line 28, E7 lines 26-27) next to its `lodo-v1-B7` (one unit left; the two
+B schedulers share the GPU through its free-memory check). Start script `~/.claude/jobs/4309162c/tmp/start8.sh <M>`.
+Unit time scales with steps per epoch (AKGC417L fold about 109, others about 250, so an AKGC417L unit takes about 0.85 h
+on B, D, E). Expected end of stage 8: about 23/10 05:30.
+
 **Stage 6, inference arms on the LODO units (21/10 11:50, user go; done 15:05).** LODO without SC finished 21/10 00:17 (220/220,
 0 failed). `src.evaluation.lodo_ttsc` runs four arms on every no-SC LODO unit, on the machine that holds its
 checkpoint: `<cell>+ttsc_static` (`target:static`), `<cell>+ttsc_dynamic` (`target:dynamic`), `<cell>+a2` (`none:a2`),
