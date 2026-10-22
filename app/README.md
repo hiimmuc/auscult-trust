@@ -1,76 +1,151 @@
 # AuscultTrust demo: inference API and web app
 
-Two parts that run and deploy independently:
+Two parts that deploy independently:
 
-- `app/api/`: FastAPI inference service. It serves the frozen Stage-1 models from a **bundle** (`app/api/bundle.py`), so a new model only needs a new bundle.
-- `app/web/`: static web app (Vite + TypeScript, no UI framework). It has two modes: **Analyse a recording** (WAV upload, optionally with its ICBHI `.txt` to show the true labels, or live microphone recording with a Siri-style level view; light, dark or system theme) and **Speaker → microphone demo**.
+- `../api/` (repo root): FastAPI inference service (`uvicorn api.main:app`). It serves the frozen models from a **bundle** (`api/bundle.py`), so a new model only needs a new bundle. With no bundle or checkpoints it still starts, reports `unavailable` and answers 503, never a made-up prediction.
+- `app/web/`: static web app (Vite + TypeScript, no UI framework). **Analyse a recording** (WAV upload, optionally with its ICBHI `.txt` to show the true labels, or live microphone recording; light, dark or system theme) and **Speaker → microphone demo**.
 
 ```
-browser ── https://auscult.ausculttrust.vn ──────┐
-   │  HTTPS, Authorization: Bearer <token>,       │
-   ▼  CORS allowlist                              ▼
-Cloudflare edge ── Tunnel ──► cloudflared on the GPU host ──► uvicorn 127.0.0.1:8000 (app.api.server, https://auscult-api.ausculttrust.vn)
-                                                         └──► static web build 127.0.0.1:8090 (app/web/dist)
-                                                                 │
-                                                                 ├─ Engine: validation → 16 kHz → segments → SC → fbank → BEATs → softmax
-                                                                 └─ bundle: manifest.json, sc_*.npz, samples/*.wav (+ checkpoints by path, SHA-256 checked)
+browser ─► web app on Cloudflare Pages (static, https://auscult-trust.pages.dev)
+   │  fetch, Authorization: Bearer <token>, CORS allowlist
+   ├─► primary API: this machine (GPU), public through Tailscale Funnel (https://auscult.tail09c58b.ts.net → 127.0.0.1:8000)
+   └─► fallback API: Hugging Face Space (Docker, CPU), tried when the primary does not answer or has no model
 ```
 
-## What the model gives, and how the app shows it
+The page tries the API address from its connection dialog (or `VITE_API_BASE`), then `VITE_API_FALLBACK`. The status chip says "Fallback API ready" when the fallback is in use. Both APIs must accept the same token.
 
-The checks below come from the code (`src/evaluation/*`, `src/processing/correction.py`), not from assumptions.
+## Install
 
-| Output | Source | Shown as |
-| --- | --- | --- |
-| 4-class softmax (normal, crackle, wheeze, both) per segment | BEATs (fine-tuned) + Patch-Mix CL, 8 s input | coloured boxes over the waveform, packed into rows when segments overlap |
-| 2-class view, p(abnormal) = 1 - p(normal), same softmax | same | lane under the waveform |
-| Conformal sets, LAC, alpha 0.1 | `src/evaluation/conformal.py` | box label "set k", lane pattern (solid = one class, hatched = both, outline = empty), chips in the tables |
-| Recording-level screening (8 s windows, mean of 1 - p(normal), 2-class LAC) | `src/evaluation/screening.py` | triage card with the p(abnormal) bar and the zones the threshold creates |
-| SC = spectrum correction: per-bin STFT gain towards the training-device reference | `src/processing/correction.py` | gain curve (dB vs Hz) and the side-by-side pipeline without SC |
-
-The two proposed methods carry a **Proposed** tag in the page: spectrum correction (the SC pipeline) and conformal prediction. The *Conformal prediction* switch in the toolbar (kept in local storage, shared by both modes) hides or shows the conformal layer: set labels on the boxes, set chips in the tables, the set pattern in the 2-class lane, the set stats in the demo comparison and the triage card. Off, the page shows top classes only and the screening card shows a plain Normal / Abnormal at p(abnormal) 0.5.
-
-Pipelines in the default bundle (seed 0, official split, report epoch 50; the two units differ only by SC):
-
-| Name | Unit | Epoch | Test-time SC | Thresholds cycle4 / cycle2 / screen |
-| --- | --- | --- | --- | --- |
-| `auscult` = AuscultTrust (SC) | `outputs/train/lodo-v1/beats+ft+patchmix_cl+sc+sc_static/seed0` | 50 | yes, static mode | 0.9992 / 0.9976 / 0.9911 |
-| `baseline` = P0 (no SC) | `outputs/train/grid-v1/beats+ft+patchmix_cl/seed0` | 50 | no | 0.9993 / 0.9981 / 0.9664 |
-
-The AST units these replaced (`screen-ast`) lost their checkpoints; to serve other units, edit `PIPELINES` in `app/api/bundle.py` and rebuild the bundle. The screening exports come from `python -m src.evaluation.screening infer` on the same checkpoints (`outputs/screening/beats_{auscult,p0}/seed0.npz`).
-
-Thresholds are calibrated on split 0 of `calibration_eval_splits` over the official-test patients without the 2 patients on both sides: 24 patients, 1,238 cycles, 176 recordings. The cycle softmax comes from the unit's saved `test_preds.npz`; the screening softmax comes from `outputs/screening/<cond>/seed0.npz`, and its checkpoint hash is checked against the weights. `app/api/test_api.py` and the engine check reproduce the saved test softmax within float16 rounding (max |Δp| ≤ 0.004, argmax 100% agree on the 3 recordings checked).
-
-Segments: an uploaded ICBHI annotation `.txt` (or `cycles` JSON) gives breathing cycles, which is the unit the model was trained on. Without one, the API scores sliding windows (default 8 s, step 4 s). The screening decision always uses the registered windows (max(1, floor(duration / 8)) windows evenly spread).
-
-SC target spectrum: when the stethoscope is a known ICBHI device, the API uses the coefficient saved with the unit (from that device's unlabelled official-test cycles). When the device is unknown (any upload without a device, every microphone take), the API estimates it from the mean spectrum of the recording's own segments.
-
-## Setup
-
-Python: the training env `.venv-train` plus the API packages (`app/api/requirements.txt`):
+Needs: the repo's training environment `.venv-train` (Python 3.10, see `docs/SETUP.md`), the two trained units' checkpoints under `checkpoints/train/`, an NVIDIA GPU (about 1.1 GB), Node 20 or newer.
 
 ```bash
-uv pip install --python .venv-train/bin/python -r app/api/requirements.txt
-PYTHONPATH=. .venv-train/bin/python -m app.api.bundle          # writes app/bundle/ (22 MB: manifest, SC state, 12 sample WAVs)
-```
-
-Web (Node 20 or newer):
-
-```bash
-cd app/web && npm ci
+uv pip install --python .venv-train/bin/python -r api/requirements.txt     # fastapi, uvicorn, python-multipart, httpx, pytest
+PYTHONPATH=. .venv-train/bin/python -m api.bundle                          # writes app/bundle/ (22 MB: manifest, SC state, 12 sample WAVs)
+(cd app/web && npm ci)
 ```
 
 ## Run locally
 
 ```bash
-# API (needs the two units' checkpoints under checkpoints/train/ and a GPU; about 1.1 GB of GPU memory)
-PYTHONPATH=. .venv-train/bin/uvicorn app.api.server:app --host 127.0.0.1 --port 8000
-
-# web app, http://127.0.0.1:5173 (talks to http://127.0.0.1:8000 by default)
-cd app/web && npm run dev
+PYTHONPATH=. .venv-train/bin/uvicorn api.main:app --host 127.0.0.1 --port 8000   # API
+cd app/web && npm run dev                                                          # web, http://127.0.0.1:5173 (default API: http://127.0.0.1:8000)
 ```
 
-The connection button in the top bar sets the API address and the access token; they are kept in the browser's local storage.
+The connection button in the top bar sets the API address and the access token; the browser keeps them in local storage.
+
+## Deploy
+
+Order: configuration, API host, Tailscale Funnel, Cloudflare Pages, then (optional) the Hugging Face fallback.
+
+### 1. Configuration
+
+| Variable | Where | Meaning |
+| --- | --- | --- |
+| `AT_APP_TOKEN` | API | access token every route except `/v1/health` needs. Generate: `python -c "import secrets; print(secrets.token_urlsafe(24))"`. Empty means no auth: never leave it empty on a public API |
+| `AT_APP_ORIGINS` | API | comma-separated CORS origins: the Pages origin, exact, no trailing slash, plus `http://localhost:5173,http://127.0.0.1:5173` for local development |
+| `AT_APP_BUNDLE` | API | bundle directory (default `app/bundle`) |
+| `VITE_API_BASE` | web build | the primary API's URL, read at build time (the saved connection in the browser wins) |
+| `VITE_API_FALLBACK` | web build | the fallback API's URL; leave unset when there is none |
+| `AT_WEIGHTS_REPO`, `HF_TOKEN` | Hugging Face Space | private weights repo and a read token for it (section 5) |
+
+```bash
+cp app/deploy/env.example app/deploy/.env      # git-ignored; set AT_APP_TOKEN and AT_APP_ORIGINS
+```
+
+The token is typed into the page's connection dialog; it is never part of the web build.
+
+### 2. API host (this machine)
+
+```bash
+bash app/deploy/serve.sh start        # uvicorn on 127.0.0.1:8000, detached; reads app/deploy/.env. Also `status`, `stop`. Log: logs/app-api.log
+curl -s localhost:8000/v1/health      # {"status":"ok","pipelines":["auscult","baseline"],"gpu":true,...}
+```
+
+Restart it after changing `.env`. The API binds to localhost only; the tunnel in the next step is what makes it public.
+
+### 3. Tailscale Funnel (public HTTPS URL for the API)
+
+Funnel gives a fixed `https://<host>.<tailnet>.ts.net` URL with a valid certificate, needs no domain and no open inbound port.
+
+1. Install and log in (once). Create a free account at tailscale.com, then:
+   ```bash
+   curl -fsSL https://tailscale.com/install.sh | sh      # installs and starts the tailscaled service
+   sudo tailscale up                                     # prints a login URL: open it and approve this machine
+   ```
+2. Name the machine (this becomes the URL's first part; a name already used by a stale device gets a `-1` suffix, so delete stale devices in the admin console, Machines):
+   ```bash
+   sudo tailscale set --operator=$USER                   # once: lets your user change settings without sudo
+   tailscale set --hostname=auscult
+   tailscale status --self --json | python3 -c "import sys,json; print(json.load(sys.stdin)['Self']['DNSName'])"
+   ```
+   The `tail09c58b` part is the tailnet name. Change it only in the admin console (DNS, tailnet name).
+3. Enable Funnel for the tailnet (once): run `tailscale funnel --bg 8000`. If it prints `Funnel is not enabled on your tailnet` with a login.tailscale.com link, open the link and approve. In the admin console (DNS) HTTPS certificates must be on.
+4. Start it (it persists across reboots) and check:
+   ```bash
+   tailscale funnel --bg 8000            # https://auscult.tail09c58b.ts.net → http://127.0.0.1:8000
+   tailscale funnel status
+   curl -s https://auscult.tail09c58b.ts.net/v1/health       # from a device NOT on the tailnet, for example a phone on mobile data
+   ```
+   Stop it with `tailscale funnel --https=443 off`, or `tailscale funnel reset` to clear everything.
+
+Notes:
+- Do not run `tailscale cert` in the repo: it writes a certificate and a private key into the current directory. Funnel needs no manual certificate.
+- A device on your tailnet, including this machine, resolves the name to a tailnet address. From there the public page's request counts as local-network access and Chrome blocks it (`ERR_BLOCKED_BY_LOCAL_NETWORK_ACCESS_CHECKS`), and the host cannot reach its own public Funnel address. Test from an outside device.
+- Funnel listens on ports 443, 8443 and 10000 only, and Tailscale applies non-configurable bandwidth limits ([docs](https://tailscale.com/docs/features/tailscale-funnel)).
+
+### 4. Static web app on Cloudflare Pages
+
+Pages serves from the site root, from direct upload, and is free. (GitHub Pages serves a project site under `/<repo>/`, which needs Vite's `base` changed, and a free account needs a public repo.)
+
+```bash
+(cd app/web && VITE_API_BASE=https://auscult.tail09c58b.ts.net npm run build)      # add VITE_API_FALLBACK=<space url> once there is one
+npx wrangler@4.60.0 login                                                          # once, opens a browser
+npx wrangler@4.60.0 pages project create auscult-trust --production-branch main    # once
+npx wrangler@4.60.0 pages deploy app/web/dist --project-name auscult-trust --branch main
+```
+
+Node 20 needs wrangler 4.60 (newer wranglers need Node 22). The site is `https://auscult-trust.pages.dev`; if Cloudflare gives another name, put that origin into `AT_APP_ORIGINS` and restart the API. Rebuild and redeploy whenever the API URL changes. Open the site, click the status chip, paste the token. [Fact] A headless Chrome session on the Pages site connected to the API through Funnel, uploaded a recording and got results (the check disabled Chrome's local-network blocking because the test ran on the API host).
+
+### 5. Fallback API: Hugging Face Space (CPU)
+
+The Space runs the same `api.main:app` on CPU (`api/engine.py` turns the training code's `.cuda()` calls into no-ops when there is no GPU). Checked by building the image and running it locally with `--cpus 2 --memory 16g`: argmax agrees with the GPU on all 14 windows (max |Δp| 0.0008), memory 1.7 GiB, a 20 s recording takes 30 to 50 s (GPU: 0.4 s), so recordings near the 90 s limit can hit the 120 s timeout there. The Space has not been created on Hugging Face.
+
+```bash
+PYTHONPATH=. .venv-train/bin/python scripts/stage_space.py      # writes build/space (public, 13 MB) and build/weights (private, 1.1 GB); build/ is git-ignored
+```
+
+1. Create a private **model** repo (for example `<user>/auscult-trust-weights`) and upload `build/weights/` to it: the two checkpoints (345 MB each), the BEATs pretrained file and the SC state. The weights stay out of the public Space repo.
+2. Create a **Docker Space** and push `build/space/` to it.
+3. In the Space settings: secrets `AT_APP_TOKEN` and `HF_TOKEN` (read access to the weights repo); variables `AT_WEIGHTS_REPO=<user>/auscult-trust-weights` and `AT_APP_ORIGINS=https://auscult-trust.pages.dev`.
+4. `curl https://<user>-auscult-trust-api.hf.space/v1/health` says `"status":"ok"` once the weights are downloaded, `unavailable` until then. Rebuild the web app with `VITE_API_FALLBACK` set to that URL and redeploy (section 4).
+
+Caveats: [Assumption] free CPU Basic Spaces (2 vCPU, 16 GB) per the Hub docs, but a community thread reports Docker Spaces being restricted for unpaid accounts, so confirm your plan allows one. Free Spaces sleep when idle and need a minute or more to wake and download the weights. `stage_space.py` leaves the ICBHI demo WAVs out (dataset-terms TODO below), so Demo mode has no samples on the Space.
+
+### Choosing the tunnel (measured 22/10/2026)
+
+From this host, API without a model so only the tunnel is timed; the client was the host itself, so each request goes out to the edge and back. Health: 30 sequential GETs; upload: 4 POSTs of 8 MB.
+
+| Route | Health median / p95 (ms) | 8 MB upload median (ms) | Stable URL | Needs |
+| --- | --- | --- | --- | --- |
+| direct, no tunnel | 1 / 1 | 12 | n/a | n/a |
+| Cloudflare quick tunnel, QUIC | 186 / 283 | 794 | no | nothing |
+| Cloudflare quick tunnel, `--protocol http2` | 177 / 230 | 758 | no | nothing |
+| ngrok free | 221 / 243 | 2243 | `*.ngrok-free.dev` | ngrok account |
+| Tailscale Funnel | not timed | not timed | yes | Tailscale account |
+
+[Fact] Funnel works end to end (section 3). Not timed: this host resolves its own Funnel name to the tailnet address, so a timing here would be loopback. Choice: Funnel as primary (stable URL, no domain, no interstitial). ngrok free is the weakest here: slowest upload, 1 GB/month and 20,000 requests/month ([docs](https://ngrok.com/docs/pricing-limits/free-plan-limits)), a browser interstitial page unless requests carry `ngrok-skip-browser-warning` (which the API's CORS `allow_headers` does not list, so the preflight answers 400). A spare when Funnel is down: `cloudflared tunnel --protocol http2 --url http://127.0.0.1:8000` prints a temporary `https://*.trycloudflare.com` URL (set it in the page's connection dialog; it changes at every start). Cloudflare's named tunnels need a domain and are not used.
+
+### Troubleshooting
+
+| Symptom | Cause and fix |
+| --- | --- |
+| Page: `Cannot reach the API` | wrong address, API down, or `AT_APP_ORIGINS` does not equal the page's origin exactly (scheme and host). From the API host the Funnel URL may fail for the reasons in section 3 |
+| Page: `Token needed` | token missing or wrong in the connection dialog |
+| Page: `No model loaded` | the API is up but its bundle or checkpoints failed to load; read `/v1/health` `reason` and `logs/app-api.log` |
+| `tailscale funnel`: `Access denied: serve config denied` | run `sudo tailscale set --operator=$USER` once |
+| `tailscale funnel`: `Funnel is not enabled on your tailnet` | open the link it prints and approve |
+| Microphone button errors | the page is not on HTTPS |
+| `wrangler` hangs or needs Node 22 | use `wrangler@4.60.0` on Node 20 |
 
 ## API
 
@@ -78,7 +153,7 @@ All responses are JSON and carry `X-Request-ID`. Errors: `{"error": {"code", "me
 
 | Method and path | Purpose |
 | --- | --- |
-| `GET /v1/health` | `status` (`ok` once the models are loaded), pipelines, GPU, pending requests |
+| `GET /v1/health` | always 200 and open. `status`: `ok` when the models are loaded, else `unavailable` with a `reason` (no bundle, load failed; never a path). Also pipelines, GPU, pending requests |
 | `GET /v1/model` | classes, alpha, preprocessing, per pipeline: label, checkpoint SHA-256, epoch, thresholds, calibration counts, SC mode and s_ref hash; upload limits; SC frequency axis |
 | `GET /v1/samples` | demo samples: id, class, patient, device, chest location, annotated cycles, SHA-256 |
 | `GET /v1/samples/{id}/audio` | the sample WAV |
@@ -116,9 +191,11 @@ Inference response (abridged):
 
 `cached` is true when the answer came from the API's result cache (same file and settings); `alignment` appears only with `reference_sample`; `truth4`/`truth2` only when the cycles carry labels (demo samples, annotation upload). Times are seconds on the input recording (after alignment for microphone takes).
 
-Validation (server; the web app checks the same limits before upload): RIFF/WAVE header, decodable by libsndfile, 1-2 channels, 4-48 kHz, 2-90 s, at most 40 MB, finite samples, not silent (peak above -80 dBFS). Error codes: `not_wav`, `unreadable`, `channels`, `sample_rate`, `duration`, `non_finite`, `silent`, `too_large`, `bad_device`, `bad_cycles`, `bad_annotation`, `bad_window`, `unknown_sample`, `unauthorized`, `busy` (more than 4 requests waiting, 429), `timeout` (120 s, 504).
+Validation (server; the web app checks the same limits before upload): RIFF/WAVE header, decodable by libsndfile, 1-2 channels, 4-48 kHz, 2-90 s, at most 40 MB, finite samples, not silent (peak above -80 dBFS). Every route except health answers 503 `model_unavailable` while the status is `unavailable`; no prediction is ever produced without the model. Error codes: `model_unavailable` (503), `internal` (500, inference crashed; details only in the server log), `not_wav`, `unreadable`, `channels`, `sample_rate`, `duration`, `non_finite`, `silent`, `too_large`, `bad_device`, `bad_cycles`, `bad_annotation`, `bad_window`, `unknown_sample`, `unauthorized`, `busy` (more than 4 requests waiting, 429), `timeout` (120 s, 504).
 
 Inference runs in a worker thread behind one lock (one GPU, shared with training jobs), so the event loop keeps answering. Results are cached by audio SHA-256 and parameters (last 64).
+
+What is not exposed: checkpoint paths, training arguments, unit directories (`/v1/model` returns hashes and thresholds only). The token is typed by the user in the browser; it is not built into the web bundle.
 
 ## Demo mode: how playback and recording line up
 
@@ -130,96 +207,40 @@ Inference runs in a worker thread behind one lock (one GPU, shared with training
 
 The page never routes the microphone to the speaker, so there is no feedback loop. Headphones would defeat the demo (the microphone must hear the speaker). The room tips in the page say this.
 
-## Deploy across networks with Cloudflare
+## What the model gives, and how the app shows it
 
-1. **API host** (the GPU machine): set the environment (`app/deploy/env.example`): a long random `AT_APP_TOKEN` and `AT_APP_ORIGINS` = the web app's origin. Run uvicorn on `127.0.0.1` only.
-2. **Tunnel**: `cloudflared` creates an outbound-only tunnel, so the GPU host needs no open inbound port. Use `app/deploy/cloudflared.example.yml` for a named tunnel on your domain (`https://api.example.org`). For a quick test without a domain: `cloudflared tunnel --url http://127.0.0.1:8000` gives a temporary `https://*.trycloudflare.com` address. `cloudflared` 2026.10.1 is installed on the GPU host.
-3. **Web app**: `VITE_API_BASE=https://api.example.org npm run build` and publish `app/web/dist/` on any HTTPS static host (Cloudflare Pages: build command `npm run build`, output `dist`, root `app/web`). HTTPS is required: browsers allow microphone access only on secure origins (or localhost).
-4. **This host** (tunnel `auscult-trust-tunnel`, `app/deploy/cloudflared.yml`): `https://auscult-api.ausculttrust.vn` → API on 127.0.0.1:8000, `https://auscult.ausculttrust.vn` → static web build on 127.0.0.1:8090 (DNS CNAMEs created with `cloudflared tunnel route dns`). Build and start:
+The checks below come from the code (`src/evaluation/*`, `src/processing/correction.py`), not from assumptions.
 
-   ```bash
-   (cd app/web && VITE_API_BASE=https://auscult-api.ausculttrust.vn npm run build)
-   bash app/deploy/serve.sh start      # API + web + tunnel, detached; `status`, `stop`
-   grep AT_APP_TOKEN app/deploy/.env   # the token to type into the page's connection dialog
-   ```
+| Output | Source | Shown as |
+| --- | --- | --- |
+| 4-class softmax (normal, crackle, wheeze, both) per segment | BEATs (fine-tuned) + Patch-Mix CL, 8 s input | coloured boxes over the waveform, packed into rows when segments overlap |
+| 2-class view, p(abnormal) = 1 - p(normal), same softmax | same | lane under the waveform |
+| Conformal sets, LAC, alpha 0.1 | `src/evaluation/conformal.py` | box label "set k", lane pattern (solid = one class, hatched = both, outline = empty), chips in the tables |
+| Recording-level screening (8 s windows, mean of 1 - p(normal), 2-class LAC) | `src/evaluation/screening.py` | triage card with the p(abnormal) bar and the zones the threshold creates |
+| SC = spectrum correction: per-bin STFT gain towards the training-device reference | `src/processing/correction.py` | gain curve (dB vs Hz) and the side-by-side pipeline without SC |
 
-   `app/deploy/.env` (mode 600, not in git) holds the token and `AT_APP_ORIGINS=https://auscult.ausculttrust.vn`. cloudflared needs outbound TCP or UDP port 7844 to the Cloudflare edge (`region1.v2.argotunnel.com`, `region2.v2.argotunnel.com`); the network of the GPU hosts blocks it as of 20/10/2026, so the tunnel keeps retrying until the port is opened (`logs/app-tunnel.log`, line `Registered tunnel connection`).
-5. **Cloudflare controls** (dashboard): a rate-limiting rule on `/v1/infer` (for example 20 requests per minute per IP), "Always use HTTPS", and a request-body size limit at or above 40 MB. Cloudflare Access with an identity login is possible, but cross-origin calls from the web app then need the Access cookie on the API hostname. The bearer token is the simpler control for a demo.
+The two proposed methods carry a **Proposed** tag in the page: spectrum correction (the SC pipeline) and conformal prediction. The *Conformal prediction* switch in the toolbar (kept in local storage, shared by both modes) hides or shows the conformal layer: set labels on the boxes, set chips in the tables, the set pattern in the 2-class lane, the set stats in the demo comparison and the triage card. Off, the page shows top classes only and the screening card shows a plain Normal / Abnormal at p(abnormal) 0.5.
 
-### Cloudflare setup, step by step
+Pipelines in the default bundle (seed 0, official split, report epoch 50; the two units differ only by SC):
 
-Run each step in order; steps 1 and 2 are one-off for the domain, steps 3 to 7 repeat for every GPU host. Host A is the first machine, host B is `10.148.182.97` (RTX 4060, 8 GB; same layout under `~/Workspace/Personal/KHKT-CVA-2026/auscult-trust`).
+| Name | Unit | Epoch | Test-time SC | Thresholds cycle4 / cycle2 / screen |
+| --- | --- | --- | --- | --- |
+| `auscult` = AuscultTrust (SC) | `outputs/train/lodo-v1/beats+ft+patchmix_cl+sc+sc_static/seed0` | 50 | yes, static mode | 0.9992 / 0.9976 / 0.9911 |
+| `baseline` = P0 (no SC) | `outputs/train/grid-v1/beats+ft+patchmix_cl/seed0` | 50 | no | 0.9993 / 0.9981 / 0.9664 |
 
-1. **Put the domain on Cloudflare** (once). Dashboard → *Add a domain* → `ausculttrust.vn` → Free plan. Cloudflare shows two nameservers. At the `.vn` registrar, replace the domain's nameservers with those two. Wait until the dashboard says *Active* (minutes to hours). Check: `dig +short NS ausculttrust.vn` returns the Cloudflare names. Until then `getent hosts auscult-api.ausculttrust.vn` fails (NXDOMAIN).
-2. **Tunnel and DNS records** (once, already done on host A). `cloudflared tunnel login` (opens a browser, writes `~/.cloudflared/cert.pem`), `cloudflared tunnel create auscult-trust-tunnel`, then `cloudflared tunnel route dns auscult-trust-tunnel auscult-api.ausculttrust.vn` and the same for `auscult.ausculttrust.vn`. This writes the credentials file `~/.cloudflared/<tunnel-id>.json` (the tunnel id is `b2884e4d-d836-4ba0-96e9-92f5ea32a9c3`). The DNS records live in the account, so another host needs only the credentials file, not `cert.pem`.
-3. **Install cloudflared on the host.** Download the binary for the CPU (`linux-amd64`) from the cloudflared GitHub releases, or copy `/usr/bin/cloudflared` from a host that has it, to `~/.local/bin/cloudflared` and `chmod +x` it (copy the real file: `rsync -aL`, not the symlink). Check: `cloudflared --version`.
-4. **Credentials.** Copy only the tunnel credentials file, never `cert.pem` (that file can create and delete tunnels for the whole account):
+The AST units these replaced (`screen-ast`) lost their checkpoints; to serve other units, edit `PIPELINES` in `api/bundle.py` and rebuild the bundle. The screening exports come from `python -m src.evaluation.screening infer` on the same checkpoints (`outputs/screening/beats_{auscult,p0}/seed0.npz`).
 
-   ```bash
-   mkdir -p -m 700 ~/.cloudflared
-   rsync -a hostA:~/.cloudflared/b2884e4d-d836-4ba0-96e9-92f5ea32a9c3.json ~/.cloudflared/   # mode 400
-   ```
+Thresholds are calibrated on split 0 of `calibration_eval_splits` over the official-test patients without the 2 patients on both sides: 24 patients, 1,238 cycles, 176 recordings. The cycle softmax comes from the unit's saved `test_preds.npz`; the screening softmax comes from `outputs/screening/<cond>/seed0.npz`, and its checkpoint hash is checked against the weights. `api/test_api.py` and the engine check reproduce the saved test softmax within float16 rounding (max |Δp| ≤ 0.004, argmax 100% agree on the 3 recordings checked).
 
-   `app/deploy/cloudflared.yml` already points at `/home/namdp15/.cloudflared/<id>.json`; the username must match or the path in the file must change.
-5. **Open the network** (the blocker so far). The host needs outbound **TCP and UDP 7844** to `region1.v2.argotunnel.com` and `region2.v2.argotunnel.com` (IPv4 `198.41.192.0/24` and `198.41.200.0/24`), and DNS to resolve them. Nothing inbound is needed. Ask the network admin for that rule. Test: `cloudflared tunnel --loglevel info run` and read the connectivity table at the start; both rows must say `PASS`:
+Segments: an uploaded ICBHI annotation `.txt` (or `cycles` JSON) gives breathing cycles, which is the unit the model was trained on. Without one, the API scores sliding windows (default 8 s, step 4 s). The screening decision always uses the registered windows (max(1, floor(duration / 8)) windows evenly spread).
 
-   ```
-   UDP Connectivity  region1.v2.argotunnel.com  PASS
-   TCP Connectivity  region1.v2.argotunnel.com  PASS
-   ```
-
-   If only TCP is allowed, add `protocol: http2` at the top of `cloudflared.yml` (QUIC needs UDP). As of 22/10/2026 hosts A and B both fail this test (`Connection refused` on TCP, QUIC timeout). Without admin help, run the tunnel from a network that allows 7844 (for example a phone hotspot) while keeping the API on the GPU host reachable from there.
-6. **Start everything.** On the host:
-
-   ```bash
-   cd ~/Workspace/Personal/KHKT-CVA-2026/auscult-trust
-   (cd app/web && VITE_API_BASE=https://auscult-api.ausculttrust.vn npm run build)   # once, or copy dist/
-   bash app/deploy/serve.sh start
-   grep -c "Registered tunnel connection" logs/app-tunnel.log                      # 4 when connected
-   ```
-
-   Keep the tunnel alive across reboots with a user service (run `loginctl enable-linger $USER` once):
-
-   ```ini
-   # ~/.config/systemd/user/cloudflared-auscult.service
-   [Unit]
-   Description=Cloudflare tunnel for AuscultTrust
-   After=network-online.target
-   [Service]
-   ExecStart=%h/.local/bin/cloudflared --no-autoupdate --config %h/Workspace/Personal/KHKT-CVA-2026/auscult-trust/app/deploy/cloudflared.yml tunnel run
-   Restart=always
-   RestartSec=5
-   [Install]
-   WantedBy=default.target
-   ```
-
-   `systemctl --user daemon-reload && systemctl --user enable --now cloudflared-auscult`. Then start only the API and web from `serve.sh` (or write two more units the same way) and stop the `cloudflared` line there, so the tunnel is not started twice.
-7. **Verify from any other network** (phone on mobile data):
-
-   ```bash
-   curl -s https://auscult-api.ausculttrust.vn/v1/health          # {"status":"ok","pipelines":["auscult","baseline"],"gpu":true,...}
-   curl -sI https://auscult.ausculttrust.vn | head -1             # HTTP/2 200
-   ```
-
-   Open `https://auscult.ausculttrust.vn`, click the status chip, paste the token from `grep AT_APP_TOKEN app/deploy/.env`, and run a sample.
-
-Two hosts on one tunnel: both register as connectors and Cloudflare spreads requests over them. Both must serve the same bundle and the same token, or requests alternate between different answers. To switch hosts, stop cloudflared on the one you retire. For separate public names per host, create a second tunnel and hostname instead.
-
-| Symptom | Cause and fix |
-| --- | --- |
-| `Failed to dial a quic connection ... timeout` | UDP 7844 blocked; allow it, or set `protocol: http2` |
-| `HTTP/2 connection is blocked or unreachable` | TCP 7844 blocked too; step 5 |
-| `Network is unreachable` in a manual `/dev/tcp` test | the name resolved to IPv6 first; test the IPv4 address or use `cloudflared` itself |
-| `Unable to reach the origin service ... connection refused` in the tunnel log | API or web not running on 8000 / 8090; `bash app/deploy/serve.sh status` |
-| Browser says `Token needed` or `Cannot reach the API` | wrong token, or `AT_APP_ORIGINS` does not equal the page's origin exactly (scheme and host) |
-| Microphone button errors on the public page | the page is not HTTPS; use the Cloudflare hostname, not an IP address |
-
-What is not exposed: checkpoint paths, training arguments, unit directories (`/v1/model` returns hashes and thresholds only). The token is typed by the user in the browser; it is not built into the web bundle.
+SC target spectrum: when the stethoscope is a known ICBHI device, the API uses the coefficient saved with the unit (from that device's unlabelled official-test cycles). When the device is unknown (any upload without a device, every microphone take), the API estimates it from the mean spectrum of the recording's own segments.
 
 ## Tests
 
 ```bash
-PYTHONPATH=. .venv-train/bin/python -m pytest -q app/api/test_api.py     # API end to end on the real bundle (GPU)
+PYTHONPATH=. .venv-train/bin/python -m pytest -q api/test_contract.py   # no checkpoints or GPU: start-up without a model (503, no fabricated output), validation, auth, CORS, error shape
+PYTHONPATH=. .venv-train/bin/python -m pytest -q api/test_api.py        # API end to end on the real bundle (GPU; skipped without the bundle or a GPU)
 
 # browser end to end, both modes, Chrome with a fake microphone (API and `npm run dev` running;
 # E2E_API=<url> E2E_TOKEN=<token> point the page at another or token-protected API)
@@ -232,8 +253,11 @@ y = np.concatenate([np.zeros(sr), 0.5 * lfilter(b, a, x) / np.abs(x).max(), np.z
 sf.write("/tmp/fake_mic.wav", y.astype(np.float32), sr, subtype="PCM_16")
 EOF
 cd app/web && npm run e2e -- /tmp/e2e-shots /tmp/fake_mic.wav
-E2E_API=http://127.0.0.1:8000 node e2e/record.mjs /tmp/e2e-shots /tmp/fake_mic.wav http://127.0.0.1:8090/   # live recording + preprocess
-E2E_API=http://127.0.0.1:8000 node e2e/labels.mjs /tmp/e2e-shots <ICBHI>/187_1b1_Ll_sc_Meditron.txt http://127.0.0.1:8090/   # wav + txt: true labels, stethoscope from the name, theme switch
+E2E_API=http://127.0.0.1:8000 node e2e/record.mjs /tmp/e2e-shots /tmp/fake_mic.wav http://127.0.0.1:5173/   # live recording + preprocess
+E2E_API=http://127.0.0.1:8000 node e2e/labels.mjs /tmp/e2e-shots <ICBHI>/187_1b1_Ll_sc_Meditron.txt http://127.0.0.1:5173/   # wav + txt: true labels, stethoscope from the name, theme switch
+E2E_API=<url of an API without a model> node e2e/unavailable.mjs /tmp/e2e-shots http://127.0.0.1:5173/   # unavailable-model state, retry, no overflow
+# fallback: build the page with VITE_API_FALLBACK=<working API>, serve it, set E2E_API to a dead address
+E2E_API=http://127.0.0.1:9 node e2e/fallback.mjs /tmp/e2e-shots <url of that build>
 node e2e/preprocess.check.mjs                                                                            # noise reduction and trimming on synthetic audio
 ```
 
