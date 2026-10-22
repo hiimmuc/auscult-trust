@@ -195,9 +195,12 @@ export class WaveView {
       g.globalAlpha = 1;
       g.fillRect(x0, y, x1 - x0, 3);
       if (i === this.selected) { g.strokeStyle = ink; g.lineWidth = 2; g.strokeRect(x0 + 1, y + 1, x1 - x0 - 2, rowH - 2); }
+      // the longest text that fits the box with a little air; narrow boxes stay unlabelled (the tooltip has the details)
       const p = `${Math.round(100 * s.probs4[s.pred4])}%`;
-      const txt = x1 - x0 > 120 ? `${s.pred4} ${p}` + (cf && s.set4.length !== 1 ? ` · set ${s.set4.length}` : "")
-        : x1 - x0 > 40 ? `${s.pred4[0].toUpperCase()} ${p}` : "";
+      g.font = font;
+      const room = x1 - x0 - 14;
+      const txt = [`${s.pred4} ${p}` + (cf && s.set4.length !== 1 ? ` · set ${s.set4.length}` : ""), `${s.pred4} ${p}`, `${s.pred4[0].toUpperCase()} ${p}`]
+        .find((t) => g.measureText(t).width <= room) ?? "";
       if (txt) labels.push(() => {
         g.font = font; g.textBaseline = "top";
         g.save(); g.beginPath(); g.rect(x0, y, x1 - x0, rowH); g.clip();

@@ -20,9 +20,9 @@ await page.click("#real-run");
 await page.waitForSelector(".results .cards", { timeout: 120000 });
 const state = () => page.evaluate(() => ({
   on: document.querySelector(".toolbar .switch input").checked,
-  chips: document.querySelectorAll(".results td.sets").length,
-  sets: document.querySelectorAll(".results .chip").length,
-  triage: [...document.querySelectorAll(".results .triage")].map((e) => e.textContent),
+  chips: document.querySelectorAll(".results .set").length,
+  sets: document.querySelectorAll(".results .set").length,
+  triage: [...document.querySelectorAll(".verdict .triage")].map((e) => e.textContent),
   tags: document.querySelectorAll(".tag").length,
   legendHatch: !!document.querySelector(".legend .hatch"),
 }));

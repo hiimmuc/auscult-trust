@@ -144,6 +144,7 @@ main { padding: 28px 32px 80px; max-width: 1360px; margin: 0 auto; }
 @media (min-width: 1001px) { .real-grid, .demo-grid { grid-template-columns: 320px minmax(0, 1fr); gap: 32px; } }
 @media (max-width: 1000px) {
   .side { position: static; }
+  .has-result .side { order: 2; } /* on a phone the result comes first once there is one */
   .top { flex-wrap: wrap; padding: 10px 16px 0; gap: 10px 16px; }
   .modes { margin-left: 0; order: 3; width: 100%; gap: 0; }
   .modes button { flex: 1; padding: 10px 0; }
@@ -197,7 +198,7 @@ details.advanced[open] > *:not(summary) { margin-top: 12px; }
 .file-block, .mic-block { display: flex; flex-direction: column; gap: 10px; align-items: flex-start; }
 .file-block[hidden], .mic-block[hidden] { display: none; }
 .mic-block { align-items: stretch; gap: 12px; }
-#real-empty .drop { flex: 1; min-height: 220px; justify-content: center; margin-bottom: 18px; }
+#real-empty .drop { min-height: 150px; justify-content: center; padding: 22px 18px; }
 
 /* microphone input and preprocessing (Real mode side card) */
 .prep { border: 0; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 10px; }
@@ -252,11 +253,11 @@ details.advanced[open] > *:not(summary) { margin-top: 12px; }
 .msg:empty { display: none; }
 
 /* empty state: a reading guide for the four labels */
-#real-empty { display: flex; flex-direction: column; min-height: 586px; padding: 24px 24px 20px; border: 1px solid var(--line); border-radius: var(--r); background: var(--surface); }
+#real-empty { padding: 20px; border: 1px solid var(--line); border-radius: var(--r); background: var(--surface); }
 #real-empty[hidden] { display: none; }
 #real-empty .muted { margin: 0; max-width: 60ch; }
-.key { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); margin: 18px 0 0; border-top: 1px solid var(--line); }
-.key div { padding: 14px 18px 4px 0; }
+.key { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); margin: 16px 0 0; border-top: 1px solid var(--line); }
+.key div { padding: 12px 18px 0 0; }
 .key dt { display: flex; align-items: center; gap: 8px; font-weight: 500; }
 .key dt i { width: 22px; height: 6px; border-radius: 3px; }
 .key dd { margin: 4px 0 0; font-size: 13px; color: var(--ink-3); }
@@ -326,14 +327,29 @@ dialog h2 { font-size: 20px; }
 .work { display: flex; flex-direction: column; gap: 16px; }
 .work[hidden] { display: none; }
 .verdict:empty { display: none; }
-.verdict-head { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; flex-wrap: wrap; margin-bottom: 4px; }
+/* compact decision: the proposed pipeline large, the others as a line, the rest behind a disclosure */
+.strip { display: grid; grid-template-columns: minmax(0, 1fr) minmax(220px, 300px); gap: 14px 32px; align-items: start; background: var(--surface); border: 1px solid var(--line); border-top: 3px solid var(--ink); border-radius: var(--r); padding: 16px 20px; }
+.strip-main h2 { font-size: 15px; margin-bottom: 10px; display: flex; align-items: center; gap: 4px; }
+.strip-side { display: grid; gap: 6px; align-content: start; font-size: 13px; padding-top: 4px; }
+.strip-side p { margin: 0; }
+.says b { font-weight: 500; }
+.strip-note { color: var(--ink-2); }
+.strip-meta { font-size: 12px; }
+.strip-more { grid-column: 1 / -1; border-top: 1px solid var(--line); padding-top: 10px; }
+.strip-more summary { cursor: pointer; font-size: 13px; color: var(--ink-2); }
+.strip-more[open] > *:not(summary) { margin-top: 12px; }
+.strip .screen-head { margin-bottom: 10px; }
+.strip .bar { margin-top: 4px; }
+@media (max-width: 700px) { .strip { grid-template-columns: minmax(0, 1fr); } }
 .results { margin-top: 8px; }
-.sec-title { font-size: 16px; margin: 28px 0 10px; }
+.sec-title { font-size: 16px; margin: 8px 0 10px; }
 .explain { margin: 4px 0 14px; color: var(--ink-2); font-size: 13px; max-width: 72ch; }
 .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px; }
 .card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); padding: 18px 20px 16px; }
 /* the card that shows a proposed method carries a heavier top rule: it is the one to read first */
 .card:has(.tag) { border-top: 3px solid var(--ink); padding-top: 16px; }
+.strip .card { border-top-width: 1px; padding-top: 16px; }
+.strip .card:has(.tag) { border-top-width: 3px; }
 .card p.muted { font-size: 12.5px; margin: 6px 0 0; }
 .screen-head { display: flex; justify-content: space-between; align-items: flex-end; gap: 12px; margin-bottom: 16px; }
 .triage { font-size: 28px; font-weight: 500; line-height: 1.1; letter-spacing: -0.02em; }
@@ -367,20 +383,22 @@ table.segs tbody tr { cursor: pointer; }
 table.segs tbody tr:hover { background: color-mix(in srgb, var(--sunk) 70%, transparent); }
 table.segs tbody tr.sel { background: color-mix(in srgb, var(--focus) 10%, transparent); }
 table.segs tbody tr:last-child td { border-bottom: 0; }
-td.sets { white-space: normal; }
-.chip { display: inline-block; font-size: 11.5px; padding: 1px 9px; border: 1px solid transparent; border-radius: 10px; margin: 1px 3px 1px 0; color: var(--ink); }
-.chip.c4-normal { background: color-mix(in srgb, var(--c-normal) 24%, var(--surface)); border-color: var(--c-normal); }
-.chip.c4-crackle { background: color-mix(in srgb, var(--c-crackle) 24%, var(--surface)); border-color: var(--c-crackle); }
-.chip.c4-wheeze { background: color-mix(in srgb, var(--c-wheeze) 22%, var(--surface)); border-color: var(--c-wheeze); }
-.chip.c4-both { background: color-mix(in srgb, var(--c-both) 26%, var(--surface)); border-color: var(--c-both); }
-.chip.empty { border: 1px dashed var(--ink-3); background: none; color: var(--ink-2); }
-.flip { font-size: 11.5px; font-weight: 600; color: var(--c2-abnormal); }
+.table-tools .num { font-family: var(--sans); }
+.table-tools { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 8px; font-size: 12.5px; }
+.segs-box.only tbody tr:not([data-flag]) { display: none; }
+td.miss { background: color-mix(in srgb, var(--rec) 9%, transparent); }
+td.flag { text-align: right; width: 1%; padding-right: 16px; }
+.set { color: var(--ink-3); font-size: 12px; margin-left: 4px; }
+.flip { font-size: 12px; font-weight: 500; color: var(--err-ink); }
 
-.stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 12px; margin: 8px 0 12px; }
+.stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; margin: 8px 0 12px; }
 .stats div { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); padding: 14px 16px; }
 .stats dt { font-size: 12px; color: var(--ink-3); }
 .stats dd { margin: 2px 0 0; font-size: 26px; font-weight: 500; line-height: 1.15; letter-spacing: -0.02em; }
-.stats dd.num { font-family: var(--sans); font-size: 26px; }
+.stats dd.num { font-family: var(--sans); font-size: 24px; }
+.stats dd.num small { font-size: 13px; font-weight: 400; color: var(--ink-3); letter-spacing: 0; }
+.stats dd.lines { display: grid; gap: 4px; font-size: 13px; font-weight: 400; letter-spacing: 0; line-height: 1.3; }
+.stats dd.lines b { font-weight: 500; }
 .stats dd.muted { font-size: 12px; font-weight: 400; letter-spacing: 0; }
 
 /* proposed-method marking and the switches */
@@ -395,3 +413,22 @@ td.sets { white-space: normal; }
 .switch input:checked + .track::after { transform: translateX(14px); }
 .switch input:focus-visible + .track { outline: 2px solid var(--focus); outline-offset: 2px; }
 @media (prefers-reduced-motion: reduce) { .switch .track, .switch .track::after { transition: none; } }
+
+/* info marks carry the long explanations in the page tooltip */
+.info { display: inline-grid; place-items: center; width: 15px; height: 15px; margin-left: 6px; border: 1px solid var(--control); border-radius: 50%; color: var(--ink-3);
+  font: italic 600 10px/1 Georgia, serif; vertical-align: 1px; cursor: help; }
+.info:hover, .info:focus-visible { color: var(--ink); border-color: var(--ink-3); }
+details.advanced summary { display: flex; align-items: center; gap: 6px; }
+details.advanced.sc { margin-top: 12px; }
+details.advanced.sc .cards { margin-top: 12px; }
+.s-bar { grid-column: 2; display: flex; height: 6px; gap: 1px; margin-top: 7px; border-radius: 3px; overflow: hidden; }
+.s-bar i { display: block; min-width: 1px; }
+details.advanced > .switch { display: flex; margin-top: 10px; }
+details.advanced summary { list-style: none; }
+details.advanced summary::-webkit-details-marker { display: none; }
+details.advanced summary::after { content: ""; margin-left: auto; width: 6px; height: 6px; border-right: 1.5px solid var(--ink-3); border-bottom: 1.5px solid var(--ink-3); transform: rotate(-45deg); transition: transform 0.15s; }
+details.advanced[open] > summary::after { transform: rotate(45deg); }
+/* before a take is loaded the empty card fills the column down to the height of the form */
+.real-grid:not(.has-work) .main-col { align-self: stretch; }
+.real-grid:not(.has-work) #real-empty:not([hidden]) { flex: 1; display: flex; flex-direction: column; }
+.real-grid:not(.has-work) #real-empty .drop { flex: 1; }

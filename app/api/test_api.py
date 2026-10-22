@@ -27,6 +27,7 @@ def test_api():
         assert set(m["pipelines"]) == {"auscult", "baseline"} and "checkpoint" not in m["pipelines"]["auscult"]
         s = c.get("/v1/samples").json()["samples"][0]
         ref = c.get("/v1/samples/{}/result".format(s["id"])).json()
+        assert ref["cached"] is False and c.get("/v1/samples/{}/result".format(s["id"])).json()["cached"] is True
         seg = ref["pipelines"]["auscult"]["segments"]
         assert len(seg) == len(s["cycles"]) and seg[0]["truth4"] == s["cycles"][0]["label"]
         assert ref["pipelines"]["auscult"]["sc"]["coefficient_source"] == "saved:test"

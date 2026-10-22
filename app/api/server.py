@@ -185,9 +185,10 @@ async def sample_result(request: Request, sid: str):
                 **state["engine"].infer(to_model_rate(x, meta["sample_rate"]), meta["duration_sec"], s["device"], sample_cycles(s))}
 
     t0 = time.perf_counter()
+    hit = ("sample", sid) in state["cache"]
     res = await guarded(cached, ("sample", sid), run)
     return {"request_id": request.state.rid, "source": {"kind": "sample", "id": sid}, **res,
-            "timing_ms": round(1000 * (time.perf_counter() - t0))}
+            "cached": hit, "timing_ms": round(1000 * (time.perf_counter() - t0))}
 
 
 @app.post("/v1/infer", dependencies=[Depends(auth)])
@@ -233,5 +234,7 @@ async def infer(
 
     t0 = time.perf_counter()
     key = (sha, device, cycles, json.dumps(cyc), reference_sample, window_sec, hop_sec)
+    hit = key in state["cache"]
     res = await guarded(cached, key, run)
-    return {"request_id": request.state.rid, "source": {"kind": "upload"}, **res, "timing_ms": round(1000 * (time.perf_counter() - t0))}
+    return {"request_id": request.state.rid, "source": {"kind": "upload"}, **res, "cached": hit,
+            "timing_ms": round(1000 * (time.perf_counter() - t0))}

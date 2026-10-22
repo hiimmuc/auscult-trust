@@ -5,7 +5,7 @@ import { capture, dB, MIC_HTML, micAlert, micPanel } from "./mic";
 import { conformalOn, onConformal } from "./prefs";
 import { denoise, trimSilence } from "./preprocess";
 import { Siri } from "./siri";
-import { attachAudio, conformalToggle, describe, errorBox, esc, legend, panel, pipelineSwitch, pipelineTag, proposed, scCurve, screening, segSwitch, segmentTable, truthOf } from "./ui";
+import { attachAudio, bindTable, bindTips, conformalToggle, describe, errorBox, esc, legend, panel, pipelineSwitch, proposed, scCurve, segSwitch, segmentTable, truthOf, verdictStrip } from "./ui";
 import { encodeWav, readWavHeader } from "./wav";
 import { TimeView } from "./wave";
 
@@ -37,33 +37,33 @@ export function mountReal(root: HTMLElement, m: ModelInfo, ctx: () => AudioConte
         <div class="file-block">
           <input type="file" multiple accept=".wav,audio/wav,audio/x-wav,.txt,text/plain" class="visually-hidden" id="real-file" />
           <button type="button" class="btn" id="real-pick">Choose .wav (and .txt)</button>
-          <span class="hint">Mono or stereo · ${L.sample_rate[0] / 1000}–${L.sample_rate[1] / 1000} kHz · ${L.min_sec}–${L.max_sec} s · up to ${L.max_bytes >> 20} MB</span>
+          <span class="hint">${L.sample_rate[0] / 1000}–${L.sample_rate[1] / 1000} kHz · ${L.min_sec}–${L.max_sec} s · up to ${L.max_bytes >> 20} MB</span>
         </div>
         <div class="mic-block" hidden>
           ${MIC_HTML}
           <button type="button" class="btn primary" id="real-rec">Record</button>
-          <span class="hint">Echo cancellation, noise suppression and auto gain are off, so the model hears the raw signal. Up to ${L.max_sec} s.</span>
+          <span class="hint">Raw signal, up to ${L.max_sec} s <span class="info" tabindex="0" role="img" aria-label="More"
+            data-tip="Echo cancellation, noise suppression and automatic gain are switched off so the model hears the unprocessed signal.">i</span></span>
         </div>
         <div class="meta" hidden></div>
-        <fieldset class="prep">
-          <legend>Preprocess</legend>
+        <details class="advanced">
+          <summary>Preprocess <span class="muted" id="prep-state">off</span>
+            <span class="info" tabindex="0" role="img" aria-label="More" data-tip="Applied in the browser before upload; the waveform shows what is sent. The model was trained on unprocessed recordings, so leave both off unless the take is noisy.">i</span></summary>
           <label class="switch"><input type="checkbox" role="switch" id="real-noise" /><span class="track" aria-hidden="true"></span><span>Reduce noise</span></label>
           <label class="switch"><input type="checkbox" role="switch" id="real-trim" /><span class="track" aria-hidden="true"></span><span>Trim silence</span></label>
-          <span class="hint">Applied in the browser before upload; the waveform shows what is sent. The model was trained on unprocessed recordings, so leave both off unless the take is noisy.</span>
-        </fieldset>
-        <label class="field">Stethoscope
+        </details>
+        <label class="field"><span>Stethoscope <span class="info" tabindex="0" role="img" aria-label="More" data-tip="A known ICBHI device uses its saved spectrum for correction. Unknown: the spectrum is estimated from this recording.">i</span></span>
           <select id="real-device">
             <option value="">Unknown (estimate from recording)</option>
             ${m.devices.map((d) => `<option>${esc(d)}</option>`).join("")}
           </select>
-          <span class="hint">A known ICBHI device uses its saved spectrum for correction.</span>
         </label>
         <details class="advanced">
-          <summary>Segments</summary>
-          <label class="field">ICBHI annotation (.txt, optional)
+          <summary>Segments <span class="info" tabindex="0" role="img" aria-label="More"
+            data-tip="With an ICBHI annotation the model scores each breathing cycle, the unit it was trained on, and the true labels are shown. Without one it scores sliding windows.">i</span></summary>
+          <label class="field">ICBHI annotation (.txt)
             <input type="file" accept=".txt,text/plain" id="real-ann" />
             <span class="hint" id="real-ann-note"></span>
-            <span class="hint">Tip: choose or drop the .wav and its .txt together. With cycle times the model scores each breathing cycle, the unit it was trained on. Without, it scores sliding windows.</span>
           </label>
           <div class="row">
             <label class="field">Window (s) <input type="number" id="real-win" min="1" max="8" step="0.5" value="8" /></label>
@@ -81,8 +81,7 @@ export function mountReal(root: HTMLElement, m: ModelInfo, ctx: () => AudioConte
           <div class="drop" id="real-drop" tabindex="0" role="button">
             <span class="drop-main"></span><span class="drop-sub"></span>
           </div>
-          <p class="muted">Each segment gets one of four labels:</p>
-          <dl class="key">
+                    <dl class="key">
             <div><dt><i class="sw c4-normal"></i>Normal</dt><dd>No adventitious sound.</dd></div>
             <div><dt><i class="sw c4-crackle"></i>Crackle</dt><dd>Short, discontinuous clicks.</dd></div>
             <div><dt><i class="sw c4-wheeze"></i>Wheeze</dt><dd>Continuous, musical tone.</dd></div>
@@ -100,8 +99,8 @@ export function mountReal(root: HTMLElement, m: ModelInfo, ctx: () => AudioConte
           </div>
         </section>
         <div class="work" hidden>
-          <div class="toolbar"></div>
           <div class="verdict"></div>
+          <div class="toolbar"></div>
           <div class="panels"></div>
           <div class="legend-host"></div>
           <div class="results"></div>
@@ -136,28 +135,26 @@ export function mountReal(root: HTMLElement, m: ModelInfo, ctx: () => AudioConte
     const segs = r.pipelines[names[0]].segments;
     if (!segs.some((x) => x.truth4)) return "";
     const abn = segs.filter((x) => x.truth4 && x.truth4 !== "normal").length;
-    const hit = names.map((n) => `${esc(r.pipelines[n].label)}: ${r.pipelines[n].segments.filter((x) => x.pred4 === x.truth4).length} of ${segs.length}`);
-    return `<p class="explain truth"><b>Annotation:</b> this recording is <b>${abn ? "abnormal" : "normal"}</b> (${abn} of ${segs.length} cycles with a crackle or a wheeze). Top class equals the annotated label in ${hit.join("; ")} cycles.</p>`;
+    const hit = names.map((n) => `${r.pipelines[n].segments.filter((x) => x.pred4 === x.truth4).length} of ${segs.length} (${esc(r.pipelines[n].label)})`);
+    return `<p class="strip-note"><b>Annotated:</b> ${abn ? "abnormal" : "normal"}, ${abn} of ${segs.length} cycles with a crackle or a wheeze. Top class matches in ${hit.join(", ")}.</p>`;
   }
 
   function renderResults() {
+    root.querySelector(".real-grid")!.classList.toggle("has-result", !!result);
     if (!result) { results.innerHTML = verdict.innerHTML = ""; return; }
-    const r = result;
-    const seg = r.segmentation.mode === "cycles" ? `${r.pipelines[names[0]].segments.length} annotated cycles`
-      : `${r.pipelines[names[0]].segments.length} windows of ${r.segmentation.window_sec} s, step ${r.segmentation.hop_sec} s`;
-    verdict.innerHTML = `
-      <div class="verdict-head"><h2>Screening decision</h2>
-        <span class="muted done">Done in ${(r.timing_ms / 1000).toFixed(1)} s · ${seg} · request ${esc(r.request_id)}</span></div>
-      ${truthNote(r)}
-      <p class="explain">${conformalOn()
-        ? `The <b>top class</b> is the most probable label. The <b>conformal set</b> holds every label the model cannot rule out; across recordings like the calibration ones it contains the true label ${Math.round(100 * (1 - m.alpha))}% of the time. A set with both labels means “uncertain”.`
-        : `Conformal prediction is off: only the <b>top class</b> is shown, with no statement of how sure the model is allowed to be. Switch it on above to see the sets.`}</p>
-      <div class="cards">${names.map((n) => `<article class="card"><h4>${esc(r.pipelines[n].label)} ${pipelineTag(m, n)}</h4>${screening(r.pipelines[n], m.pipelines[n].thresholds.screen)}</article>`).join("")}</div>`;
+    const r = result, n0 = r.pipelines[names[0]].segments.length;
+    const seg = r.segmentation.mode === "cycles" ? `${n0} annotated cycles` : `${n0} windows of ${r.segmentation.window_sec} s, step ${r.segmentation.hop_sec} s`;
+    const explain = conformalOn()
+      ? `The <b>top class</b> is the most probable label. The <b>conformal set</b> holds every label the model cannot rule out; across recordings like the calibration ones it contains the true label ${Math.round(100 * (1 - m.alpha))}% of the time. A set with both labels means “uncertain”.`
+      : `Conformal prediction is off: only the <b>top class</b> is shown, with no statement of how sure the model is allowed to be. Switch it on above to see the sets.`;
+    verdict.innerHTML = verdictStrip(r, m, names, `${r.cached ? "Cached result" : `Done in ${(r.timing_ms / 1000).toFixed(1)} s`} · ${seg} · request ${esc(r.request_id)}`, truthNote(r), explain);
     results.innerHTML = `
-      <h3 class="sec-title">Spectrum correction ${proposed()}</h3>
-      <div class="cards">${names.filter((n) => r.pipelines[n].sc.applied).map((n) => `<article class="card wide"><h4>Gain applied by ${esc(r.pipelines[n].label)}</h4>${scCurve(r.pipelines[n], m.sc_freqs_hz, r.device.declared)}</article>`).join("")}</div>
       <h3 class="sec-title">Per segment</h3>
-      ${segmentTable(r, m, names)}`;
+      ${segmentTable(r, m, names)}
+      <details class="advanced sc"><summary>Spectrum correction gain ${proposed()}</summary>
+        <div class="cards">${names.filter((n) => r.pipelines[n].sc.applied).map((n) => `<article class="card wide"><h4>Gain applied by ${esc(r.pipelines[n].label)}</h4>${scCurve(r.pipelines[n], m.sc_freqs_hz, r.device.declared)}</article>`).join("")}</div>
+      </details>`;
+    bindTable(results);
     results.querySelectorAll<HTMLTableRowElement>("tr[data-i]").forEach((tr) => (tr.onclick = () => {
       const i = +tr.dataset.i!;
       P.wave.selected = i; highlight(i);
@@ -182,6 +179,7 @@ export function mountReal(root: HTMLElement, m: ModelInfo, ctx: () => AudioConte
   const fail = (t: string) => { msg.innerHTML = `<div class="alert error" role="alert">${esc(t)}</div>`; send = src = null; meta.hidden = true; showStage(); };
 
   function showStage() {
+    root.querySelector(".real-grid")!.classList.toggle("has-work", !!src);
     $("#real-empty").hidden = !!src || !live.hidden; $(".work").hidden = !src || !live.hidden;
   }
 
@@ -235,6 +233,7 @@ export function mountReal(root: HTMLElement, m: ModelInfo, ctx: () => AudioConte
     let x = src.pcm;
     const notes = [src.note];
     if (noise.checked) { x = denoise(x); notes.push("noise reduced"); }
+    $("#prep-state").textContent = [noise.checked && "noise", trim.checked && "trim"].filter(Boolean).join(" + ") || "off";
     if (trim.checked) { const t = trimSilence(x, src.sr, L.min_sec); x = t.x; notes.push(t.note); }
     const buf = ctx().createBuffer(1, x.length, src.sr);
     buf.getChannelData(0).set(x);
@@ -331,6 +330,7 @@ export function mountReal(root: HTMLElement, m: ModelInfo, ctx: () => AudioConte
   $("#live-stop").onclick = () => stopLive?.(true);
   $("#live-discard").onclick = () => stopLive?.(false);
   noise.onchange = trim.onchange = prepare;
+  bindTips(root);
   $<HTMLInputElement>("#real-ann").onchange = (e) => setAnnotation((e.target as HTMLInputElement).files?.[0] ?? null);
   run.onclick = analyse;
   cancel.onclick = () => busy?.abort();

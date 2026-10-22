@@ -38,6 +38,7 @@ export interface InferResult {
   segmentation: { mode: "cycles" | "windows"; window_sec?: number; hop_sec?: number };
   alignment?: { reference_sample: string; lag_sec: number; peak_score: number; reliable: boolean; trimmed_to_sec: number };
   pipelines: Record<string, PipelineResult>;
+  cached: boolean; // served from the API's result cache (same file, same settings)
   timing_ms: number;
 }
 

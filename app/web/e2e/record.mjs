@@ -24,6 +24,7 @@ await page.click("#live-stop");
 await page.waitForFunction(() => !document.querySelector("#real-run").disabled, { timeout: 20000 });
 const raw = await page.$eval(".panel .sub", (e) => e.textContent);
 await page.screenshot({ path: `${S}/rec_2_review.png` });
+await page.click("#prep-state"); // the Preprocess group is collapsed
 await page.click("#real-noise + .track"); await page.click("#real-trim + .track");
 await page.waitForFunction(() => /noise reduced/.test(document.querySelector(".panel .sub").textContent));
 const cleaned = await page.$eval(".panel .sub", (e) => e.textContent);

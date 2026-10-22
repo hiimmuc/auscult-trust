@@ -114,7 +114,7 @@ Inference response (abridged):
 }
 ```
 
-`alignment` appears only with `reference_sample`; `truth4`/`truth2` only when the cycles carry labels (demo samples, annotation upload). Times are seconds on the input recording (after alignment for microphone takes).
+`cached` is true when the answer came from the API's result cache (same file and settings); `alignment` appears only with `reference_sample`; `truth4`/`truth2` only when the cycles carry labels (demo samples, annotation upload). Times are seconds on the input recording (after alignment for microphone takes).
 
 Validation (server; the web app checks the same limits before upload): RIFF/WAVE header, decodable by libsndfile, 1-2 channels, 4-48 kHz, 2-90 s, at most 40 MB, finite samples, not silent (peak above -80 dBFS). Error codes: `not_wav`, `unreadable`, `channels`, `sample_rate`, `duration`, `non_finite`, `silent`, `too_large`, `bad_device`, `bad_cycles`, `bad_annotation`, `bad_window`, `unknown_sample`, `unauthorized`, `busy` (more than 4 requests waiting, 429), `timeout` (120 s, 504).
 

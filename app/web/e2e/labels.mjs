@@ -17,7 +17,7 @@ const device = await page.$eval("#real-device", (e) => e.value);
 const note = await page.$eval("#real-ann-note", (e) => e.textContent);
 await page.click("#real-run");
 await page.waitForSelector(".results .cards", { timeout: 120000 });
-const truth = await page.$eval(".verdict .truth", (e) => e.textContent);
+const truth = await page.$eval(".verdict .strip-note", (e) => e.textContent);
 const col = await page.$$eval("table.segs th", (t) => t.some((x) => /Annotated/.test(x.textContent)));
 await page.screenshot({ path: `${S}/labels_dark_or_auto.png`, fullPage: true });
 // theme: Auto -> Light -> Dark -> Auto (each click shows the new state)
@@ -29,5 +29,5 @@ for (let i = 0; i < 3; i++) {
 await page.click("#theme"); await page.screenshot({ path: `${S}/labels_light.png`, fullPage: true });
 console.log({ device, note, truth, col, themes, errs });
 await browser.close();
-const ok = device === "Meditron" && /true labels/.test(note) && /Annotation/.test(truth) && col && !errs.length && themes[0][0] === "light" && themes[1][0] === "dark" && themes[2][0] === "auto";
+const ok = device === "Meditron" && /true labels/.test(note) && /Annotated/.test(truth) && col && !errs.length && themes[0][0] === "light" && themes[1][0] === "dark" && themes[2][0] === "auto";
 console.log(ok ? "LABELS OK" : "LABELS FAIL"); process.exit(ok ? 0 : 1);

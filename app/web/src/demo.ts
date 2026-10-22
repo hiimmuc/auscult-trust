@@ -4,7 +4,7 @@
 import { api, type Class4, type InferResult, type ModelInfo, type Sample } from "./api";
 import { capture, MIC_HTML, micAlert, micPanel } from "./mic";
 import { onConformal } from "./prefs";
-import { attachAudio, CLASS_LABEL, comparison, conformalToggle, describe, errorBox, esc, legend, panel, pipelineSwitch, pipelineTag, truthOf } from "./ui";
+import { attachAudio, bindTable, CLASS_LABEL, comparison, conformalToggle, describe, errorBox, esc, legend, panel, pipelineSwitch, pipelineTag, truthOf } from "./ui";
 import { encodeWav } from "./wav";
 import { TimeView } from "./wave";
 
@@ -108,11 +108,12 @@ export function mountDemo(root: HTMLElement, m: ModelInfo, ctx: () => AudioConte
     $(".compare").innerHTML = refResult && micResult ? `
       <h3 class="sec-title">Reference vs microphone · ${esc(m.pipelines[shown].label)} ${pipelineTag(m, shown)}</h3>
       ${alignNote()}
-      ${comparison(refResult, micResult, m, shown)}
+      ${comparison(refResult, micResult, shown)}
       <p class="muted">Other pipeline: ${names.filter((n) => n !== shown).map((n) => {
         const a = refResult!.pipelines[n].segments, b = micResult!.pipelines[n].segments;
         return `${esc(m.pipelines[n].label)} changed the top class on ${a.filter((s, i) => s.pred4 !== b[i].pred4).length} of ${a.length} cycles`;
       }).join("; ")}. Switch above to see it.</p>` : "";
+    bindTable($(".compare"));
     root.querySelectorAll<HTMLTableRowElement>(".compare tr[data-i]").forEach((tr) => (tr.onclick = () => {
       const i = +tr.dataset.i!; select(i);
       const s = refResult!.pipelines[shown].segments[i];
@@ -137,6 +138,7 @@ export function mountDemo(root: HTMLElement, m: ModelInfo, ctx: () => AudioConte
       <label class="sample"><input type="radio" name="demo-sample" value="${esc(s.id)}" ${i === 0 ? "checked" : ""} />
         <span class="s-main">${esc(s.device)} · ${esc(s.chest_location)} <span class="muted">patient ${esc(s.patient.replace("icbhi_", ""))}</span></span>
         <span class="s-sub">${s.class_cycles} of ${s.cycles_total} cycles annotated ${CLASS_LABEL[cls].toLowerCase()}</span>
+        <span class="s-bar" aria-hidden="true">${s.cycles.map((c) => `<i class="c4-${c.label}" style="flex:${(c.end - c.start).toFixed(2)}"></i>`).join("")}</span>
       </label>`).join("") || `<p class="muted">No sample for this class.</p>`;
     root.querySelectorAll<HTMLInputElement>(".sample-list input").forEach((r) => (r.onchange = () => load(r.value)));
     if (list[0]) load(list[0].id);

@@ -17,7 +17,6 @@ export function el<K extends keyof HTMLElementTagNameMap>(tag: K, cls = "", html
 
 export const CLASS_LABEL: Record<string, string> = { normal: "Normal", crackle: "Crackle", wheeze: "Wheeze", both: "Crackle + wheeze", abnormal: "Abnormal" };
 
-const SHORT: Record<string, string> = { ...CLASS_LABEL, both: "Both" };
 
 /** Marks the methods this project proposes: spectrum correction (the SC pipeline) and conformal prediction. */
 export const proposed = (on = true) => (on ? `<span class="tag" title="Proposed method">Proposed</span>` : "");
@@ -33,15 +32,6 @@ export function conformalToggle(host: HTMLElement) {
   box.onchange = () => setConformal(box.checked);
   onConformal(sync);
   host.append(l);
-}
-
-export function chip(c: string, on: boolean, two = false) {
-  return `<span class="chip ${two ? "c2" : "c4"}-${c} ${on ? "on" : "off"}" title="${esc(CLASS_LABEL[c])}: ${on ? "in" : "not in"} the conformal set">${esc(SHORT[c])}</span>`;
-}
-
-export function setChips(set: string[], all: readonly string[], two = false) {
-  if (!set.length) return `<span class="chip empty">empty set</span>`;
-  return all.map((c) => (set.includes(c) ? chip(c, true, two) : "")).join("");
 }
 
 export function describe(seg: Segment, label: string, m: ModelInfo) {
@@ -111,32 +101,62 @@ const TRIAGE: Record<string, [string, string]> = {
   rerecord: ["Re-record", "The set is empty: the recording looks unlike the calibration data."],
 };
 
-/** Recording-level screening: p(abnormal) on a 0-1 bar with the zones the conformal threshold creates. */
-export function screening(r: PipelineResult, thr: number) {
-  const rec = r.recording;
+/** The recording-level decision of one pipeline: wording, colour class, bar with the zones the conformal threshold creates, and the reading. */
+function triage(r: PipelineResult, thr: number) {
+  const rec = r.recording, p = rec.p_abnormal, n = rec.windows.length;
+  const windows = `Mean over ${n} window${n > 1 ? "s" : ""} of 8 s.`;
   if (!conformalOn()) {
-    const abn = rec.p_abnormal >= 0.5;
-    return `<div class="screen">
-    <div class="screen-head"><span class="triage ${abn ? "t-refer" : "t-no_referral"}">${abn ? "Abnormal" : "Normal"}</span>
-      <span class="pab">p(abnormal) <b class="num">${rec.p_abnormal.toFixed(3)}</b></span></div>
-    <div class="bar" role="img" aria-label="p abnormal ${rec.p_abnormal.toFixed(3)}"><span class="mark" style="left:${100 * rec.p_abnormal}%"></span></div>
-    <div class="bar-scale"><span>0 · normal</span><span>0.5</span><span>abnormal · 1</span></div>
-    <p class="why">Top class only, no uncertainty. Mean over ${rec.windows.length} window${rec.windows.length > 1 ? "s" : ""} of 8 s.</p>
-  </div>`;
+    const abn = p >= 0.5;
+    return { word: abn ? "Abnormal" : "Normal", cls: abn ? "t-refer" : "t-no_referral", p,
+      bar: `<div class="bar" role="img" aria-label="p abnormal ${p.toFixed(3)}"><span class="mark" style="left:${100 * p}%"></span></div>`,
+      scale: ["0 · normal", "0.5", "abnormal · 1"], why: `Top class only, no uncertainty. ${windows}` };
   }
   const lo = Math.min(1 - thr, thr), hi = Math.max(1 - thr, thr);
   const mid = thr >= 0.5 ? ["uncertain", "both in set"] : ["rerecord", "empty set"];
   const [word, why] = TRIAGE[rec.triage];
-  return `<div class="screen">
-    <div class="screen-head"><span class="triage t-${rec.triage}">${word}</span>
-      <span class="pab">p(abnormal) <b class="num">${rec.p_abnormal.toFixed(3)}</b></span></div>
-    <div class="bar" role="img" aria-label="p abnormal ${rec.p_abnormal.toFixed(3)}; normal-only below ${lo.toFixed(3)}, abnormal-only above ${hi.toFixed(3)}">
+  return { word, cls: `t-${rec.triage}`, p,
+    bar: `<div class="bar" role="img" aria-label="p abnormal ${p.toFixed(3)}; normal-only below ${lo.toFixed(3)}, abnormal-only above ${hi.toFixed(3)}">
       <span class="z z-no" style="width:${100 * lo}%"></span><span class="z z-${mid[0]}" style="width:${100 * (hi - lo)}%"></span><span class="z z-refer" style="width:${100 * (1 - hi)}%"></span>
-      <span class="mark" style="left:${100 * rec.p_abnormal}%"></span>
+      <span class="mark" style="left:${100 * p}%"></span></div>`,
+    scale: ["0 · normal only", mid[1], "abnormal only · 1"], why: `${why} ${windows}` };
+}
+
+const scale = (t: string[]) => `<div class="bar-scale"><span>${t[0]}</span><span>${t[1]}</span><span>${t[2]}</span></div>`;
+
+/** Full card of one pipeline's recording-level decision. */
+export function screening(r: PipelineResult, thr: number) {
+  const t = triage(r, thr);
+  return `<div class="screen">
+    <div class="screen-head"><span class="triage ${t.cls}">${t.word}</span><span class="pab">p(abnormal) <b class="num">${t.p.toFixed(3)}</b></span></div>
+    ${t.bar}${scale(t.scale)}<p class="why">${t.why}</p></div>`;
+}
+
+/**
+ * Compact decision strip: the proposed pipeline's verdict and bar, the others as one "says" line, and the full cards
+ * and the reading guide behind a disclosure.
+ */
+export function verdictStrip(res: InferResult, m: ModelInfo, names: string[], meta: string, note: string, explain: string) {
+  const main = names.find((n) => m.pipelines[n].spectrum_correction) ?? names[0];
+  const others = names.filter((n) => n !== main);
+  const T = (n: string) => triage(res.pipelines[n], m.pipelines[n].thresholds.screen);
+  const t = T(main);
+  const says = others.map((n) => {
+    const o = T(n);
+    return `<p class="says"><span class="muted">${esc(res.pipelines[n].label)} says</span> <b class="${o.cls}">${o.word}</b>
+      <span class="num muted">p ${o.p.toFixed(3)}</span> <span class="muted">· ${o.word === t.word ? "same decision" : "different decision"}</span></p>`;
+  }).join("");
+  return `<section class="strip">
+    <div class="strip-main">
+      <h2>${esc(res.pipelines[main].label)} ${pipelineTag(m, main)}</h2>
+      <div class="screen-head"><span class="triage ${t.cls}">${t.word}</span><span class="pab">p(abnormal) <b class="num">${t.p.toFixed(3)}</b></span></div>
+      ${t.bar}${scale(t.scale)}
     </div>
-    <div class="bar-scale"><span>0 · normal only</span><span>${mid[1]}</span><span>abnormal only · 1</span></div>
-    <p class="why">${why} Mean over ${rec.windows.length} window${rec.windows.length > 1 ? "s" : ""} of 8 s.</p>
-  </div>`;
+    <div class="strip-side">${says}${note}<p class="muted strip-meta">${meta}</p></div>
+    <details class="strip-more"><summary>How to read this, and the full decisions</summary>
+      <p class="explain">${explain}</p>
+      <div class="cards">${names.map((n) => `<article class="card"><h4>${esc(res.pipelines[n].label)} ${pipelineTag(m, n)}</h4>${screening(res.pipelines[n], m.pipelines[n].thresholds.screen)}</article>`).join("")}</div>
+    </details>
+  </section>`;
 }
 
 /** SC gain per frequency bin, 0-4 kHz, as an SVG line. */
@@ -159,26 +179,44 @@ export function scCurve(r: PipelineResult, freqs: number[], device: string | nul
     <p class="muted">${src} ${r.sc.mode === "static" ? "Static mode: corrected between 50 Hz and 2 kHz (shaded), untouched elsewhere." : "Dynamic mode: every bin clipped to ±20 dB."}</p>`;
 }
 
-const flip = (a: string, b: string) => (a !== b ? `<span class="flip" title="changed">changed</span>` : "");
+const set = (q: Segment) => (q.set4.length > 1
+  ? ` <span class="set" title="Conformal set: ${q.set4.map((c) => CLASS_LABEL[c]).join(", ")}">${q.set4.length > 2 ? `set of ${q.set4.length}` : `or ${CLASS_LABEL[q.set4.find((c) => c !== q.pred4)!].toLowerCase()}`}</span>` : "");
+const top = (q: Segment, cf: boolean, miss = false) =>
+  `<td${miss ? ' class="miss"' : ""}><i class="sw c4-${q.pred4}"></i>${CLASS_LABEL[q.pred4]} <span class="num muted">${pct(q.probs4[q.pred4])}</span>${cf ? set(q) : ""}</td>`;
 
-/** Real mode: one row per segment, every pipeline side by side. */
+let onlyFlagged = false;
+
+/** Wraps the table with its "only differing rows" filter. Call `bindTable` on the container after inserting the markup. */
+const tableBox = (flagged: number, total: number, label: string, table: string) => `<div class="segs-box${onlyFlagged ? " only" : ""}">
+  <div class="table-tools"><span class="muted num">${flagged} of ${total} rows ${label}</span>
+    <label class="check"><input type="checkbox" class="only-flag" ${onlyFlagged ? "checked" : ""} /> Only these rows</label></div>
+  <div class="table-wrap">${table}</div></div>`;
+
+export function bindTable(root: HTMLElement) {
+  const box = root.querySelector<HTMLElement>(".segs-box"), cb = root.querySelector<HTMLInputElement>(".only-flag");
+  if (box && cb) cb.onchange = () => { onlyFlagged = cb.checked; box.classList.toggle("only", onlyFlagged); };
+}
+
+/** Real mode: one row per segment, top class (and the conformal set when it holds more than one label) per pipeline. */
 export function segmentTable(res: InferResult, m: ModelInfo, names: string[]) {
   const segs = res.pipelines[names[0]].segments;
   const truth = segs.some((s) => s.truth4);
   const cf = conformalOn();
   const head = `<tr><th>#</th><th>Time</th>${truth ? "<th>Annotated</th>" : ""}${names.map((n) =>
-    `<th colspan="${cf ? 2 : 1}">${esc(res.pipelines[n].label)} ${pipelineTag(m, n)}</th>`).join("")}${names.length === 2 ? "<th></th>" : ""}</tr>`;
+    `<th>${esc(res.pipelines[n].label)} ${pipelineTag(m, n)}</th>`).join("")}<th></th></tr>`;
+  let flagged = 0;
   const body = segs.map((s, i) => {
-    const cells = names.map((n) => {
-      const q = res.pipelines[n].segments[i];
-      return `<td><i class="sw c4-${q.pred4}"></i>${CLASS_LABEL[q.pred4]} <span class="num muted">${pct(q.probs4[q.pred4])}</span></td>
-        ${cf ? `<td class="sets">${setChips(q.set4, m.classes)}</td>` : ""}`;
-    }).join("");
-    const d = names.length === 2 ? `<td>${flip(res.pipelines[names[0]].segments[i].pred4, res.pipelines[names[1]].segments[i].pred4)}</td>` : "";
-    return `<tr data-i="${i}"><td class="num">${i + 1}</td><td class="num">${s.start.toFixed(2)}–${s.end.toFixed(2)}</td>
-      ${truth ? `<td>${s.truth4 ? `<i class="sw c4-${s.truth4}"></i>${CLASS_LABEL[s.truth4]}` : ""}</td>` : ""}${cells}${d}</tr>`;
+    const qs = names.map((n) => res.pipelines[n].segments[i]);
+    const miss = qs.map((q) => !!s.truth4 && q.pred4 !== s.truth4);
+    const differs = qs.some((q) => q.pred4 !== qs[0].pred4);
+    const flag = miss.some(Boolean) || differs;
+    if (flag) flagged++;
+    return `<tr data-i="${i}"${flag ? ' data-flag="1"' : ""}><td class="num">${i + 1}</td><td class="num">${s.start.toFixed(2)}–${s.end.toFixed(2)}</td>
+      ${truth ? `<td>${s.truth4 ? `<i class="sw c4-${s.truth4}"></i>${CLASS_LABEL[s.truth4]}` : ""}</td>` : ""}${qs.map((q, k) => top(q, cf, miss[k])).join("")}
+      <td class="flag">${differs ? `<span class="flip">differs</span>` : ""}</td></tr>`;
   }).join("");
-  return `<div class="table-wrap"><table class="segs"><thead>${head}</thead><tbody>${body}</tbody></table></div>`;
+  return tableBox(flagged, segs.length, truth ? "differ from the annotation or between pipelines" : "differ between pipelines",
+    `<table class="segs"><thead>${head}</thead><tbody>${body}</tbody></table>`);
 }
 
 export function agreement(a: Segment[], b: Segment[]) {
@@ -193,32 +231,33 @@ export function agreement(a: Segment[], b: Segment[]) {
   };
 }
 
-/** Demo mode: reference vs microphone, per pipeline summary and per-cycle rows. */
-export function comparison(ref: InferResult, mic: InferResult, m: ModelInfo, name: string) {
+/** Demo mode: summary tiles, then one row per cycle with the reference and the microphone result. */
+export function comparison(ref: InferResult, mic: InferResult, name: string) {
   const R = ref.pipelines[name], M = mic.pipelines[name];
   const a = agreement(R.segments, M.segments);
   const cf = conformalOn();
-  const tri = (r: PipelineResult) => !cf
-    ? `<span class="triage small ${r.recording.p_abnormal >= 0.5 ? "t-refer" : "t-no_referral"}">${r.recording.p_abnormal >= 0.5 ? "Abnormal" : "Normal"}</span>`
-    : `<span class="triage small t-${r.recording.triage}">${TRIAGE[r.recording.triage][0]}</span>`;
+  const word = (r: PipelineResult) => (cf ? TRIAGE[r.recording.triage][0] : r.recording.p_abnormal >= 0.5 ? "Abnormal" : "Normal");
   const truth = R.segments.some((s) => s.truth4);
+  const tile = (label: string, big: string, sub = "") => `<div><dt>${label}</dt><dd class="num">${big}</dd>${sub ? `<dd class="muted">${sub}</dd>` : ""}</div>`;
   const stats = `<dl class="stats">
-      <div><dt>Top class changed</dt><dd class="num">${a.flip4} / ${a.n}</dd><dd class="muted">cycles (flip rate ${pct(a.flip4 / a.n)})</dd></div>
-      <div><dt>Normal ↔ abnormal changed</dt><dd class="num">${a.flip2} / ${a.n}</dd></div>
-      ${cf ? `<div><dt>Conformal set changed</dt><dd class="num">${a.setChange} / ${a.n}</dd><dd class="muted">mean size ${a.size(R.segments).toFixed(2)} → ${a.size(M.segments).toFixed(2)}</dd></div>` : ""}
-      ${truth ? `<div><dt>Matches annotation</dt><dd class="num">${a.correct(R.segments)} → ${a.correct(M.segments)}</dd><dd class="muted">of ${a.n} cycles</dd></div>` : ""}
-      <div><dt>Recording screening</dt><dd>${tri(R)} → ${tri(M)}</dd><dd class="muted num">p(abn.) ${R.recording.p_abnormal.toFixed(3)} → ${M.recording.p_abnormal.toFixed(3)}</dd></div>
+      ${tile("Top class changed", `${a.flip4}<small> of ${a.n}</small>`, `flip rate ${pct(a.flip4 / a.n)}`)}
+      ${tile("Normal vs abnormal changed", `${a.flip2}<small> of ${a.n}</small>`)}
+      ${cf ? tile("Conformal set changed", `${a.setChange}<small> of ${a.n}</small>`, `mean size ${a.size(R.segments).toFixed(2)} → ${a.size(M.segments).toFixed(2)}`) : ""}
+      ${truth ? tile("Matches annotation", `${a.correct(R.segments)} → ${a.correct(M.segments)}`, `of ${a.n} cycles`) : ""}
+      <div><dt>Recording screening</dt><dd class="lines"><span>Reference <b>${word(R)}</b> <span class="num muted">p ${R.recording.p_abnormal.toFixed(3)}</span></span>
+        <span>Microphone <b>${word(M)}</b> <span class="num muted">p ${M.recording.p_abnormal.toFixed(3)}</span></span></dd></div>
     </dl>`;
+  let changed = 0;
   const rows = R.segments.map((s, i) => {
     const q = M.segments[i];
-    return `<tr data-i="${i}"><td class="num">${i + 1}</td><td class="num">${s.start.toFixed(2)}–${s.end.toFixed(2)}</td>
+    const flag = s.pred4 !== q.pred4;
+    if (flag) changed++;
+    return `<tr data-i="${i}"${flag ? ' data-flag="1"' : ""}><td class="num">${i + 1}</td><td class="num">${s.start.toFixed(2)}–${s.end.toFixed(2)}</td>
       ${truth ? `<td>${s.truth4 ? `<i class="sw c4-${s.truth4}"></i>${CLASS_LABEL[s.truth4]}` : ""}</td>` : ""}
-      <td><i class="sw c4-${s.pred4}"></i>${CLASS_LABEL[s.pred4]} <span class="num muted">${pct(s.probs4[s.pred4])}</span></td>${cf ? `<td class="sets">${setChips(s.set4, m.classes)}</td>` : ""}
-      <td><i class="sw c4-${q.pred4}"></i>${CLASS_LABEL[q.pred4]} <span class="num muted">${pct(q.probs4[q.pred4])}</span></td>${cf ? `<td class="sets">${setChips(q.set4, m.classes)}</td>` : ""}
-      <td>${flip(s.pred4, q.pred4)}</td></tr>`;
+      ${top(s, cf)}${top(q, cf, flag)}<td class="flag">${flag ? `<span class="flip">changed</span>` : ""}</td></tr>`;
   }).join("");
-  return `${stats}<div class="table-wrap"><table class="segs"><thead><tr><th>#</th><th>Time</th>${truth ? "<th>Annotated</th>" : ""}
-    <th colspan="${cf ? 2 : 1}" class="ref">Reference</th><th colspan="${cf ? 2 : 1}" class="mic">Microphone</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>`;
+  return `${stats}${tableBox(changed, a.n, "changed their top class",
+    `<table class="segs"><thead><tr><th>#</th><th>Time</th>${truth ? "<th>Annotated</th>" : ""}<th>Reference</th><th>Microphone</th><th></th></tr></thead><tbody>${rows}</tbody></table>`)}`;
 }
 
 /** Radio-style segmented control: arrow keys move the selection, `html` is trusted markup. */
@@ -252,3 +291,17 @@ export function errorBox(e: any) {
 }
 
 export const truthOf = (segs: Segment[]) => segs.filter((s) => s.truth4).map((s) => ({ start: s.start, end: s.end, label: s.truth4 as Class4 }));
+
+/** Shows the text of every `[data-tip]` element in the page tooltip on hover and keyboard focus. */
+export function bindTips(root: HTMLElement) {
+  const tip = document.getElementById("tooltip")!;
+  root.querySelectorAll<HTMLElement>("[data-tip]").forEach((e) => {
+    const show = () => {
+      const r = e.getBoundingClientRect();
+      tip.innerHTML = esc(e.dataset.tip!); tip.hidden = false;
+      tip.style.left = `${Math.max(8, Math.min(r.left, innerWidth - tip.offsetWidth - 8))}px`; tip.style.top = `${r.bottom + 8}px`;
+    };
+    e.addEventListener("pointerenter", show); e.addEventListener("focus", show);
+    e.addEventListener("pointerleave", () => (tip.hidden = true)); e.addEventListener("blur", () => (tip.hidden = true));
+  });
+}
