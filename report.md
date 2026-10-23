@@ -562,6 +562,8 @@ PAFA alone (Sp and Se in points). Best epoch on test = every member at its own b
 | E1+E3, SC static | 63.4 ± 0.4 | +0.6 / +1.6 | 62.4 ± 0.8 | +1.2 / +2.9 | 87.8 / 34.3 | 66.1 ± 0.5 (85.6 / 46.5) |
 | E1+E2+E3, SC static | 63.1 ± 0.5 | +0.4 / +1.1 | 62.1 ± 0.6 | +1.0 / +2.5 | 86.9 / 31.8 | 65.8 ± 0.4 (86.1 / 45.6) |
 | E2+E3, SC static | 60.8 ± 0.9 | -1.5 / -1.4 | 60.3 ± 0.6 | -0.1 / +0.1 | 84.8 / 26.8 | 64.3 ± 0.5 (82.9 / 45.7) |
+| BEATs PAFA alone, trained SC dynamic | 62.0 ± 0.5 | | 57.9 ± 1.6 | | 88.5 / 34.2 | 63.9 ± 0.3 (81.6 / 46.2) |
+| E1 BEATs, SC dynamic | 64.3 ± 0.5 | +1.8 / +2.9 | 59.9 ± 1.5 | +1.1 / +3.0 | 88.5 / 33.6 | 65.6 ± 1.1 (82.0 / 49.3) |
 
 - [Fact] With `k rate`, E1, E1+E3 and E1+E2+E3 keep PAFA's Sp (dSp +0.4 to +1.4) and raise Se on both splits (official
   +1.1 to +2.3, LODO macro +2.4 to +3.1); best: E1+E3, LODO Score +2.1 (no SC: 60.9; trained SC: 62.4).
@@ -570,6 +572,9 @@ PAFA alone (Sp and Se in points). Best epoch on test = every member at its own b
 - [Fact] Litt3200 is the exception: no ensemble raises Se there at PAFA's Sp, except E1 with trained SC (36.0 vs 34.8).
 - [Fact] Best epoch on test [optimistic]: E1+E3 65.8 ± 0.7 (no SC) and 66.1 ± 0.5 (trained SC); published BEATs PC-MCL
   65.37 ± 0.73 on the same rule. The test-picked epochs raise Sp, not Se.
+- [Fact] E1 with SC dynamic (23/10; d vs PAFA + SC dynamic): best official-split Score of any configuration (64.3 ± 0.5),
+  but LODO macro 59.9 vs 62.0 for E1 with SC static: the dynamic bound fits the official split, the static bound unseen
+  devices (detailed report, section 6).
 - [Assumption] `k rate` needs a batch of unlabelled target cycles and PAFA running beside the ensemble; its behaviour with
   few cycles is not measured.
 
@@ -587,6 +592,7 @@ Official split = last epoch, 5 seeds; LODO = macro Score over the 4 held-out dev
 | BEATs SG-SCL + trained SC dynamic | 62.8 ± 1.4 | 59.5 ± 0.8 | 60.2 ± 5.3 | stage 8; best official-split single cell |
 | BEATs PAFA + PC-MCL + trained SC static | 61.8 ± 0.2 | 60.7 ± 1.5 | 59.5 ± 4.2 | stage 8; best LODO macro, smallest sets |
 | E1 BEATs ensemble + trained SC static, `k rate` | 63.4 ± 0.5 | 62.0 ± 0.6 | 62.2 | stage 9; 3 models, keeps PAFA's Sp |
+| E1 BEATs ensemble + trained SC dynamic, `k rate` | 64.3 ± 0.5 | 59.9 ± 1.5 | 61.1 | stage 9; best official split, weaker LODO |
 
 [Interpretation] The differences between the BEATs candidates are within one seed SD on every axis; BEATs PAFA + trained
 SC is the only one that is first or close to first on all three.

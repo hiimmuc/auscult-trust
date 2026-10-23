@@ -369,3 +369,71 @@ Regenerate: `PYTHONPATH=. .venv-train/bin/python scripts/ensemble_sesp.py` (CPU,
   Se 49.7): this column raises Score, not Se. Published BEATs PC-MCL (best epoch on test): 65.37 ± 0.73.
 - [Assumption] `k rate` needs a batch of unlabelled cycles from the target device (as SC does) and runs PAFA next to the
   ensemble; with few cycles the rate estimate is noisy (not measured here). Exploratory, as section 4.
+
+## 6. E1 with trained SC dynamic (23/10)
+
+Regenerate: `PYTHONPATH=. .venv-train/bin/python scripts/ensemble_e1_dynamic.py`. Only E1 (BEATs PAFA, SG-SCL, Patch-Mix
+CL) has SC dynamic units (stage 8); reference = BEATs PAFA alone with SC dynamic, rules as in section 5.
+
+### Official split, trained SC dynamic (last epoch, 5 seeds; d = paired vs BEATs PAFA trained SC dynamic)
+
+| Ensemble | Sp | Se | Score | HS | Worst-dev Score | Cov | Worst-dev Cov | Set size | dScore | dWorst-dev Score |
+|---|---|---|---|---|---|---|---|---|---|---|
+| BEATs PAFA alone (reference) | 77.7 ± 0.8 | 46.3 ± 0.5 | 62.0 ± 0.5 | 58.0 ± 0.4 | 59.3 ± 0.7 | 89.8 ± 0.3 | 86.8 ± 0.9 | 2.24 ± 0.10 | +0.0 ± 0.0 | +0.0 ± 0.0 |
+| E1 BEATs (equal) | 77.4 ± 2.0 | 50.6 ± 0.6 | 64.0 ± 0.7 | 61.2 ± 0.3 | 61.5 ± 1.0 | 89.4 ± 0.2 | 86.9 ± 0.2 | 2.06 ± 0.06 | +2.0 ± 0.7 | +2.2 ± 0.5 |
+| E1 BEATs (fit*) | 76.8 ± 2.2 | 50.6 ± 0.9 | 63.7 ± 0.7 | 61.0 ± 0.2 | 60.8 ± 1.2 | 89.4 ± 0.2 | 86.8 ± 0.2 | 2.06 ± 0.06 | +1.8 ± 0.8 | +1.5 ± 0.7 |
+
+### LODO v1, trained SC dynamic (Score per held-out device, mean of 5 seeds; macro = mean over the 4 folds per seed)
+
+| Ensemble | Meditron | LittC2SE | Litt3200 | AKGC417L | Macro Score | dMacro vs ref | dLitt3200 vs ref | Litt3200 Sp / Se | Macro abs(Delta) | Macro set size |
+|---|---|---|---|---|---|---|---|---|---|---|
+| BEATs PAFA alone (reference) | 53.5 | 61.2 | 61.3 | 55.4 | 57.9 ± 1.6 | +0.0 ± 0.0 | +0.0 ± 0.0 | 88.5 / 34.2 | 0.038 | 2.33 |
+| E1 BEATs (equal) | 57.1 | 64.6 | 62.2 | 57.3 | 60.3 ± 1.3 | +2.4 ± 0.7 | +0.9 ± 3.1 | 83.7 / 40.7 | 0.046 | 2.43 |
+| E1 BEATs (fit) | 57.0 | 64.1 | 61.4 | 57.6 | 60.0 ± 1.1 | +2.2 ± 0.7 | +0.0 ± 3.6 | 82.5 / 40.3 | 0.044 | 2.40 |
+
+### Fitted member weights, trained SC dynamic (mean ± SD over 4 folds x 5 seeds)
+
+| Ensemble | Weights |
+|---|---|
+| E1 BEATs | beats+ft+pafa 0.22 ± 0.09, beats+ft+sg_scl 0.42 ± 0.09, beats+ft+patchmix_cl 0.36 ± 0.08 |
+
+### Official split, trained SC dynamic (5 seeds; d = paired vs BEATs PAFA alone with the same rule)
+
+| Ensemble (rule) | Sp | Se | Score | HS | Worst-dev Score | dSp | dSe | dScore |
+|---|---|---|---|---|---|---|---|---|
+| BEATs PAFA alone (last, k = 1) | 77.7 ± 0.8 | 46.3 ± 0.5 | 62.0 ± 0.5 | 58.0 ± 0.4 | 59.3 ± 0.7 | 0.0 ± 0.0 | 0.0 ± 0.0 | 0.0 ± 0.0 |
+| BEATs PAFA alone (last, k*) | 77.5 ± 0.8 | 46.6 ± 0.5 | 62.0 ± 0.5 | 58.2 ± 0.4 | 59.3 ± 0.8 | 0.0 ± 0.0 | 0.0 ± 0.0 | 0.0 ± 0.0 |
+| BEATs PAFA alone (last, k rate) | 77.7 ± 0.8 | 46.3 ± 0.5 | 62.0 ± 0.5 | 58.0 ± 0.4 | 59.3 ± 0.7 | 0.0 ± 0.0 | 0.0 ± 0.0 | 0.0 ± 0.0 |
+| BEATs PAFA alone (last, k test [optimistic]) | 77.7 ± 0.8 | 46.3 ± 0.5 | 62.0 ± 0.5 | 58.0 ± 0.4 | 59.3 ± 0.7 | 0.0 ± 0.0 | 0.0 ± 0.0 | 0.0 ± 0.0 |
+| BEATs PAFA alone (best epoch on test [optimistic]) | 81.6 ± 1.1 | 46.2 ± 1.6 | 63.9 ± 0.3 | 59.0 ± 1.0 | 59.5 ± 2.8 | 0.0 ± 0.0 | 0.0 ± 0.0 | 0.0 ± 0.0 |
+| E1 BEATs (last, k = 1) | 77.4 ± 2.0 | 50.6 ± 0.6 | 64.0 ± 0.7 | 61.2 ± 0.3 | 61.5 ± 1.0 | -0.3 ± 1.6 | 4.4 ± 0.9 | 2.0 ± 0.7 |
+| E1 BEATs (last, k*) | 75.4 ± 2.1 | 52.0 ± 0.9 | 63.7 ± 0.7 | 61.5 ± 0.4 | 61.4 ± 1.4 | -2.1 ± 1.7 | 5.4 ± 1.0 | 1.7 ± 0.8 |
+| E1 BEATs (last, k rate) | 79.5 ± 0.9 | 49.1 ± 0.5 | 64.3 ± 0.5 | 60.7 ± 0.4 | 61.7 ± 1.2 | 1.8 ± 0.6 | 2.9 ± 0.4 | 2.4 ± 0.5 |
+| E1 BEATs (last, k test [optimistic]) | 77.7 ± 0.8 | 50.7 ± 0.8 | 64.2 ± 0.4 | 61.4 ± 0.5 | 62.0 ± 1.0 | 0.0 ± 0.0 | 4.4 ± 0.9 | 2.2 ± 0.5 |
+| E1 BEATs (best epoch on test [optimistic]) | 82.0 ± 0.3 | 49.3 ± 2.2 | 65.6 ± 1.1 | 61.5 ± 1.7 | 61.4 ± 3.2 | 0.4 ± 1.3 | 3.1 ± 2.4 | 1.7 ± 1.1 |
+
+### LODO v1, trained SC dynamic (macro over the 4 held-out devices per seed; d = paired vs BEATs PAFA alone, k = 1)
+
+| Ensemble (rule) | Macro Sp | Macro Se | Macro Score | dSp | dSe | dScore | Litt3200 Sp / Se / Score | AKGC417L Sp / Se / Score |
+|---|---|---|---|---|---|---|---|---|
+| BEATs PAFA alone (k = 1) | 81.0 ± 2.0 | 34.7 ± 2.6 | 57.9 ± 1.6 | 0.0 ± 0.0 | 0.0 ± 0.0 | 0.0 ± 0.0 | 88.5 / 34.2 / 61.3 | 90.3 / 20.5 / 55.4 |
+| BEATs PAFA alone (k cal) | 80.9 ± 2.0 | 34.8 ± 2.8 | 57.9 ± 1.6 | -0.1 ± 0.1 | 0.1 ± 0.1 | -0.0 ± 0.0 | 88.4 / 34.3 / 61.4 | 89.9 / 20.9 / 55.4 |
+| BEATs PAFA alone (k rate) | 81.0 ± 2.0 | 34.7 ± 2.6 | 57.9 ± 1.6 | 0.0 ± 0.0 | 0.0 ± 0.0 | 0.0 ± 0.0 | 88.5 / 34.2 / 61.3 | 90.3 / 20.5 / 55.4 |
+| BEATs PAFA alone (k test [optimistic]) | 81.0 ± 2.0 | 34.8 ± 2.6 | 57.9 ± 1.6 | 0.0 ± 0.0 | 0.0 ± 0.1 | 0.0 ± 0.1 | 88.5 / 34.3 / 61.4 | 90.3 / 20.6 / 55.5 |
+| E1 BEATs (k = 1) | 81.3 ± 3.6 | 39.3 ± 3.1 | 60.3 ± 1.3 | 0.3 ± 2.1 | 4.6 ± 1.1 | 2.4 ± 0.7 | 83.7 / 40.7 / 62.2 | 91.4 / 23.3 / 57.3 |
+| E1 BEATs (k cal) | 79.5 ± 4.5 | 41.3 ± 4.1 | 60.4 ± 1.2 | -1.5 ± 2.8 | 6.6 ± 2.6 | 2.5 ± 0.7 | 81.2 / 44.8 / 63.0 | 91.1 / 23.3 / 57.2 |
+| E1 BEATs (k rate) | 82.1 ± 2.0 | 37.7 ± 2.2 | 59.9 ± 1.5 | 1.1 ± 0.6 | 3.0 ± 1.5 | 2.1 ± 1.0 | 88.5 / 33.6 / 61.1 | 92.0 / 22.1 / 57.0 |
+| E1 BEATs (k test [optimistic]) | 81.0 ± 2.0 | 38.8 ± 2.3 | 59.9 ± 1.3 | 0.0 ± 0.0 | 4.1 ± 2.1 | 2.0 ± 1.1 | 88.5 / 33.2 / 60.9 | 90.3 / 24.6 / 57.5 |
+
+### 6.1 Findings
+
+- [Fact] E1 with SC dynamic has the best official-split last-epoch Score of any configuration: 64.3 ± 0.5 with `k rate`
+  (Sp +1.8 ± 0.6, Se +2.9 ± 0.4 vs PAFA + SC dynamic; worst device 61.7), 64.0 ± 0.7 with plain argmax (Se +4.4).
+  Against E1 with SC static and `k rate` (63.4 ± 0.5): +0.9.
+- [Fact] In LODO it is weaker than E1 with SC static: macro 59.9 ± 1.5 with `k rate` (60.3 plain argmax) vs 62.0 ± 0.6;
+  on Litt3200 `k rate` holds Sp (88.5) but Se stays at PAFA's level (33.6). The dynamic bound's LODO loss on Meditron
+  (stage 8) carries into the ensemble.
+- [Fact] Fitted weights again do not beat equal weights (official 63.7 vs 64.0, LODO 60.0 vs 60.3).
+- [Fact] Best epoch on test [optimistic]: 65.6 ± 1.1 (E1 with SC static: 65.8 ± 0.5).
+- [Interpretation] SC dynamic suits the official split, SC static suits unseen devices; for a device-shift claim E1 with
+  SC static stays the stronger ensemble.
