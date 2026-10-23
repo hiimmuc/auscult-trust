@@ -13,8 +13,9 @@ from fastapi.testclient import TestClient
 
 from api import engine, main
 
+SAMPLE = {"id": "s1", "class": "normal", "file": "samples/s1.wav", "device": "Meditron", "cycles": []}
 MANIFEST = {"classes": ["normal", "crackle", "wheeze", "both"], "classes2": ["normal", "abnormal"], "devices": ["Meditron", "Litt3200"],
-            "alpha": 0.1, "preprocessing": {}, "pipelines": {}, "samples": []}
+            "alpha": 0.1, "preprocessing": {}, "pipelines": {}, "samples": [SAMPLE]}
 
 
 class Stub:
@@ -52,6 +53,9 @@ def stub_client(tmp_path, monkeypatch):
     monkeypatch.setattr(main, "BUNDLE", tmp_path)
     monkeypatch.setattr(engine, "Engine", Stub)
     monkeypatch.setattr(main, "TOKEN", "")
+    monkeypatch.setattr(main, "AUTH", "auto")
+    monkeypatch.setattr(main, "RATE_LIMIT", 0)
+    monkeypatch.setattr(main, "SAMPLES", "on")
     with TestClient(main.app) as c:
         yield c
 
@@ -133,3 +137,30 @@ def test_token_and_cors(stub_client, monkeypatch):
                                           "Access-Control-Request-Headers": "authorization"})
     assert pre.headers["access-control-allow-origin"] == origin
     assert "access-control-allow-origin" not in c.get("/v1/health", headers={"Origin": "https://evil.example"}).headers
+
+
+def test_auth_off_ignores_the_token(stub_client, monkeypatch):
+    monkeypatch.setattr(main, "TOKEN", "s3cret")
+    monkeypatch.setattr(main, "AUTH", "off")
+    assert stub_client.get("/v1/model").status_code == 200 and upload(stub_client).status_code == 200
+
+
+def test_rate_limit(stub_client, monkeypatch):
+    monkeypatch.setattr(main, "RATE_LIMIT", 2)
+    main.hits.clear()
+    assert [upload(stub_client, device="Meditron").status_code for _ in range(2)] == [200, 200]
+    r = upload(stub_client)
+    assert r.status_code == 429 and r.json()["error"]["code"] == "rate_limited"
+    assert stub_client.get("/v1/model").status_code == 200  # only inference is limited
+    main.hits.clear()
+
+
+def test_samples_switch(tmp_path, monkeypatch):
+    (tmp_path / "manifest.json").write_text(json.dumps(MANIFEST))
+    monkeypatch.setattr(main, "BUNDLE", tmp_path)
+    monkeypatch.setattr(engine, "Engine", Stub)
+    for mode, n in (("on", 1), ("off", 0)):
+        monkeypatch.setattr(main, "SAMPLES", mode)
+        with TestClient(main.app) as c:
+            assert len(c.get("/v1/samples").json()["samples"]) == n
+            assert (c.get("/v1/samples/s1/result").status_code == 404) == (n == 0)  # off: unknown sample

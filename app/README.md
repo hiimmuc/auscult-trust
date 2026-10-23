@@ -41,7 +41,10 @@ Order: configuration, API host, Tailscale Funnel, Cloudflare Pages, then (option
 
 | Variable | Where | Meaning |
 | --- | --- | --- |
-| `AT_APP_TOKEN` | API | access token every route except `/v1/health` needs. Generate: `python -c "import secrets; print(secrets.token_urlsafe(24))"`. Empty means no auth: never leave it empty on a public API |
+| `AT_APP_AUTH` | API | `auto` (default), `on` or `off`. `auto` enforces the token when `AT_APP_TOKEN` is set and leaves the API open when it is not. `on` always enforces and the API refuses to start without a token. `off` leaves every route open even if a token is set. `/v1/health` is always open |
+| `AT_APP_TOKEN` | API | the access token, sent as `Authorization: Bearer <token>`. Generate: `python -c "import secrets; print(secrets.token_urlsafe(24))"` |
+| `AT_APP_RATE_LIMIT` | API | inference requests per minute, all clients together, on `/v1/infer` and sample results; the next one gets 429 `rate_limited`. `0` (default) is unlimited. Not per client: behind a tunnel every request comes from the proxy |
+| `AT_APP_SAMPLES` | API | `on` (default) or `off`. `off` serves no demo samples (the ICBHI recordings) and Demo mode shows "This server has no demo samples" |
 | `AT_APP_ORIGINS` | API | comma-separated CORS origins: the Pages origin, exact, no trailing slash, plus `http://localhost:5173,http://127.0.0.1:5173` for local development |
 | `AT_APP_BUNDLE` | API | bundle directory (default `app/bundle`) |
 | `VITE_API_BASE` | web build | the primary API's URL, read at build time (the saved connection in the browser wins) |
@@ -49,10 +52,12 @@ Order: configuration, API host, Tailscale Funnel, Cloudflare Pages, then (option
 | `AT_WEIGHTS_REPO`, `HF_TOKEN` | Hugging Face Space | private weights repo and a read token for it (section 5) |
 
 ```bash
-cp app/deploy/env.example app/deploy/.env      # git-ignored; set AT_APP_TOKEN and AT_APP_ORIGINS
+cp app/deploy/env.example app/deploy/.env      # git-ignored; set AT_APP_TOKEN (or AT_APP_AUTH=off) and AT_APP_ORIGINS
 ```
 
 The token is typed into the page's connection dialog; it is never part of the web build.
+
+**Running without a token.** Set `AT_APP_AUTH=off` (or leave `AT_APP_TOKEN` out) and leave the page's token field empty. On a public Funnel URL that means anyone who finds it can call `/v1/infer` on your GPU, and read the demo recordings unless `AT_APP_SAMPLES=off`. CORS does not stop `curl`. If you go open, also set `AT_APP_SAMPLES=off` (the ICBHI terms for serving the recordings are unconfirmed) and a rate limit such as `AT_APP_RATE_LIMIT=20`. The API already queues at most 4 requests (the 5th gets 429 `busy`) and cuts a request at 120 s.
 
 ### 2. API host (this machine)
 
@@ -191,7 +196,7 @@ Inference response (abridged):
 
 `cached` is true when the answer came from the API's result cache (same file and settings); `alignment` appears only with `reference_sample`; `truth4`/`truth2` only when the cycles carry labels (demo samples, annotation upload). Times are seconds on the input recording (after alignment for microphone takes).
 
-Validation (server; the web app checks the same limits before upload): RIFF/WAVE header, decodable by libsndfile, 1-2 channels, 4-48 kHz, 2-90 s, at most 40 MB, finite samples, not silent (peak above -80 dBFS). Every route except health answers 503 `model_unavailable` while the status is `unavailable`; no prediction is ever produced without the model. Error codes: `model_unavailable` (503), `internal` (500, inference crashed; details only in the server log), `not_wav`, `unreadable`, `channels`, `sample_rate`, `duration`, `non_finite`, `silent`, `too_large`, `bad_device`, `bad_cycles`, `bad_annotation`, `bad_window`, `unknown_sample`, `unauthorized`, `busy` (more than 4 requests waiting, 429), `timeout` (120 s, 504).
+Validation (server; the web app checks the same limits before upload): RIFF/WAVE header, decodable by libsndfile, 1-2 channels, 4-48 kHz, 2-90 s, at most 40 MB, finite samples, not silent (peak above -80 dBFS). Every route except health answers 503 `model_unavailable` while the status is `unavailable`; no prediction is ever produced without the model. Error codes: `model_unavailable` (503), `rate_limited` (429), `internal` (500, inference crashed; details only in the server log), `not_wav`, `unreadable`, `channels`, `sample_rate`, `duration`, `non_finite`, `silent`, `too_large`, `bad_device`, `bad_cycles`, `bad_annotation`, `bad_window`, `unknown_sample`, `unauthorized`, `busy` (more than 4 requests waiting, 429), `timeout` (120 s, 504).
 
 Inference runs in a worker thread behind one lock (one GPU, shared with training jobs), so the event loop keeps answering. Results are cached by audio SHA-256 and parameters (last 64).
 

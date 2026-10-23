@@ -6,9 +6,14 @@ Without a bundle or checkpoints the service still starts: `/v1/health` says `una
 and every route that needs the model answers 503 `model_unavailable`. It never returns a prediction it did not compute.
 
 Environment:
-    AT_APP_BUNDLE   bundle directory from `api.bundle` (default app/bundle)
-    AT_APP_TOKEN    shared access token; when set, every /v1 route except /v1/health needs `Authorization: Bearer <token>`
-    AT_APP_ORIGINS  comma-separated CORS origins (default: the Vite dev server on localhost and 127.0.0.1)
+    AT_APP_BUNDLE      bundle directory from `api.bundle` (default app/bundle)
+    AT_APP_AUTH        on | off | auto (default). Authentication of every /v1 route except /v1/health, with
+                       `Authorization: Bearer <AT_APP_TOKEN>`. auto: enforced when AT_APP_TOKEN is set. on: enforced, the
+                       API refuses to start without a token. off: open, even if a token is set
+    AT_APP_TOKEN       the shared access token
+    AT_APP_RATE_LIMIT  inference requests (/v1/infer and sample results) per minute, all clients together; 0 = unlimited (default)
+    AT_APP_SAMPLES     on (default) | off: off serves no demo samples (the ICBHI recordings) and turns Demo mode off
+    AT_APP_ORIGINS     comma-separated CORS origins (default: the Vite dev server on localhost and 127.0.0.1)
 """
 
 import asyncio
@@ -19,7 +24,7 @@ import logging
 import os
 import time
 import uuid
-from collections import OrderedDict
+from collections import OrderedDict, deque
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -34,6 +39,11 @@ log = logging.getLogger("uvicorn.error")
 
 BUNDLE = Path(os.environ.get("AT_APP_BUNDLE", "app/bundle"))
 TOKEN = os.environ.get("AT_APP_TOKEN", "")
+AUTH = os.environ.get("AT_APP_AUTH", "auto")
+RATE_LIMIT = int(os.environ.get("AT_APP_RATE_LIMIT", "0"))
+SAMPLES = os.environ.get("AT_APP_SAMPLES", "on")
+if AUTH not in ("on", "off", "auto") or SAMPLES not in ("on", "off") or (AUTH == "on" and not TOKEN):
+    raise RuntimeError("Bad config: AT_APP_AUTH is on|off|auto (on needs AT_APP_TOKEN), AT_APP_SAMPLES is on|off.")
 ORIGINS = [o.strip() for o in os.environ.get("AT_APP_ORIGINS", "http://localhost:5173,http://127.0.0.1:5173").split(",") if o.strip()]
 MAX_BYTES = 40 * 1024 * 1024
 MAX_PENDING = 4  # requests waiting for or holding the model; more get 429
@@ -63,7 +73,7 @@ async def lifespan(app):
     try:
         manifest = json.loads((BUNDLE / "manifest.json").read_text())
         state.update(manifest=manifest, engine=E.Engine(manifest, BUNDLE), unavailable=None,
-                     samples={s["id"]: s for s in manifest["samples"]})
+                     samples={s["id"]: s for s in manifest["samples"]} if SAMPLES == "on" else {})
     except Exception as e:
         log.exception("model not loaded")
         state["unavailable"] = ("No model bundle found." if isinstance(e, FileNotFoundError) and "manifest" in str(e)
@@ -95,11 +105,25 @@ async def audio_error(request: Request, e: E.AudioError):
 
 
 def auth(request: Request):
-    if not TOKEN:
+    if AUTH == "off" or (AUTH == "auto" and not TOKEN):
         return
     got = request.headers.get("authorization", "")
     if not hmac.compare_digest(got.encode(), "Bearer {}".format(TOKEN).encode()):
         raise ApiError(401, "unauthorized", "Missing or wrong access token.")
+
+
+hits = deque()  # monotonic times of the inference requests in the last minute
+
+
+def rate_limit():
+    if not RATE_LIMIT:
+        return
+    now = time.monotonic()
+    while hits and now - hits[0] > 60:
+        hits.popleft()
+    if len(hits) >= RATE_LIMIT:
+        raise ApiError(429, "rate_limited", "More than {} inference requests a minute. Retry in {} s.".format(RATE_LIMIT, int(60 - (now - hits[0])) + 1))
+    hits.append(now)
 
 
 def ready():
@@ -199,7 +223,7 @@ def model():
 @app.get("/v1/samples", dependencies=[Depends(auth)])
 def samples():
     ready()
-    return {"samples": [{k: v for k, v in s.items() if k != "file"} for s in state["manifest"]["samples"]]}
+    return {"samples": [{k: v for k, v in s.items() if k != "file"} for s in state["samples"].values()]}
 
 
 @app.get("/v1/samples/{sid}/audio", dependencies=[Depends(auth)])
@@ -207,7 +231,7 @@ def sample_audio(sid: str):
     return FileResponse(BUNDLE / sample(sid)["file"], media_type="audio/wav")
 
 
-@app.get("/v1/samples/{sid}/result", dependencies=[Depends(auth)])
+@app.get("/v1/samples/{sid}/result", dependencies=[Depends(auth), Depends(rate_limit)])
 async def sample_result(request: Request, sid: str):
     s = sample(sid)
 
@@ -224,7 +248,7 @@ async def sample_result(request: Request, sid: str):
             "cached": hit, "timing_ms": round(1000 * (time.perf_counter() - t0))}
 
 
-@app.post("/v1/infer", dependencies=[Depends(auth)])
+@app.post("/v1/infer", dependencies=[Depends(auth), Depends(rate_limit)])
 async def infer(
     request: Request,
     file: UploadFile = File(..., description="WAV audio"),
