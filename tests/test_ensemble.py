@@ -36,3 +36,18 @@ def test_k_for_rate_calls_that_fraction_normal():
 
     p = np.random.default_rng(2).dirichlet(np.ones(4), 1000)
     assert abs((predict(p, k_for_rate(p, 0.6)) == 0).mean() - 0.6) < 0.01
+
+
+def test_frozen_ensemble_rejects_shuffled_patients(tmp_path):
+    import pytest
+    sys.path.insert(0, "scripts")
+    from final_ensembles import mean_exports
+
+    p = np.array([[0.7, 0.1, 0.1, 0.1], [0.1, 0.7, 0.1, 0.1]])
+    a, b = tmp_path / "a.npz", tmp_path / "b.npz"
+    np.savez(a, probs=p, patient=np.array(["a", "b"]))
+    np.savez(b, probs=p[::-1], patient=np.array(["b", "a"]))
+    out = tmp_path / "ensemble.npz"
+    with pytest.raises(AssertionError):
+        mean_exports([a, b], out, {"a": "hash-a", "b": "hash-b"})
+    assert not out.exists()
