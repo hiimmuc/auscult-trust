@@ -1,6 +1,6 @@
 """Build the serving bundle: frozen pipelines, conformal thresholds and the demo samples.
 
-    PYTHONPATH=. .venv-train/bin/python -m app.api.bundle [--out app/bundle]
+    PYTHONPATH=. .venv-train/bin/python -m api.bundle [--out app/bundle]
 
 The bundle is the only thing the API reads, so the model, the API and the web app can change independently.
 

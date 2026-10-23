@@ -1,17 +1,22 @@
 """End-to-end check of the API on the built bundle (needs the checkpoints and a GPU).
 
-    PYTHONPATH=. .venv-train/bin/python -m pytest -q app/api/test_api.py
+    PYTHONPATH=. .venv-train/bin/python -m pytest -q api/test_api.py
 """
 
 import io
 import json
 
 import numpy as np
+import pytest
 import soundfile as sf
+import torch
 from fastapi.testclient import TestClient
 from scipy.signal import butter, lfilter
 
-from app.api.server import BUNDLE, app
+from api.main import BUNDLE, app
+
+pytestmark = pytest.mark.skipif(not (BUNDLE / "manifest.json").exists() or not torch.cuda.is_available(),
+                                reason="needs the built bundle, its checkpoints and a GPU")
 
 
 def wav_bytes(x, sr):

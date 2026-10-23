@@ -139,7 +139,7 @@ export function mountDemo(root: HTMLElement, m: ModelInfo, ctx: () => AudioConte
         <span class="s-main">${esc(s.device)} · ${esc(s.chest_location)} <span class="muted">patient ${esc(s.patient.replace("icbhi_", ""))}</span></span>
         <span class="s-sub">${s.class_cycles} of ${s.cycles_total} cycles annotated ${CLASS_LABEL[cls].toLowerCase()}</span>
         <span class="s-bar" aria-hidden="true">${s.cycles.map((c) => `<i class="c4-${c.label}" style="flex:${(c.end - c.start).toFixed(2)}"></i>`).join("")}</span>
-      </label>`).join("") || `<p class="muted">No sample for this class.</p>`;
+      </label>`).join("") || `<p class="muted">${samples.length ? "No sample for this class." : "This server has no demo samples."}</p>`;
     root.querySelectorAll<HTMLInputElement>(".sample-list input").forEach((r) => (r.onchange = () => load(r.value)));
     if (list[0]) load(list[0].id);
   }

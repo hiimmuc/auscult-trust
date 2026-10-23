@@ -1,4 +1,4 @@
-"""Audio validation, preprocessing, inference and serialisation for the serving bundle (`app.api.bundle`).
+"""Audio validation, preprocessing, inference and serialisation for the serving bundle (`api.bundle`).
 
 Preprocessing follows training: mono, torchaudio resampling to 16 kHz, 1/16 s linear fade on the whole recording, every
 segment cut or repeat-padded to 8 s, SC (if the pipeline has it) on the 8 s waveform, Kaldi fbank, frozen model, softmax.
@@ -62,6 +62,11 @@ def read_wav(data):
     meta.update(peak_dbfs=round(20 * np.log10(peak), 1), clipped_share=round(float((np.abs(x) > 0.999).mean()), 5))
     return x, meta
 
+if not torch.cuda.is_available():
+    # ponytail: the training code moves models and tensors with .cuda(); on a CPU host that becomes a no-op. Slower (about 20x), same maths.
+    torch.nn.Module.cuda = lambda self, *a, **k: self
+    torch.Tensor.cuda = lambda self, *a, **k: self
+
 
 def to_model_rate(x, sr):
     """Resampled and faded (1, n) tensor at 16 kHz, as in training."""
@@ -115,6 +120,15 @@ def shift(x, lag):
     else:
         out[:, -k:] = x[:, : x.shape[1] + k]
     return out
+
+
+def align(ref16, take16):
+    """Shift the (1, n) `take16` onto the (1, m) `ref16` and cut or zero-pad it to m samples. Returns (take, lag_sec, peak_score)."""
+    lag, score = gcc_phat_lag(ref16[0].numpy(), take16[0].numpy())
+    take16 = shift(take16, lag)[:, : ref16.shape[1]]
+    if take16.shape[1] < ref16.shape[1]:
+        take16 = torch.nn.functional.pad(take16, (0, ref16.shape[1] - take16.shape[1]))
+    return take16, lag, score
 
 
 class Pipeline:
