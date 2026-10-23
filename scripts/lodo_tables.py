@@ -20,7 +20,13 @@ CELLS = ["ast+ft+ce", "ast+ft+pafa", "ast+ft+patchmix_cl", "htsat+ft+ce", "htsat
 SC = ["ast+ft+patchmix_cl", "ast+ft+pafa", "htsat+ft+patchmix_cl", "htsat+ft+sg_scl", "beats+ft+patchmix_cl", "beats+ft+pafa",
       "beats+ft+sg_scl"]
 ARMS = [("ttsc_static", "TT-SC static"), ("ttsc_dynamic", "TT-SC dynamic"), ("a2", "A2"), ("tta8", "TTA-EQ"),
-        ("sc+sc_static", "trained SC static")]
+        ("sc+sc_static", "trained SC static"), ("sc", "trained SC dynamic")]
+EXTRA = {"beats+ft+pafa": [("beats+ft+pafa_pcmcl+sc+sc_static", "PAFA + PC-MCL, trained SC static"),
+                           ("beats+ft+pafa_pcmcl+sc", "PAFA + PC-MCL, trained SC dynamic")]}
+OFFICIAL = ([(c, f"{c}+sc+sc_static", Path("outputs/train/grid-v1") / c) for c in SC]
+            + [(c, f"{c}+sc", Path("outputs/train/grid-v1") / c) for c in ["beats+ft+patchmix_cl", "beats+ft+pafa", "beats+ft+sg_scl"]]
+            + [("beats+ft+pafa_pcmcl", f"beats+ft+pafa_pcmcl{s}", Path("outputs/train/pcmcl-v1/beats+ft+pafa_pcmcl"))
+               for s in ("+sc+sc_static", "+sc")])
 DEV = DEVICES
 f1 = lambda x: f"{x:.1f}"
 
@@ -40,8 +46,9 @@ def macro(ps, key, devs=DEV):
     return np.array([np.mean([ps[s][d][key] for d in devs]) for s in sorted(ps)])
 
 
-units = collect(R, CELLS + [f"{c}+{a}" for c in CELLS for a, _ in ARMS], DEV, range(5))
-P = {a: per_seed(units, a) for a in CELLS + [f"{c}+{a}" for c in CELLS for a, _ in ARMS]}
+ALL = CELLS + [f"{c}+{a}" for c in CELLS for a, _ in ARMS] + [a for v in EXTRA.values() for a, _ in v]
+units = collect(R, ALL, DEV, range(5))
+P = {a: per_seed(units, a) for a in ALL}
 P = {a: v for a, v in P.items() if v}
 noakg = [d for d in DEV if d != "AKGC417L"]
 
@@ -66,10 +73,10 @@ print("| Cell | Arm | dScore macro | dScore Litt3200 | dCov Litt3200 | d|Delta| 
 print("|---|---|---|---|---|---|---|---|")
 for c in CELLS:
     b = P[c]
-    for a, name in ARMS:
-        if f"{c}+{a}" not in P:
+    for arm, name in [(f"{c}+{a}", n) for a, n in ARMS] + EXTRA.get(c, []):
+        if len(P.get(arm, {})) < 5:  # arms run on some cells only
             continue
-        x = P[f"{c}+{a}"]
+        x = P[arm]
         ss = sorted(set(b) & set(x))
         dm = np.array([np.mean([x[s][d]["score"] - b[s][d]["score"] for d in DEV]) for s in ss])
         dl = np.array([x[s]["Litt3200"]["score"] - b[s]["Litt3200"]["score"] for s in ss])
@@ -92,13 +99,13 @@ for c in CELLS:
     d3 = np.array([x[s]["Litt3200"]["score"] - b[s]["Litt3200"]["score"] for s in ss])
     print(f"| {enc} | {c.split('+')[-1]} | {d1.mean():+.1f} ± {d1.std(ddof=1):.1f} | {d2.mean():+.1f} ± {d2.std(ddof=1):.1f} | {d3.mean():+.1f} ± {d3.std(ddof=1):.1f} |")
 
-print("\n## T4 trained SC static on the official split vs the grid unit of the same cell and seed (last epoch)\n")
+print("\n## T4 trained SC on the official split vs the no-SC unit of the same cell and seed (last epoch)\n")
 cols = [("sp", "Sp"), ("se", "Se"), ("score", "Score"), ("hs", "HS"), ("two_cls_score", "2c Score"), ("worst_dev_score", "Worst-dev Score"),
         ("cov", "Cov"), ("worst_dev_cov", "Worst-dev Cov"), ("set_size", "Set size")]
 print("| Cell | " + " | ".join(n for _, n in cols) + " | dScore vs no SC | dWorst-dev Score |\n|" + "---|" * (len(cols) + 3))
-for c in SC:
-    r = [unit_metrics(R / f"{c}+sc+sc_static" / f"seed{s}" / "test_preds.npz", "last") for s in range(5)]
-    g = [unit_metrics(Path("outputs/train/grid-v1") / c / f"seed{s}" / "test_preds.npz", "last") for s in range(5)]
+for _, c, base in OFFICIAL:
+    r = [unit_metrics(R / c / f"seed{s}" / "test_preds.npz", "last") for s in range(5)]
+    g = [unit_metrics(base / f"seed{s}" / "test_preds.npz", "last") for s in range(5)]
     cell = lambda k: "{:.{p}f} ± {:.{p}f}".format(np.mean([x[k] for x in r]), np.std([x[k] for x in r], ddof=1), p=2 if k == "set_size" else 1)
     d = np.array([a["score"] - b["score"] for a, b in zip(r, g)])
     w = np.array([a["worst_dev_score"] - b["worst_dev_score"] for a, b in zip(r, g)])

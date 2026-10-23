@@ -1,4 +1,4 @@
-# LODO v1 results: leave-one-device-out, inference arms and trained SC (21/10/2026)
+# LODO v1 results: leave-one-device-out, inference arms and trained SC (21/10/2026, trained SC dynamic and PAFA + PC-MCL added 23/10)
 
 Registration: `docs/updates/prereg-v9-amendment-4.md` (exploratory, no verdict; the registered AST results in
 `docs/reports/report_2026-10-09.md` stay the registered outcomes). Run `lodo-v1`; plan `docs/updates/lodo-plan-v1.md`.
@@ -40,12 +40,21 @@ Tables: `scripts/lodo_h2_all.sh` (null gate and H2 per cell, `outputs/train/lodo
 6. [Fact] **Trained SC (static bound) improves LODO Score for 6 of 7 cells** (macro +1.2 to +1.5 for AST PAFA, HTS-AT
    both, BEATs PAFA and SG-SCL; +0.3 AST Patch-Mix CL; -0.0 BEATs Patch-Mix CL) and costs nothing on the official split
    (-0.6 to +0.7 Score). BEATs PAFA + trained SC reaches 62.3 ± 0.9 on the official split at the last epoch (best so
-   far; 61.7 without SC) and about 60.3 macro in LODO (61.6 on Litt3200).
+   far; 61.7 without SC) and 60.3 ± 0.8 macro in LODO (61.5 on Litt3200).
 7. [Fact] A2 hurts every BEATs cell (macro -4.0 to -6.1; Litt3200 -4.8 to -11.6) and AST PAFA (-2.6), and helps HTS-AT
    on Litt3200 (+5). [Interpretation] Matching whole-device statistics removes the held-out device's class mix along
    with its spectrum.
 8. [Fact] TTA-EQ changes Score by 0.0 to +0.5 and shrinks sets by 0.07-0.32 labels, lowering Litt3200 over-coverage by 1-5
    points (towards nominal).
+9. [Fact] **Trained SC, dynamic bound (BEATs, 75 units):** on the official split it beats the static bound for SG-SCL
+   (62.8 ± 1.4, +1.7 ± 1.3 vs no SC; worst device +5.5) and Patch-Mix CL (61.5 ± 1.0, +1.8 ± 1.3; worst device +5.3), and
+   is level for PAFA (62.0 ± 0.5 vs 62.3 ± 0.9 static). In LODO it raises Litt3200 Score for all three (+1.7 to +5.2) but
+   not the macro (PAFA -0.9 ± 1.5, Patch-Mix CL -0.2 ± 1.8, SG-SCL +0.4 ± 1.2), where the static bound is better for PAFA
+   (+1.5) and SG-SCL (+1.5).
+10. [Fact] **BEATs PAFA + PC-MCL with trained SC (50 units):** static bound 61.8 ± 0.2 on the official split (+0.5 ± 1.1
+   vs its no-SC unit; set size 2.01, the smallest) and LODO macro 60.7 (+1.9 ± 1.2 vs BEATs PAFA without SC; Litt3200
+   -0.2); dynamic bound 60.9 ± 1.3 official (-0.4) and LODO macro 57.4 (-1.4 ± 1.3) but Litt3200 63.0 (+3.3 ± 1.6, the
+   best Litt3200 Score of any arm). No arm changes coverage beyond noise; no fold passes the null gate.
 
 [Interpretation] The device-shift problem that the registered AST study found is mostly absent in converged models at the
 level of coverage; SC's value in LODO v1 shows in Score on the hardest device (test-time) and in macro Score (trained),
@@ -140,16 +149,21 @@ not in coverage. Coverage-based claims (H2) need either earlier-epoch models, th
 | beats+ft+patchmix_cl | A2 | -4.4 ± 2.1 | -7.4 ± 5.0 | -0.0 | +0.004 | +0.13 | 3.75 |
 | beats+ft+patchmix_cl | TTA-EQ | +0.3 ± 0.4 | +0.3 ± 1.0 | -2.4 | -0.011 | -0.30 | 3.07 |
 | beats+ft+patchmix_cl | trained SC static | -0.0 ± 1.4 | -0.3 ± 3.8 | +0.2 | -0.003 | -0.00 | 3.75 |
+| beats+ft+patchmix_cl | trained SC dynamic | -0.2 ± 1.8 | +3.9 ± 3.4 | -0.2 | +0.001 | -0.11 | 3.42 |
 | beats+ft+sg_scl | TT-SC static | -0.2 ± 1.0 | +0.6 ± 1.3 | +0.1 | +0.005 | -0.02 | 2.84 |
 | beats+ft+sg_scl | TT-SC dynamic | -0.2 ± 0.6 | +1.2 ± 2.1 | +0.1 | -0.002 | -0.05 | 2.79 |
 | beats+ft+sg_scl | A2 | -4.0 ± 1.7 | -4.8 ± 3.7 | -2.7 | -0.008 | -0.00 | 2.86 |
 | beats+ft+sg_scl | TTA-EQ | +0.3 ± 0.3 | +0.3 ± 0.6 | -1.2 | -0.005 | -0.32 | 2.51 |
 | beats+ft+sg_scl | trained SC static | +1.5 ± 1.1 | +2.9 ± 4.7 | +1.7 | -0.002 | -0.07 | 2.66 |
+| beats+ft+sg_scl | trained SC dynamic | +0.4 ± 1.2 | +5.2 ± 3.2 | +1.2 | -0.005 | -0.09 | 2.64 |
 | beats+ft+pafa | TT-SC static | -0.3 ± 0.5 | +2.4 ± 0.9 | +0.2 | -0.011 | +0.07 | 2.82 |
 | beats+ft+pafa | TT-SC dynamic | -0.8 ± 0.4 | +2.2 ± 1.3 | +0.2 | -0.017 | +0.11 | 2.78 |
 | beats+ft+pafa | A2 | -6.1 ± 1.7 | -11.6 ± 5.1 | -0.2 | -0.019 | +0.29 | 3.15 |
 | beats+ft+pafa | TTA-EQ | +0.2 ± 0.2 | -0.0 ± 0.3 | -1.1 | -0.012 | -0.10 | 2.49 |
 | beats+ft+pafa | trained SC static | +1.5 ± 1.2 | +1.9 ± 3.3 | +0.9 | +0.012 | -0.10 | 3.01 |
+| beats+ft+pafa | trained SC dynamic | -0.9 ± 1.5 | +1.7 ± 2.6 | -1.2 | -0.019 | +0.10 | 2.64 |
+| beats+ft+pafa | PAFA + PC-MCL, trained SC static | +1.9 ± 1.2 | -0.2 ± 2.1 | +0.1 | -0.008 | -0.23 | 2.51 |
+| beats+ft+pafa | PAFA + PC-MCL, trained SC dynamic | -1.4 ± 1.3 | +3.3 ± 1.6 | +0.5 | -0.023 | -0.15 | 2.37 |
 | beats+ft+qlung | TT-SC static | -0.8 ± 1.4 | +0.7 ± 3.0 | +0.3 | -0.004 | +0.11 | 3.41 |
 | beats+ft+qlung | TT-SC dynamic | -1.4 ± 1.1 | +0.7 ± 3.5 | +0.3 | +0.000 | +0.02 | 3.39 |
 | beats+ft+qlung | A2 | -5.1 ± 1.3 | -7.0 ± 5.3 | -0.7 | -0.001 | +0.22 | 3.60 |
@@ -168,17 +182,22 @@ not in coverage. Coverage-based claims (H2) need either earlier-epoch models, th
 | beats | pafa | -0.3 ± 1.5 | +0.1 ± 1.3 | +3.3 ± 2.9 |
 | beats | qlung | +0.6 ± 0.9 | +0.8 ± 1.5 | +0.8 ± 6.9 |
 
-## Trained SC (static) on the official split vs no SC (same cell and seed, last epoch)
+## Trained SC on the official split vs no SC (same cell and seed, last epoch; PAFA + PC-MCL vs its no-SC pcmcl-v1 unit)
 
 | Cell | Sp | Se | Score | HS | 2c Score | Worst-dev Score | Cov | Worst-dev Cov | Set size | dScore vs no SC | dWorst-dev Score |
 |---|---|---|---|---|---|---|---|---|---|---|---|
-| ast+ft+patchmix_cl | 70.8 ± 2.0 | 45.8 ± 1.3 | 58.3 ± 1.1 | 55.6 ± 1.0 | 66.1 ± 0.8 | 49.8 ± 3.0 | 89.4 ± 0.1 | 87.5 ± 0.3 | 2.25 ± 0.06 | +0.1 ± 1.3 | +2.8 ± 5.0 |
-| ast+ft+pafa | 71.7 ± 2.3 | 46.4 ± 1.6 | 59.0 ± 0.7 | 56.3 ± 0.8 | 67.0 ± 0.6 | 50.3 ± 2.0 | 89.5 ± 0.2 | 85.5 ± 0.6 | 2.34 ± 0.02 | +0.7 ± 0.5 | +2.9 ± 2.5 |
-| htsat+ft+patchmix_cl | 68.8 ± 3.3 | 48.1 ± 1.0 | 58.5 ± 1.2 | 56.6 ± 0.6 | 65.9 ± 0.8 | 46.3 ± 3.5 | 90.1 ± 0.3 | 87.3 ± 0.5 | 2.24 ± 0.08 | -0.6 ± 1.4 | -0.2 ± 6.1 |
-| htsat+ft+sg_scl | 73.0 ± 3.0 | 45.7 ± 1.6 | 59.3 ± 1.0 | 56.2 ± 0.7 | 66.5 ± 0.9 | 49.7 ± 4.3 | 90.2 ± 0.3 | 87.7 ± 1.1 | 2.34 ± 0.03 | -0.3 ± 1.4 | -0.1 ± 5.8 |
-| beats+ft+patchmix_cl | 67.4 ± 1.6 | 52.2 ± 1.3 | 59.8 ± 0.8 | 58.8 ± 0.8 | 68.3 ± 0.7 | 52.0 ± 2.6 | 89.2 ± 0.2 | 86.2 ± 0.2 | 2.30 ± 0.06 | +0.1 ± 1.2 | -0.1 ± 4.0 |
-| beats+ft+pafa | 75.6 ± 3.1 | 48.9 ± 2.9 | 62.3 ± 0.9 | 59.3 ± 1.3 | 69.5 ± 0.7 | 58.9 ± 1.4 | 89.6 ± 0.3 | 85.6 ± 0.7 | 2.33 ± 0.13 | +0.5 ± 1.5 | -0.1 ± 1.2 |
-| beats+ft+sg_scl | 72.0 ± 2.9 | 49.4 ± 1.1 | 60.7 ± 1.0 | 58.6 ± 0.6 | 68.5 ± 0.8 | 51.8 ± 5.5 | 89.8 ± 0.2 | 87.5 ± 0.2 | 2.43 ± 0.16 | -0.4 ± 1.6 | -1.1 ± 6.8 |
+| ast+ft+patchmix_cl+sc+sc_static | 70.8 ± 2.0 | 45.8 ± 1.3 | 58.3 ± 1.1 | 55.6 ± 1.0 | 66.1 ± 0.8 | 49.8 ± 3.0 | 89.4 ± 0.1 | 87.5 ± 0.3 | 2.25 ± 0.06 | +0.1 ± 1.3 | +2.8 ± 5.0 |
+| ast+ft+pafa+sc+sc_static | 71.7 ± 2.3 | 46.4 ± 1.6 | 59.0 ± 0.7 | 56.3 ± 0.8 | 67.0 ± 0.6 | 50.3 ± 2.0 | 89.5 ± 0.2 | 85.5 ± 0.6 | 2.34 ± 0.02 | +0.7 ± 0.5 | +2.9 ± 2.5 |
+| htsat+ft+patchmix_cl+sc+sc_static | 68.8 ± 3.3 | 48.1 ± 1.0 | 58.5 ± 1.2 | 56.6 ± 0.6 | 65.9 ± 0.8 | 46.3 ± 3.5 | 90.1 ± 0.3 | 87.3 ± 0.5 | 2.24 ± 0.08 | -0.6 ± 1.4 | -0.2 ± 6.1 |
+| htsat+ft+sg_scl+sc+sc_static | 73.0 ± 3.0 | 45.7 ± 1.6 | 59.3 ± 1.0 | 56.2 ± 0.7 | 66.5 ± 0.9 | 49.7 ± 4.3 | 90.2 ± 0.3 | 87.7 ± 1.1 | 2.34 ± 0.03 | -0.3 ± 1.4 | -0.1 ± 5.8 |
+| beats+ft+patchmix_cl+sc+sc_static | 67.4 ± 1.6 | 52.2 ± 1.3 | 59.8 ± 0.8 | 58.8 ± 0.8 | 68.3 ± 0.7 | 52.0 ± 2.6 | 89.2 ± 0.2 | 86.2 ± 0.2 | 2.30 ± 0.06 | +0.1 ± 1.2 | -0.1 ± 4.0 |
+| beats+ft+pafa+sc+sc_static | 75.6 ± 3.1 | 48.9 ± 2.9 | 62.3 ± 0.9 | 59.3 ± 1.3 | 69.5 ± 0.7 | 58.9 ± 1.4 | 89.6 ± 0.3 | 85.6 ± 0.7 | 2.33 ± 0.13 | +0.5 ± 1.5 | -0.1 ± 1.2 |
+| beats+ft+sg_scl+sc+sc_static | 72.0 ± 2.9 | 49.4 ± 1.1 | 60.7 ± 1.0 | 58.6 ± 0.6 | 68.5 ± 0.8 | 51.8 ± 5.5 | 89.8 ± 0.2 | 87.5 ± 0.2 | 2.43 ± 0.16 | -0.4 ± 1.6 | -1.1 ± 6.8 |
+| beats+ft+patchmix_cl+sc | 69.6 ± 3.1 | 53.5 ± 1.9 | 61.5 ± 1.0 | 60.4 ± 0.9 | 69.2 ± 1.1 | 57.4 ± 2.9 | 89.3 ± 0.2 | 86.6 ± 0.1 | 2.26 ± 0.09 | +1.8 ± 1.3 | +5.3 ± 3.7 |
+| beats+ft+pafa+sc | 77.7 ± 0.8 | 46.3 ± 0.5 | 62.0 ± 0.5 | 58.0 ± 0.4 | 68.6 ± 0.6 | 59.3 ± 0.7 | 89.8 ± 0.3 | 86.8 ± 0.9 | 2.24 ± 0.10 | +0.3 ± 0.6 | +0.4 ± 1.1 |
+| beats+ft+sg_scl+sc | 75.7 ± 3.3 | 49.8 ± 0.5 | 62.8 ± 1.4 | 60.1 ± 0.7 | 69.9 ± 1.0 | 58.4 ± 3.5 | 90.0 ± 0.2 | 87.4 ± 0.2 | 2.38 ± 0.04 | +1.7 ± 1.3 | +5.5 ± 4.7 |
+| beats+ft+pafa_pcmcl+sc+sc_static | 73.2 ± 1.9 | 50.4 ± 2.2 | 61.8 ± 0.2 | 59.6 ± 0.9 | 70.4 ± 0.2 | 59.0 ± 1.2 | 89.5 ± 0.2 | 87.0 ± 0.5 | 2.01 ± 0.05 | +0.5 ± 1.1 | +0.2 ± 1.8 |
+| beats+ft+pafa_pcmcl+sc | 78.1 ± 1.7 | 43.7 ± 2.7 | 60.9 ± 1.3 | 55.9 ± 2.2 | 67.8 ± 1.1 | 56.6 ± 1.8 | 89.7 ± 0.2 | 86.7 ± 0.6 | 2.03 ± 0.08 | -0.4 ± 1.7 | -2.2 ± 2.3 |
 
 Notes: Cov in %, set = mean labels per set (of 4). Macro = mean over the 4 folds per seed, then mean ± SD over seeds.
 In the arms table d = arm minus source cell on the same seed (same calibration and test patients); `d|Delta|` = change of
