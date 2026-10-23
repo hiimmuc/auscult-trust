@@ -18,6 +18,25 @@ MANIFEST = {"classes": ["normal", "crackle", "wheeze", "both"], "classes2": ["no
             "alpha": 0.1, "preprocessing": {}, "pipelines": {}, "samples": [SAMPLE]}
 
 
+def test_annotated_cycles_use_training_length_screening_stays_eight_seconds():
+    import threading
+    import torch
+
+    lengths = []
+    class Capture:
+        thr = {"cycle4": 0.9, "cycle2": 0.9, "screen": 0.9}
+        def run(self, segments, screening, *args):
+            lengths.append((len(segments[0]), len(screening[0])))
+            return {}, np.tile([0.7, 0.1, 0.1, 0.1], (len(segments), 1)), np.tile([0.7, 0.1, 0.1, 0.1], (len(screening), 1))
+    e = engine.Engine.__new__(engine.Engine)
+    e.m = {**MANIFEST, "preprocessing": {"segment_sec": 5}}
+    e.pipelines, e.lock = {"capture": Capture()}, threading.Lock()
+    x = torch.ones(1, 10 * engine.SR)
+    e.infer(x, 10, cycles=[(0, 2)])
+    e.infer(x, 10)
+    assert lengths == [(5 * engine.SR, 8 * engine.SR), (8 * engine.SR, 8 * engine.SR)]
+
+
 class Stub:
     """Stands in for the model: returns a fixed, plainly fake result so the upload plumbing can be checked."""
 

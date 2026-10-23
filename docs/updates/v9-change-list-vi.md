@@ -47,7 +47,7 @@ Ngày 07/10/2026. Nguồn chuẩn: `docs/research-proposal-v9-en.md` (repo) và 
 | 4.7 Tầng 2 | Kế hoạch chi tiết | Xóa |
 | 4.8 Cổng | G-base, G0–G9 | G, R1–R7 |
 | 5. Đạo đức (trống) | — | Dữ liệu công khai và phổi giả; TT 06/2024 + 24/2025: ≤ 12 tháng đến 31/01/2027, sổ nhật ký, người hướng dẫn không làm phần lõi |
-| 6. Mốc (trống ngày) | — | M0 09/10, M1 14/10, M2 17/10, M3 31/10, M4 30/11, M5 31/12, M6 31/01/2027 |
+| 6. Mốc (trống ngày) | — | M0 09/10, M1 14/10, M2 10/10, M3 31/10, M4 30/11, M5 31/12, M6 31/01/2027 |
 | 8. Phạm vi claims (trống) | — | Danh sách "Không claim" ở §0 của v9 |
 | References [7] | Tác giả cần xác minh | Ang, Aw, Koh, Tan (2023), *Medicine in Novel Technology and Devices* 19, 100256 |
 
@@ -105,9 +105,9 @@ Ngày 07/10/2026. Nguồn chuẩn: `docs/research-proposal-v9-en.md` (repo) và 
 3. **`stage1_summary.py screen` tự thêm P8 và chỉ giữ top 3 + P0,** nên có thể loại mất P4 hoặc một arm SC. Cần thêm chế độ v9 (TODO 3).
 4. **Trong CV, s_ref được tính cả trên bệnh nhân của fold validation.** Lỗi nhỏ: sửa hoặc ghi chú.
 
-**Thứ tự code:** TODO 1–10 trong `CLAUDE.md`. Trước 17/10 cần TODO 1–3 + bản tối thiểu của TODO 4–5 (suy luận trên KAUH, flip rate).
+**Thứ tự code:** TODO 1–10 trong `CLAUDE.md`. Trước 10/10 cần TODO 1–3 + bản tối thiểu của TODO 4–5 (suy luận trên KAUH, flip rate).
 
-## 5. Đến 17/10 (vòng trường cần báo cáo kết quả)
+## 5. Đến 10/10 (vòng trường cần báo cáo kết quả)
 
 | Ngày | Việc | GPU-h |
 |---|---|---|
@@ -118,9 +118,9 @@ Ngày 07/10/2026. Nguồn chuẩn: `docs/research-proposal-v9-en.md` (repo) và 
 | 12–13/10 | Đóng băng, export; E0; KAUH-A (đối chứng dương, P0 so với AuscultTrust) | < 1 |
 | 13–14/10 | Bảng GĐ1 (theo thiết bị, 4 và 2 lớp, cột văn liệu); hình hệ số SC | 0 |
 | 15–16/10 | Slide 10 phút + poster | 0 |
-| Sau 17/10 | Seed 5–9 (cổng G), LODO, KAUH B/C, phổi giả | ≈ 70 |
+| Sau 10/10 | Seed 5–9 (cổng G), LODO, KAUH B/C, phổi giả | ≈ 70 |
 
-**Nếu thiếu GPU:** AuscultTrust = P1 (dự phòng đã đăng ký); P1P3 và P4 chạy sau 17/10.
+**Nếu thiếu GPU:** AuscultTrust = P1 (dự phòng đã đăng ký); P1P3 và P4 chạy sau 10/10.
 
 ## 6. Thế nào là "thành công"
 
@@ -128,7 +128,7 @@ Không thiết kế trung thực nào bảo đảm mọi giả thuyết đúng. 
 
 | Mức | Nội dung | Khả năng |
 |---|---|---|
-| Tối thiểu (17/10) | Bảng GĐ1 kèm Sp/Se theo thiết bị; mô hình đóng băng; đối chứng dương KAUH-A | Cao |
+| Tối thiểu (10/10) | Bảng GĐ1 kèm Sp/Se theo thiết bị; mô hình đóng băng; đối chứng dương KAUH-A | Cao |
 | Lõi (30/11) | Cổng G; H2 trên LODO so với P0 và P4 chạy lại; KAUH B1/B2/C; F1–F5 | Trung bình. H2 có thể ra "không phát hiện được" nếu LODO không có thiếu hụt vượt cổng null |
 | Đầy đủ (31/12) | H1, H2, H3 trên phổi giả với ống nghe thật | Phụ thuộc phần cứng. Đầu thu rẻ giảm rủi ro |
 

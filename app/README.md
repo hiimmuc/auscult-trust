@@ -7,12 +7,12 @@ Two parts that deploy independently:
 
 ```
 browser ─► web app on Cloudflare Pages (static, https://auscult-trust.pages.dev)
-   │  fetch, Authorization: Bearer <token>, CORS allowlist
-   ├─► primary API: this machine (GPU), public through Tailscale Funnel (https://auscult.tail09c58b.ts.net → 127.0.0.1:8000)
+   │  fetch, configured API origin, CORS allowlist
+   ├─► primary API: this machine (GPU), public through Tailscale Funnel (current hostname: `vmo-namdp15-d.tail09c58b.ts.net` → 127.0.0.1:8000)
    └─► fallback API: Hugging Face Space (Docker, CPU), tried when the primary does not answer or has no model
 ```
 
-The page tries the API address from its connection dialog (or `VITE_API_BASE`), then `VITE_API_FALLBACK`. The status chip says "Fallback API ready" when the fallback is in use. Both APIs must accept the same token.
+The page tries the API address from its connection dialog (or `VITE_API_BASE`), then `VITE_API_FALLBACK`. The status chip says "Fallback API ready" when the fallback is in use. The connection dialog stores its API URL and optional token in browser local storage.
 
 ## Install
 
@@ -73,27 +73,34 @@ Restart it after changing `.env`. The API binds to localhost only; the tunnel in
 Funnel gives a fixed `https://<host>.<tailnet>.ts.net` URL with a valid certificate, needs no domain and no open inbound port.
 
 1. Install and log in (once). Create a free account at tailscale.com, then:
+
    ```bash
    curl -fsSL https://tailscale.com/install.sh | sh      # installs and starts the tailscaled service
    sudo tailscale up                                     # prints a login URL: open it and approve this machine
    ```
-2. Name the machine (this becomes the URL's first part; a name already used by a stale device gets a `-1` suffix, so delete stale devices in the admin console, Machines):
+
+2. Name the machine (this becomes the URL's first part; a name already used by another device may get a suffix. Rename it in the Tailscale admin console under **Machines → Edit machine name** if the CLI name does not update):
+
    ```bash
    sudo tailscale set --operator=$USER                   # once: lets your user change settings without sudo
    tailscale set --hostname=auscult
    tailscale status --self --json | python3 -c "import sys,json; print(json.load(sys.stdin)['Self']['DNSName'])"
    ```
+
    The `tail09c58b` part is the tailnet name. Change it only in the admin console (DNS, tailnet name).
 3. Enable Funnel for the tailnet (once): run `tailscale funnel --bg 8000`. If it prints `Funnel is not enabled on your tailnet` with a login.tailscale.com link, open the link and approve. In the admin console (DNS) HTTPS certificates must be on.
 4. Start it (it persists across reboots) and check:
+
    ```bash
-   tailscale funnel --bg 8000            # https://auscult.tail09c58b.ts.net → http://127.0.0.1:8000
+   tailscale funnel --bg 8000            # use the DNSName printed by tailscale status --self --json
    tailscale funnel status
-   curl -s https://auscult.tail09c58b.ts.net/v1/health       # from a device NOT on the tailnet, for example a phone on mobile data
+   curl -s https://<current-machine-name>.tail09c58b.ts.net/v1/health  # test from outside the tailnet
    ```
+
    Stop it with `tailscale funnel --https=443 off`, or `tailscale funnel reset` to clear everything.
 
 Notes:
+
 - Do not run `tailscale cert` in the repo: it writes a certificate and a private key into the current directory. Funnel needs no manual certificate.
 - A device on your tailnet, including this machine, resolves the name to a tailnet address. From there the public page's request counts as local-network access and Chrome blocks it (`ERR_BLOCKED_BY_LOCAL_NETWORK_ACCESS_CHECKS`), and the host cannot reach its own public Funnel address. Test from an outside device.
 - Funnel listens on ports 443, 8443 and 10000 only, and Tailscale applies non-configurable bandwidth limits ([docs](https://tailscale.com/docs/features/tailscale-funnel)).
@@ -103,17 +110,17 @@ Notes:
 Pages serves from the site root, from direct upload, and is free. (GitHub Pages serves a project site under `/<repo>/`, which needs Vite's `base` changed, and a free account needs a public repo.)
 
 ```bash
-(cd app/web && VITE_API_BASE=https://auscult.tail09c58b.ts.net npm run build)      # add VITE_API_FALLBACK=<space url> once there is one
+(cd app/web && VITE_API_BASE=https://vmo-namdp15-d.tail09c58b.ts.net npm run build) # replace with current Tailscale DNSName if it changes
 npx wrangler@4.60.0 login                                                          # once, opens a browser
 npx wrangler@4.60.0 pages project create auscult-trust --production-branch main    # once
 npx wrangler@4.60.0 pages deploy app/web/dist --project-name auscult-trust --branch main
 ```
 
-Node 20 needs wrangler 4.60 (newer wranglers need Node 22). The site is `https://auscult-trust.pages.dev`; if Cloudflare gives another name, put that origin into `AT_APP_ORIGINS` and restart the API. Rebuild and redeploy whenever the API URL changes. Open the site, click the status chip, paste the token. [Fact] A headless Chrome session on the Pages site connected to the API through Funnel, uploaded a recording and got results (the check disabled Chrome's local-network blocking because the test ran on the API host).
+The site is `https://auscult-trust.pages.dev`; individual deployment URLs are version-specific previews, while this is the stable project URL. If Cloudflare gives another project hostname, add that origin to `AT_APP_ORIGINS` and restart the API. Rebuild and redeploy whenever the API URL changes. The current local `.env` sets `AT_APP_AUTH=off`, so the connection dialog token can be left blank. This makes every API route public, including inference. It currently also leaves demo samples enabled and has no rate limit; choose those settings deliberately before keeping the host internet-facing. The local env file is ignored by git and must not be copied into a public bundle.
 
 ### 5. Fallback API: Hugging Face Space (CPU)
 
-The Space runs the same `api.main:app` on CPU (`api/engine.py` turns the training code's `.cuda()` calls into no-ops when there is no GPU). Checked by building the image and running it locally with `--cpus 2 --memory 16g`: argmax agrees with the GPU on all 14 windows (max |Δp| 0.0008), memory 1.7 GiB, a 20 s recording takes 30 to 50 s (GPU: 0.4 s), so recordings near the 90 s limit can hit the 120 s timeout there. The Space has not been created on Hugging Face.
+The Space runs the same `api.main:app` on CPU (`api/engine.py` turns the training code's `.cuda()` calls into no-ops when there is no GPU). Historical check on the earlier bundle, not a fresh CPU benchmark of the final PAFA model: building the image and running it locally with `--cpus 2 --memory 16g` gave argmax agrees with the GPU on all 14 windows (max |Δp| 0.0008), memory 1.7 GiB, a 20 s recording takes 30 to 50 s (GPU: 0.4 s), so recordings near the 90 s limit can hit the 120 s timeout there. The Space has not been created on Hugging Face.
 
 ```bash
 PYTHONPATH=. .venv-train/bin/python scripts/stage_space.py      # writes build/space (public, 13 MB) and build/weights (private, 1.1 GB); build/ is git-ignored
@@ -218,7 +225,7 @@ The checks below come from the code (`src/evaluation/*`, `src/processing/correct
 
 | Output | Source | Shown as |
 | --- | --- | --- |
-| 4-class softmax (normal, crackle, wheeze, both) per segment | BEATs (fine-tuned) + Patch-Mix CL, 8 s input | coloured boxes over the waveform, packed into rows when segments overlap |
+| 4-class softmax (normal, crackle, wheeze, both) per segment | BEATs + PAFA, fine-tuned; annotated cycles cut/padded to 5 s, unannotated windows 8 s | coloured boxes over the waveform, packed into rows when segments overlap |
 | 2-class view, p(abnormal) = 1 - p(normal), same softmax | same | lane under the waveform |
 | Conformal sets, LAC, alpha 0.1 | `src/evaluation/conformal.py` | box label "set k", lane pattern (solid = one class, hatched = both, outline = empty), chips in the tables |
 | Recording-level screening (8 s windows, mean of 1 - p(normal), 2-class LAC) | `src/evaluation/screening.py` | triage card with the p(abnormal) bar and the zones the threshold creates |
@@ -226,16 +233,19 @@ The checks below come from the code (`src/evaluation/*`, `src/processing/correct
 
 The two proposed methods carry a **Proposed** tag in the page: spectrum correction (the SC pipeline) and conformal prediction. The *Conformal prediction* switch in the toolbar (kept in local storage, shared by both modes) hides or shows the conformal layer: set labels on the boxes, set chips in the tables, the set pattern in the 2-class lane, the set stats in the demo comparison and the triage card. Off, the page shows top classes only and the screening card shows a plain Normal / Abnormal at p(abnormal) 0.5.
 
-Pipelines in the default bundle (seed 0, official split, report epoch 50; the two units differ only by SC):
+The selected serving bundle uses seed 0 at fixed epoch 100. On 23/10 it passed the real-checkpoint API test and
+was activated in `app/bundle/`; the candidate remains in `app/bundle-final-pafa-static/`. The previous bundle is
+retained under `app/bundle-backup-*/`. The running local API checkpoint hashes were checked against the selected manifest.
+`AT_APP_BUNDLE` selects which bundle the API loads.
 
-| Name | Unit | Epoch | Test-time SC | Thresholds cycle4 / cycle2 / screen |
-| --- | --- | --- | --- | --- |
-| `auscult` = AuscultTrust (SC) | `outputs/train/lodo-v1/beats+ft+patchmix_cl+sc+sc_static/seed0` | 50 | yes, static mode | 0.9992 / 0.9976 / 0.9911 |
-| `baseline` = P0 (no SC) | `outputs/train/grid-v1/beats+ft+patchmix_cl/seed0` | 50 | no | 0.9993 / 0.9981 / 0.9664 |
+| Name | Unit | Epoch | SC |
+| --- | --- | --- | --- |
+| `auscult` = AuscultTrust (BEATs + PAFA) | `outputs/train/lodo-v1/beats+ft+pafa+sc+sc_static/seed0` | 100 | yes, static mode |
+| `baseline` = BEATs + PAFA (no SC) | `outputs/train/grid-v1/beats+ft+pafa/seed0` | 100 | no |
 
-The AST units these replaced (`screen-ast`) lost their checkpoints; to serve other units, edit `PIPELINES` in `api/bundle.py` and rebuild the bundle. The screening exports come from `python -m src.evaluation.screening infer` on the same checkpoints (`outputs/screening/beats_{auscult,p0}/seed0.npz`).
+The reproducible evaluation and candidate bundle build are documented in `docs/decision_logs/2026-10-23-final-model.md` and `report.md`. The campaign freezes five paired seeds, exports predictions, and builds the candidate bundle; thresholds are generated from the selected seed's saved predictions and screening export. To change the served model, update `PIPELINES` in `api/bundle.py`, rebuild, then validate the bundle before pointing `AT_APP_BUNDLE` at it.
 
-Thresholds are calibrated on split 0 of `calibration_eval_splits` over the official-test patients without the 2 patients on both sides: 24 patients, 1,238 cycles, 176 recordings. The cycle softmax comes from the unit's saved `test_preds.npz`; the screening softmax comes from `outputs/screening/<cond>/seed0.npz`, and its checkpoint hash is checked against the weights. `api/test_api.py` and the engine check reproduce the saved test softmax within float16 rounding (max |Δp| ≤ 0.004, argmax 100% agree on the 3 recordings checked).
+Thresholds are calibrated on split 0 of `calibration_eval_splits` over official-test patients, excluding patients present on both sides of the official split. The cycle softmax comes from the unit's saved `test_preds.npz`; the recording-level softmax comes from the matching screening export, whose checkpoint hash is checked during bundle construction.
 
 Segments: an uploaded ICBHI annotation `.txt` (or `cycles` JSON) gives breathing cycles, which is the unit the model was trained on. Without one, the API scores sliding windows (default 8 s, step 4 s). The screening decision always uses the registered windows (max(1, floor(duration / 8)) windows evenly spread).
 
@@ -273,8 +283,8 @@ Preprocessing (Real mode, both off by default) runs in the browser, on uploads a
 ## Known limitations
 
 - **Demo samples are not same-patient device triplets.** No ICBHI patient was recorded on three devices. The four patients recorded on two (112, 158, 218, 226) are on the training side or on both official sides, so they are excluded. Each class instead has 3 recordings from evaluation-half patients (never trained on, never in the conformal calibration), spread over the three official-test devices (Meditron, Litt3200, AKGC417L; LittC2SE has no official-test recording). For "crackle + wheeze", no evaluation-half recording from another device has it as the majority label, so all three come from AKGC417L, and one has it on 67% of its cycles. The sample list in the page shows each recording's annotated share.
-- **Windows are not cycles.** Without annotations the model scores 8 s windows. It was trained on breathing cycles repeat-padded to 8 s, so window predictions are less reliable than cycle predictions.
-- **Coverage is guaranteed only for data exchangeable with the calibration set.** A microphone take or another stethoscope is a device shift. Whether SC keeps coverage under such a shift is the open research question (H2), not something the demo can assume. Both served models are very confident at epoch 50, so their 4-class thresholds are about 0.999, which means many 3- and 4-class sets; the app shows them as they are.
+- **Windows are not cycles.** Without annotations the model scores 8 s windows. The selected PAFA models were trained on breathing cycles cut/repeat-padded to 5 s, so window predictions are less reliable than cycle predictions.
+- **Coverage is guaranteed only for data exchangeable with the calibration set.** A microphone take or another stethoscope is a device shift. Whether SC keeps coverage under such a shift is the open research question (H2), not something the demo can assume. Prediction-set sizes and thresholds are model-dependent; use `/v1/model` for the active PAFA bundle. The app shows the actual sets, including large or empty sets.
 - **SC from one recording.** For an unknown device the correction is estimated from that single recording, so it also flattens the sound's own spectrum. The registered pipeline estimates it from many unlabelled recordings per device.
 - **One global lag.** The demo corrects a constant delay. Clock drift between separate speaker and microphone hardware (parts per million) and room reverberation are not corrected.
 - **One seed per arm**, chosen for serving; the reported results average 5-10 seeds.

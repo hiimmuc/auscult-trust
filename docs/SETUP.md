@@ -62,6 +62,7 @@ python scripts/prepare_data.py           # idempotent
 | KAUH | [Mendeley Data jwyy9np4gv v3](https://data.mendeley.com/datasets/jwyy9np4gv/3) |
 | AST AudioSet weights | AST authors |
 | Patch-Mix CL, OPERA, SG-SCL | GitHub, cloned to `repos/` |
+| BEATs iter3+ AS2M weights (final model) | `data/models/beats/BEATs_iter3_plus_AS2M.pt`; network code from `repos/PAFA/BEATs` |
 | Optional encoders (OPERA-CT, CLAP, HeAR, HTS-AT) | Hugging Face. HeAR is gated: request access, then `hf auth login`. HTS-AT weights are a manual download, see the header of `scripts/download_data.sh` |
 
 `prepare_data.py` does:
@@ -77,6 +78,11 @@ Expected after setup: ICBHI 920 wav, 6898 cycles, 126 patients; KAUH 336 wav.
 ```bash
 uv run --no-project --python .venv/bin/python python -m pytest -q tests
 ```
+
+Tests that build training models (`tests/test_pafa.py`, `test_db_scale.py`, `test_grid_audit.py`,
+`test_lung_srad_config.py`) import the reference code, which needs `wget`: run them with `.venv-train/bin/python -m pytest`.
+API contract: `.venv-train/bin/python -m pytest -q api/test_contract.py`. From a git worktree set `AT_DATA` and
+`AT_REPOS` to the wrapper's `data/` and `repos/` (the default `../data` points elsewhere).
 
 Single test: append `tests/test_training.py::test_summary_counts_match_metrics`.
 

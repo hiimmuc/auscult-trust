@@ -2,12 +2,12 @@
 
 | | |
 | --- | --- |
-| Report version | 5.0 (4.6, 4.5, 4.4, 4.3, 4.2, 4.1, 4.0 and 3.0 in git history; 2.0 is `docs/reports/report_archive_2026-10-07.md`) |
-| Datetime | 2026-10-23 15:00 (+07) |
-| Proposal / prereg | v9 (`docs/updates/research-proposal-v9-en.md`); `docs/updates/prereg-v8.md` with Amendments 1-5 (`docs/updates/prereg-v9-amendment*.md`) |
+| Report version | 5.2, final v5 (5.1, 5.0, 4.6, 4.5, 4.4, 4.3, 4.2, 4.1, 4.0 and 3.0 in git history; 2.0 is `docs/reports/report_archive_2026-10-07.md`) |
+| Datetime | 2026-10-23 16:15 (+07) |
+| Proposal / prereg | v10 (`docs/updates/research-proposal-v10-en.md`, 23/10; model and evidence updated, registered criteria of v9 unchanged); registered study v9 (`docs/updates/research-proposal-v9-en.md`) with `docs/updates/prereg-v8.md` and Amendments 1-5 (`docs/updates/prereg-v9-amendment*.md`) |
 | Plans | `docs/updates/stage-plan-v1.md` (grid), `docs/updates/lodo-plan-v1.md` (LODO, ensembles; Amendment 4 wins where they differ) |
 | Results (all on A) | `outputs/train/<run>/<cell>/seed<s>/` in this repo (section 4.3); checkpoints of the BEATs PAFA family on A, the others stay on B, D, E |
-| Detailed sources | `docs/reports/report_2026-10-09.md` (registered core), `docs/reports/grid-v1-results.md` (grid, every cell), `docs/reports/pcmcl-v1-results.md` (PC-MCL), `docs/reports/lodo-v1-results.md` (LODO v1, SC), `docs/reports/ensemble-v1-results.md` (ensembles by encoder group), `docs/handoff/HANDOFF.md` (machines, commands, incidents) |
+| Detailed sources | `docs/reports/report_2026-10-09.md` (registered core), `docs/reports/grid-v1-results.md` (grid, every cell), `docs/reports/pcmcl-v1-results.md` (PC-MCL), `docs/reports/lodo-v1-results.md` (LODO v1, SC), `docs/reports/ensemble-v1-results.md` (ensembles by encoder group), `docs/reports/final-pafa-static-execution.md` (frozen final evaluation), `docs/decision_logs/2026-10-23-final-model.md` (final decision), `docs/handoff/HANDOFF.md` (state, commands; earlier machines and incidents in `HANDOFF_2026-10-19.md`) |
 
 Tags: [Fact] measured in the repo, [Interpretation] reasoned, [Assumption], [Pending] not run, [Preliminary] computed on
 the units finished so far (may change; no verdict). Score = (Sp + Se) / 2 on ICBHI 4-class, official split unless
@@ -15,14 +15,15 @@ stated. All numbers are mean ± SD over seeds 0-4 unless a seed count is given.
 
 ## 1. Status and key findings
 
-**Current step (23/10):** stage 10, choice of the final AuscultTrust. All training is done (stages 0-9: 0 runs left, 0
-failed), every result is gathered on machine A in this repository (section 4.3), and the LODO and ensemble tables are
-regenerated. The encoder and method are fixed (BEATs + PAFA, fine-tuned, user decision 22/10); the SC variant and the
-use of an ensemble are open (section 15).
+**Current step (23/10):** final model selected by the user. Baseline = fine-tuned BEATs + PAFA without SC;
+AuscultTrust = BEATs + PAFA trained and evaluated with static SC. E1 and E1+E3 are exploratory extensions,
+with and without static SC. Fixed epochs and seeds are recorded in
+`docs/decision_logs/2026-10-23-final-model.md`. All model-comparison training is complete.
 
-**Next steps:** (1) the user chooses the SC variant and single model vs ensemble; (2) results report for the submission
-of 25/10 from this file; (3) with the frozen final model: KAUH positive controls, screening view, serving bundle of the deployed demo;
-(4) phantom tests (H1, H3, co-primary H2) once the hardware exists. Details in section 18.
+**Execution update:** frozen-model exports, KAUH A/B2 and recording-level screening completed in campaign
+`final-pafa-static`; command logs and hashes are retained. The validated seed-0 serving bundle is active on the local API.
+E1/E1+E3 extensions completed at 15:32; detailed results: `docs/reports/final-pafa-static-execution.md`.
+Phantom H1/H3/co-primary H2 remains pending hardware. The registered AST study and H2 criteria are unchanged.
 
 Results and findings are reported per stage of the plan (sections 5-16, numbering as in section 2). Key findings:
 
@@ -32,11 +33,11 @@ Results and findings are reported per stage of the plan (sections 5-16, numberin
    split) and the best cell on the hardest unseen device (Litt3200).
 3. [Fact] H2 cannot be tested in LODO v1: no held-out device shows a coverage error above chance once models are trained
    to their last epoch (stage 7). The registered AST study (models stopped at epoch 2) did show one.
-4. [Fact] SC helps Score, not coverage: test-time SC raises Litt3200 Score for every cell (stage 6); trained SC raises
+4. [Fact] In LODO v1, SC helps Score, with no established coverage improvement: test-time SC raises Litt3200 Score for every cell (stage 6); trained SC raises
    the LODO macro Score for 6 of 7 cells at no cost on the official split (stage 4).
-5. [Fact] Final AuscultTrust (user decision 22/10): BEATs + PAFA, fine-tuned. With trained SC static it scores 62.3 ±
-   0.9 on the official split (best last-epoch Score so far) and 60.3 ± 0.8 macro in LODO; the SC variant (none, trained
-   static, trained dynamic, test-time) is the user's choice now that stage 8 has ended (section 15).
+5. [Fact] Final decision (user, 23/10): baseline = BEATs + PAFA without SC; AuscultTrust = BEATs + PAFA
+   with trained static SC, 62.3 ± 0.9 on the official split and 60.3 ± 0.8 macro in LODO. E1 and E1+E3
+   are exploratory extensions (section 15).
 6. [Fact] Ensembles raise Se at PAFA's Sp only with a target-side anchor: equal-weight E1+E3 (BEATs + HTS-AT) or E1
    (BEATs) with a label-free rule that calls as many cycles normal as PAFA does on the same unlabelled cycles keep Sp and
    gain 1.4-3.1 Se (+1.1 to +2.1 Score) on the official split and in LODO; learned member weights never beat equal
@@ -44,6 +45,9 @@ Results and findings are reported per stage of the plan (sections 5-16, numberin
 7. [Fact] The dynamic SC bound helps SG-SCL and Patch-Mix CL on the official split (+1.7, +1.8; BEATs SG-SCL + SC
    dynamic 62.8 ± 1.4 is the best single cell) but lowers the LODO macro for PAFA (-0.9); for BEATs PAFA the static bound
    is the better SC variant. PAFA + PC-MCL with SC static has the best LODO macro (60.7) and the smallest sets (stage 8).
+8. [Fact] Both KAUH positive controls pass on the frozen final model (stage 11): cross-filter flip rate 0.445 -> 0.209
+   (reduction +0.236 [+0.177, +0.305]) and filter-to-filter coverage error D = +0.113 [+0.072, +0.153] on the 2 of 6
+   pairs above the null gate. Software filters only: no hardware claim follows.
 
 Runs (all finished; at 23/10 15:00):
 
@@ -75,8 +79,8 @@ the screening view and the phantom tests close the project.
 | 7 | Analysis (L3) | Per-fold Sp/Se/Score/HS/2c; method vs CE; H2 (prior-matched coverage, null gate, two-level bootstrap) with set size beside abs(Delta); SC vs no SC paired by seed | Done 21/10: H2 not testable (section 12); `docs/reports/lodo-v1-results.md` |
 | 8 | Trained SC, dynamic bound | BEATs PAFA, SG-SCL, Patch-Mix CL (75 units) + BEATs PAFA + PC-MCL with SC static and dynamic (50 units) | Done 23/10 (section 13) |
 | 9 | Ensembles, distillation | Registered E1-E4 (equal weights, 11/5/3/3 cells); user groups by encoder with equal and fitted weights | User groups done 22/10 (section 14); registered E1-E4 and distillation [Pending], optional |
-| 10 | Final AuscultTrust | Choose encoder + method + SC with the user | Decided 22/10: BEATs + PAFA (fine-tuned); SC variant open (section 15) |
-| 11 | After LODO | KAUH positive controls on the final model, screening view (recording level), phantom tests (H1, H3) | [Pending] (section 16); phantom depends on hardware |
+| 10 | Final AuscultTrust | Choose encoder + method + SC with the user | Decided 23/10: baseline PAFA; AuscultTrust PAFA + trained static SC; E1/E1+E3 extensions (section 15) |
+| 11 | After LODO | Frozen KAUH A/B2/B1 and recording screening; phantom H1/H3 | Primary and extension computation done 23/10; phantom pending hardware (section 16) |
 | - | Demo app (`app/`) | FastAPI + web demo; currently serves the BEATs + PAFA bundle | Deployed to Cloudflare Pages; GPU API available through Tailscale Funnel at `vmo-namdp15-d.tail09c58b.ts.net` (checked 23/10) |
 
 ## 3. Decisions of the user
@@ -584,22 +588,23 @@ Official split = last epoch, 5 seeds; LODO = macro Score over the 4 held-out dev
 
 | Candidate | Official split Score | LODO macro Score | LODO Litt3200 Score | Note |
 | --- | --- | --- | --- | --- |
-| BEATs PAFA + trained SC static | 62.3 ± 0.9 | 60.3 ± 0.8 | 61.5 ± 6.0 | best official-split Score; best on the hardest device |
-| BEATs SG-SCL + trained SC static | 60.7 ± 1.0 | about 60.5 | about 57.8 | best LODO macro, by a margin within seed SD |
+| BEATs PAFA + trained SC static | 62.3 ± 0.9 | 60.3 ± 0.8 | 61.5 ± 6.0 | selected primary AuscultTrust |
+| BEATs SG-SCL + trained SC static | 60.7 ± 1.0 | about 60.5 | about 57.8 | alternative single model |
 | BEATs Patch-Mix CL (no SC) | 59.7 ± 1.3 | 60.1 ± 1.7 | 57.5 | trained SC adds nothing here |
 | BEATs PAFA (no SC) + test-time SC static | 61.7 ± 0.7 | about 58.5 | about 62.1 | no retraining; SC only at test time |
 | BEATs PAFA + trained SC dynamic | 62.0 ± 0.5 | 57.9 ± 1.6 | 61.3 ± 3.9 | stage 8; weaker LODO macro (Meditron) |
 | BEATs SG-SCL + trained SC dynamic | 62.8 ± 1.4 | 59.5 ± 0.8 | 60.2 ± 5.3 | stage 8; best official-split single cell |
 | BEATs PAFA + PC-MCL + trained SC static | 61.8 ± 0.2 | 60.7 ± 1.5 | 59.5 ± 4.2 | stage 8; best LODO macro, smallest sets |
 | E1 BEATs ensemble + trained SC static, `k rate` | 63.4 ± 0.5 | 62.0 ± 0.6 | 62.2 | stage 9; 3 models, keeps PAFA's Sp |
+| E1+E3 ensemble + trained SC static, `k rate` | 63.4 ± 0.4 | 62.4 ± 0.8 | 61.0 | selected exploratory extension; 5 models |
 | E1 BEATs ensemble + trained SC dynamic, `k rate` | 64.3 ± 0.5 | 59.9 ± 1.5 | 61.1 | stage 9; best official split, weaker LODO |
 
 [Interpretation] The differences between the BEATs candidates are within one seed SD on every axis; BEATs PAFA + trained
 SC is the only one that is first or close to first on all three.
 
-**Decision (user, 22/10): the final AuscultTrust is BEATs + PAFA, fine-tuned.** Stage 8 has ended; the SC variant is the
-user's choice: no SC, trained SC static (recommended: best of the PAFA variants on LODO macro, level on the official
-split), trained SC dynamic, or test-time SC on the no-SC model. The ensemble and PAFA + PC-MCL rows are alternatives.
+**Decision (user, 23/10): baseline = BEATs + PAFA without SC; AuscultTrust = BEATs + PAFA
+trained and evaluated with static SC.** E1 and E1+E3 are exploratory extensions, not replacements
+for this primary comparison. Use the fixed last epochs; best-on-test results stay optimistic.
 
 ### 15.1 Review of stages 0-4 for the chosen configuration (22/10)
 
@@ -619,12 +624,28 @@ split), trained SC dynamic, or test-time SC on the no-SC model. The ensemble and
   gate (stage 7), so coverage under device shift is not yet shown for this model. The LODO numbers are selected numbers
   (section 17).
 
-## 16. Stage 11: After LODO [Pending]
+## 16. Stage 11: Frozen-model KAUH and recording screening
 
-KAUH positive controls A and B2 on the final model (frozen checkpoint + SHA-256, saved s_ref), screening view
-(recording level, 8 s windows, triage counts), phantom tests (H1, H3, co-primary H2) once the hardware is ready. The web
-demo is deployed; its current bundle serves BEATs + PAFA. Needs the final SC variant first (section 15), which the
-serving bundle must then match.
+Primary evaluation completed 23/10 15:25, five paired seeds. Decision and full process log:
+`docs/decision_logs/2026-10-23-final-model.md`, `docs/reports/final-pafa-static-execution.md`.
+
+- [Fact] KAUH-A: flip rate 0.445 ± 0.047 (baseline) → 0.209 ± 0.027 (AuscultTrust), reduction
+  +0.236, patient/seed bootstrap 95% CI [+0.177, +0.305]. Test-time-only SC: 0.212 ± 0.025.
+- [Fact] KAUH-B2: 2/6 ordered filter pairs pass the null gate; absolute coverage-error reduction
+  +0.1130 [0.0724, 0.1532] for AuscultTrust, +0.1346 [0.0856, 0.1608] for test-time-only SC.
+  Both software-filter positive controls pass; no claim about hardware H2 follows.
+- [Fact] ICBHI recording screening (mean windows, 20 patient splits): baseline coverage 89.8%,
+  set size 1.570, uncertain 57.0%; AuscultTrust 90.0%, 1.603, uncertain 60.3%. Argmax Se/Sp:
+  70.3/62.1% vs 64.2/67.7%. These are descriptive averages, not confidence bounds.
+- [Fact] ICBHI recording thresholds on KAUH (B1): AuscultTrust coverage 83.1/86.1/87.9% on
+  Bell/Diaphragm/Extended. Nominal coverage does not transfer uniformly.
+- [Fact] Validated PAFA/static-SC seed-0 bundle activated; local API health and checkpoint hashes verified.
+- [Fact] E1 raw-mean extension: KAUH flip 0.318 → 0.188, reduction +0.130 [0.084, 0.177];
+  B2 2/6 tested pairs, D +0.0615 [0.0301, 0.0887]. E1+E3: flip 0.304 → 0.190,
+  reduction +0.115 [0.073, 0.159]; B2 not tested (0/6 gated pairs).
+- [Fact] Recording screening with static-SC raw ensembles: E1 coverage 91.2%, set size 1.596,
+  uncertain 59.6%; E1+E3 90.7%, 1.535, uncertain 53.5%. These use raw mean softmax, not `k rate`.
+- [Pending] Phantom H1/H3/co-primary H2 requires physical recordings.
 
 ## 17. Caveats
 
@@ -644,15 +665,20 @@ serving bundle must then match.
 
 ## 18. Next steps
 
-Current step: stage 10 (final choice). Every training run is done and gathered on A.
+Final configuration chosen on 23/10; see `docs/decision_logs/2026-10-23-final-model.md`.
 
-1. [User] Choose the SC variant of BEATs PAFA (recommended: trained SC static) and single model vs ensemble
-   (section 15). Then freeze it (checkpoint SHA-256, s_ref, softmax export with `export_probs.py`) and make the serving
-   bundle of the demo match it.
-2. Results report for the submission of 25/10, built from this file (sections 1, 7-15, 17).
-3. Ensembles by encoder group done (section 14): equal weights beat learned weights; with the label-free `k rate` rule,
-   E1 or E1+E3 raise Se at PAFA's Sp. Open: whether the final AuscultTrust becomes such an ensemble (decision of the
-   user), `k rate` with few target cycles, the registered E1-E4, distillation into one BEATs model.
-4. With the frozen final model: KAUH positive controls and screening view (recording level); phantom tests (H1, H3)
-   once the hardware is ready. A coverage test of SC (H2) now needs the phantom data, earlier-epoch models or
-   another dataset, since LODO v1 has no tested fold.
+1. Primary campaign `scripts/final_evaluation.py` completed: five paired seeds frozen/exported,
+   KAUH and recording screening analysed, and the validated serving bundle activated.
+2. Record outcomes and limitations in `docs/reports/final-pafa-static-execution.md`; retain raw logs.
+3. Serving validation completed (21 focused tests, one real-bundle test; live local checkpoint hashes verified).
+4. E1 and E1+E3 frozen evaluation completed (raw equal-weight softmax; `k rate` cycle classification
+   remains separate). All member checkpoints, predictions and software-filter controls are logged.
+5. Phantom H1/H3/co-primary H2 requires hardware. No H2 criterion is relaxed after seeing results.
+
+Remaining work (23/10):
+
+6. Results report for the submission of 25/10/2026, built from this file (sections 1, 6-16, 17).
+7. Optional before the cut-off (31/01/2027): the registered ensembles E1-E4 of Amendment 4; `k rate` with few target
+   cycles; distillation of an ensemble into one BEATs model; AST/HTS-AT with SC dynamic (about 8 h) on request.
+8. Phantom: hardware, capture protocol, remove-and-replace ceiling, then H1, H3 and co-primary H2 on the frozen
+   weights and s_ref (`outputs/train/final-pafa-static/*/seed*/freeze.json`).

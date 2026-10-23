@@ -37,12 +37,12 @@ from src.processing.icbhi import CLASSES, DEVICES, cycle_table
 from src.processing.splits import calibration_eval_splits
 from src.training.patchmix_cl.summary import both_sides_patients
 
-# (unit, screening export from `src.evaluation.screening infer`, label); BEATs + Patch-Mix CL with and without SC.
+# (unit, screening export from `src.evaluation.screening infer`, label); BEATs + PAFA with and without static SC.
 # The AST units (screen-ast/sc+sc_static, screen-ast/baseline) fit too once their weights are on disk.
 PIPELINES = {
-    "auscult": ("outputs/train/lodo-v1/beats+ft+patchmix_cl+sc+sc_static/seed0", "outputs/screening/beats_auscult/seed0.npz",
-                "AuscultTrust (SC)"),
-    "baseline": ("outputs/train/grid-v1/beats+ft+patchmix_cl/seed0", "outputs/screening/beats_p0/seed0.npz", "Baseline (no SC)"),
+    "auscult": ("outputs/train/lodo-v1/beats+ft+pafa+sc+sc_static/seed0", "outputs/screening/final-pafa-static/auscult/seed0.npz",
+                "AuscultTrust (PAFA + static SC)"),
+    "baseline": ("outputs/train/grid-v1/beats+ft+pafa/seed0", "outputs/screening/final-pafa-static/baseline/seed0.npz", "Baseline (BEATs + PAFA, no SC)"),
 }
 PER_CLASS = 3
 

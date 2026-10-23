@@ -1,7 +1,8 @@
 """Audio validation, preprocessing, inference and serialisation for the serving bundle (`api.bundle`).
 
 Preprocessing follows training: mono, torchaudio resampling to 16 kHz, 1/16 s linear fade on the whole recording, every
-segment cut or repeat-padded to 8 s, SC (if the pipeline has it) on the 8 s waveform, Kaldi fbank, frozen model, softmax.
+annotated cycle cut or repeat-padded to the training duration (5 s for PAFA), SC (if enabled), Kaldi fbank,
+frozen model, softmax. Unannotated segments and recording-level screening retain 8 s windows.
 
 Segments: annotated cycles when given (the unit the model was trained on), else sliding 8 s windows. The recording-level
 screening view always uses the registered windows: max(1, floor(duration / 8)) windows evenly spread.
@@ -89,10 +90,10 @@ def screen_windows(duration):
     return [(float(s), float(min(s + SEG_SEC, duration))) for s in np.linspace(0, max(duration - SEG_SEC, 0), n)]
 
 
-def cut(x, segs):
-    """8 s repeat-padded waveforms (numpy) of the (start, end) segments of the (1, n) tensor `x`."""
+def cut(x, segs, desired_length=SEG_SEC):
+    """Repeat-padded waveforms of the requested model duration."""
     n = x.shape[1]
-    return [cut_pad(x[:, min(int(s * SR), n) : min(int(e * SR), n)], SEG_SEC, SR, "repeat")[0].numpy() for s, e in segs]
+    return [cut_pad(x[:, min(int(s * SR), n) : min(int(e * SR), n)], desired_length, SR, "repeat")[0].numpy() for s, e in segs]
 
 
 def gcc_phat_lag(ref, rec, max_lead=0.25, max_lag=1.5, band=(100.0, 2000.0)):
@@ -162,8 +163,10 @@ class Pipeline:
             screen8 = [apply_spectrum_correction(w, coef).astype(np.float32) for w in screen8]
             out["sc"] = {"applied": True, "mode": str(self.sc["sc_mode"]), "coefficient_source": source,
                          "gain_db": np.round(20 * np.log10(np.maximum(coef, 1e-8)), 2).tolist()}
-        p = predict_images(images_of(segs8 + screen8, self.args), self.model, self.classifier).astype(np.float64)
-        return out, p[: len(segs8)], p[len(segs8) :]
+        # Annotated cycles follow the training length; screening keeps its calibrated 8 s windows.
+        p = predict_images(images_of(segs8, self.args), self.model, self.classifier).astype(np.float64)
+        ps = predict_images(images_of(screen8, self.args), self.model, self.classifier).astype(np.float64)
+        return out, p, ps
 
 
 def serialise_segments(segs, p4, thr4, thr2, classes, classes2, truth=None):
@@ -212,7 +215,8 @@ class Engine:
         if not segs:
             raise AudioError("no_segments", "No segment falls inside the recording.")
         wins = screen_windows(duration)
-        segs8, screen8 = cut(x16, segs), cut(x16, wins)
+        length = int(self.m["preprocessing"]["segment_sec"]) if mode == "cycles" else SEG_SEC
+        segs8, screen8 = cut(x16, segs, length), cut(x16, wins)
         res = {"segmentation": {"mode": mode, **({"window_sec": window_sec, "hop_sec": hop_sec} if mode == "windows" else {})},
                "pipelines": {}}
         with self.lock, torch.no_grad():

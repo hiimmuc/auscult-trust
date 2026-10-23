@@ -66,3 +66,35 @@ def test_rotation_partitions_each_patient_tested_once_and_disjoint():
             and not set(s["train"]) & set(s["test"])
             and not set(s["cal"]) & set(s["test"])
         )
+
+
+def test_b2_identical_conditions_have_zero_paired_interval(tmp_path, monkeypatch):
+    import sys
+    import json
+    import numpy as np
+    from src.evaluation import kauh
+
+    rng = np.random.default_rng(5)
+    patients = np.repeat(np.arange(12), 3)
+    filters = np.tile(list(kauh.FILTERS.values()), 12)
+    probs = rng.dirichlet(np.ones(4), len(patients))
+    for condition in ("base", "same"):
+        (tmp_path / condition).mkdir()
+        for seed in (0, 1):
+            np.savez(tmp_path / condition / f"seed{seed}.npz", probs=probs,
+                     patient=patients, filter=filters, window=np.zeros(len(patients), int),
+                     stem=np.array([f"{p}_{f}" for p, f in zip(patients, filters)]),
+                     label=np.repeat(np.arange(12) % 2, 3))
+    monkeypatch.setattr(kauh, "rotation_folds", lambda: [(set(range(6)), set(range(6, 12))),
+                                                        (set(range(6, 12)), set(range(6)))])
+    calls = []
+    def null(*args, **kwargs):
+        calls.append(kwargs["n_splits"])
+        return -1.0  # Exercise B2 on every pair, regardless of the synthetic null gate.
+    monkeypatch.setattr(kauh, "null_delta_p95", null)
+    monkeypatch.setattr(sys, "argv", ["kauh", "--dir", str(tmp_path), "--base", "base",
+                                     "--arms", "same", "--boot", "8"])
+    kauh.main()
+    result = json.loads((tmp_path / "kauh_summary.json").read_text())
+    assert result["D_same"] == [0.0, 0.0, 0.0]
+    assert set(calls) == {200}

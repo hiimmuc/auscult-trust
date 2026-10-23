@@ -107,13 +107,21 @@ def main():
     ap.add_argument("--dir", required=True)
     ap.add_argument("--base", default="p0")
     ap.add_argument("--arms", nargs="+", default=["p0_sc", "auscult"])
-    ap.add_argument("--boot", type=int, default=500)
+    ap.add_argument("--boot", type=int, default=1000)
+    ap.add_argument("--null_splits", type=int, default=200)
     a = ap.parse_args()
     root = Path(a.dir)
     conds = [a.base] + a.arms
     data = {c: {int(p.stem[4:]): load(p) for p in sorted((root / c).glob("seed*.npz"))} for c in conds}
     recs = {c: {s: recordings(d) for s, d in data[c].items()} for c in conds}
     seeds = sorted(set.intersection(*[set(v) for v in data.values()]))
+    if not seeds:
+        raise ValueError("No paired seeds found for the requested conditions")
+    for c in conds:
+        for s in seeds:
+            for key in ("patient", "stem", "filter", "window", "label"):
+                if not np.array_equal(data[c][s][key], data[a.base][s][key]):
+                    raise ValueError(f"Unpaired KAUH rows: {c}, seed {s}, {key}")
     folds = rotation_folds()
     L = ["## A: paired invariance across the three filters (windows)", "",
          "| Condition | Flip rate | TV distance |", "|---|---|---|"]
@@ -144,25 +152,39 @@ def main():
         for s in seeds:
             for test_pat, cal_pat in folds:
                 u = pair_fold(recs[a.base][s], src, src, test_pat, cal_pat)  # source-filter data only
-                nulls.append(null_delta_p95({**u, "test_pat": u["test_pat"]}, n_splits=100, seed=s))
+                nulls.append(null_delta_p95({**u, "test_pat": u["test_pat"]}, n_splits=a.null_splits, seed=s))
         null[src, tgt] = float(np.mean(nulls))
         for c in conds:
             L.append(f"| {src} -> {tgt} | {c} | {abs_d[src, tgt, c]:.3f} | {null[src, tgt]:.3f} | {'yes' if abs_d[src, tgt, a.base] > null[src, tgt] else 'no'} |")
     tested = [(s_, t_) for s_, t_ in ORDERED_PAIRS if abs_d[s_, t_, a.base] > null[s_, t_]]
     L += ["", f"Tested pairs (baseline |Delta| above the null p95): {len(tested)} of {len(ORDERED_PAIRS)}.", ""]
-    results = {"A": {c: A[c].mean(0).tolist() for c in conds}, "tested_pairs": [list(p) for p in tested]}
+    results = {"A": {c: A[c].mean(0).tolist() for c in conds}, "tested_pairs": [list(p) for p in tested],
+               "seeds": seeds, "bootstrap_draws": a.boot, "null_splits": a.null_splits}
     for arm in a.arms:
         def stat(draw):
             vals = []
             for src, tgt in tested:
                 ss = seeds if draw is None else draw.choice(seeds, len(seeds))
-                vals.append(np.mean([b2_delta(recs[a.base][s], folds, src, tgt, draw) - b2_delta(recs[arm][s], folds, src, tgt, draw) for s in ss]))
+                paired = []
+                for s in ss:
+                    # Identical patient draws in both conditions, including calibration.
+                    seed = None if draw is None else int(draw.integers(0, 2**32))
+                    base_rng = None if seed is None else np.random.default_rng(seed)
+                    arm_rng = None if seed is None else np.random.default_rng(seed)
+                    paired.append(b2_delta(recs[a.base][s], folds, src, tgt, base_rng)
+                                  - b2_delta(recs[arm][s], folds, src, tgt, arm_rng))
+                vals.append(np.mean(paired))
             return float(np.mean(vals)) if vals else float("nan")
 
         point = stat(None)
-        boots = np.array([stat(np.random.default_rng(1000 + i)) for i in range(max(50, a.boot // 5))])
-        L.append(f"- D({a.base} vs {arm}) = {point:+.4f} [{np.nanpercentile(boots, 2.5):+.4f}, {np.nanpercentile(boots, 97.5):+.4f}] over {len(tested)} tested pairs")
-        results[f"D_{arm}"] = [point, float(np.nanpercentile(boots, 2.5)), float(np.nanpercentile(boots, 97.5))]
+        if tested:
+            boots = np.array([stat(np.random.default_rng(1000 + i)) for i in range(a.boot)])
+            ci = np.percentile(boots, [2.5, 97.5]).tolist()
+            L.append(f"- D({a.base} vs {arm}) = {point:+.4f} [{ci[0]:+.4f}, {ci[1]:+.4f}] over {len(tested)} tested pairs")
+            results[f"D_{arm}"] = [point, *ci]
+        else:
+            L.append(f"- D({a.base} vs {arm}): not tested (no pair passes the null gate).")
+            results[f"D_{arm}"] = None
     md = "\n".join(L) + "\n"
     (root / "kauh_summary.md").write_text(md)
     (root / "kauh_summary.json").write_text(json.dumps(results, indent=1))

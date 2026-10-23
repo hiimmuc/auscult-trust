@@ -1,119 +1,70 @@
 # AuscultTrust
 
-**Spectrum correction + AST (Patch-Mix CL) + split-conformal prediction for lung-sound classification that survives a change of stethoscope.**
+Research code and a demo app for lung-sound classification under stethoscope/device shift. The research studies spectrum correction (SC) and split-conformal prediction. The selected **baseline** is fine-tuned **BEATs + PAFA** without SC; **AuscultTrust** uses the same recipe with **static SC at training and inference**. Exploratory extensions are the equal-weight **E1** and **E1+E3** ensembles.
 
-KHKT 2026-2027 · school round 17/10/2026 · research cut-off 31/01/2027
+This is a research prototype for sound classification and screening support. It is not a medical device and does not diagnose disease.
 
-> *Nghiên cứu giải pháp cải thiện độ tin cậy của mô hình phân loại âm thanh phổi dưới sự dịch chuyển thiết bị bằng hiệu chỉnh phổ và dự đoán Conformal cho hỗ trợ sàng lọc bệnh đường hô hấp*
+## Project map
 
----
-
-## Research question
-
-Does spectrum correction (SC) let a benchmark-level lung-sound classifier **keep its predictions and its conformal coverage** when the stethoscope changes, **without labels from the new stethoscope**?
-
-| Piece | What it does |
+| Path | Purpose |
 | --- | --- |
-| **SC front end** | Rescales each device's mean spectrum to a shared reference (STFT 1024/512, 16 kHz). Uses unlabelled target audio only. |
-| **AST + Patch-Mix CL** | Benchmark-level 4-class cycle classifier (normal / crackle / wheeze / both). |
-| **Split-conformal layer** | LAC score, alpha = 0.1. Cycle 4-class view and recording-level screening view (normal / abnormal). |
+| `src/processing/` | Audio, ICBHI/KAUH data, patient splits, spectrum correction |
+| `src/training/patchmix_cl/` | Training and export using the Patch-Mix CL reference implementation |
+| `src/evaluation/` | Metrics, conformal prediction, screening, device-shift experiments |
+| `experiments/train/` | Composable YAML training recipes |
+| `scripts/` | Data preparation, campaigns, analysis, and deployment staging |
+| `api/` | FastAPI inference service and serving-bundle builder |
+| `app/web/` | Vite/TypeScript browser app |
+| `package.json` | Root Wrangler CLI dependency for Cloudflare Pages deployment |
+| `docs/` | Setup, protocols, decisions, results, and handoffs |
+| `outputs/`, `checkpoints/`, `logs/` | Local, git-ignored experiment artifacts |
 
-**Hypotheses** (full definitions: `docs/updates/research-proposal-v9-en.md`, pre-registration `docs/updates/prereg-v8.md` + `docs/updates/prereg-v9-amendment.md`)
-
-| ID | Claim |
-| --- | --- |
-| G | Stage 1 gate: AuscultTrust is not worse than plain Patch-Mix CL by more than 1.5 Score points (10 seeds). |
-| H1 | SC lowers the prediction flip rate between devices on the same sound. |
-| H2 | SC lowers \|coverage - 0.90\| on an unseen device, set size not larger (ICBHI leave-one-device-out). |
-| H3 | SC explains at least 80 % of the paired log-mel shift (phantom transducers, pending). |
-
-Not claimed: a new algorithm, SOTA Score, disease diagnosis, patient-level guarantees, KAUH software filters as real hardware.
-
-## Pipeline
+Training outputs and checkpoints mirror each other by run, model variant, and fit:
 
 ```text
- wav ──► SC (per-device spectrum / reference) ──► log-mel ──► AST + Patch-Mix CL ──► softmax
-                                                                                      │
-                          calibration patients ──► split conformal (LAC, alpha 0.1) ◄──┘
-                                                          │
-                              cycle 4-class sets  /  recording screening triage
+outputs/train/<run>/<cell>/<unit>/       reports, predictions, training arguments
+checkpoints/train/<run>/<cell>/<unit>/   model weights
 ```
 
-- **Stage 1 (model):** official ICBHI 60/40 split, arms P0 / P1 / P1+P3 / P4, 5 seeds (10 for the gate), grouped 3-fold CV for selection.
-- **Stage 2 (experiments):** frozen Stage-1 model. Test 1 ICBHI LODO, Test 2 KAUH filters, Test 3 phantom (pending).
+Serving is separate: `api/bundle.py` assembles selected checkpoints and metadata into `app/bundle/`. The API loads that bundle; it does not scan experiment output folders. `AT_APP_BUNDLE` can point to another bundle directory.
 
-## Quick start
+## Setup and training
+
+See [Setup](docs/SETUP.md) for environments, datasets, and reference repositories, and [Quickstart](docs/QUICKSTART.md) for the registered training workflow. The training environment uses Python 3.10; analysis and training dependencies are intentionally separate.
+
+Typical campaign:
 
 ```bash
-# 1. data + reference code
-bash scripts/download_data.sh          # ICBHI, KAUH, AST weights, Patch-Mix CL repo
-python scripts/prepare_data.py         # fix names, build training folder, check datasets
-
-# 2. environments (two: analysis and training, timm==0.4.5 needs Python 3.10)
-uv venv .venv && uv pip install -r requirements.txt
-uv venv .venv-train --python 3.10 && uv pip install --python .venv-train/bin/python -r requirements-train.txt
-
-# 3. campaign
-export RUN_ID=$(date +%Y%m%d-%H%M%S)   # export the same id again to resume
-bash scripts/run.sh screen             # 3-fold CV of every arm (SC arms with both sc_mode)
-bash scripts/run.sh summary            # ranking, CV epochs, AuscultTrust arm
-bash scripts/run.sh final              # refit at CV epoch, test once
-bash scripts/run.sh report             # final.md: tables, paired differences, gate G
-
-# 4. tests
-uv run --no-project --python .venv/bin/python python -m pytest -q tests
+export RUN_ID=$(date +%Y%m%d-%H%M%S)
+bash scripts/run.sh screen
+bash scripts/run.sh summary
+bash scripts/run.sh final
+bash scripts/run.sh report
 ```
 
-Step-by-step: **[docs/SETUP.md](docs/SETUP.md)** (environments, data sources) and **[docs/QUICKSTART.md](docs/QUICKSTART.md)** (campaign, single run, freeze and export).
+Results and checkpoints are local artifacts and are not committed. Keep each experiment's `RUN_ID` fixed when resuming it.
 
-## Arms
+## Inference app
 
-| Arm | Config | Code name |
-| --- | --- | --- |
-| P0 Patch-Mix CL (baseline) | `experiments/train/baseline.yaml` | `baseline` |
-| P1 = P0 + SC | `sc.yaml` | `sc` |
-| P1+P3 = SC + random per-bin gain (6 dB SD) | `sc_gain.yaml` | `sc_gain` |
-| P4 Freq-MixStyle p = 0.5 (competitor) | `freq_mixstyle.yaml` | `freq_mixstyle` |
+The app has two independently run parts: a FastAPI model service and a static browser UI. Deployment instructions, environment variables, API routes, security settings, and hosting options are in [app/README.md](app/README.md).
 
-All configs layer on `base.yaml`; `sc_static.yaml` switches the SC clipping mode. See `experiments/train/README.md`.
+To run locally after installing the documented dependencies and preparing `app/bundle/`:
 
-## Layout
-
-```
-auscult-trust/
-├── src/
-│   ├── paths.py, runs.py        data/repo locations; run dirs outputs|checkpoints/<exp>/<run_id>/<cell>/<unit>
-│   ├── processing/              ICBHI + KAUH loaders, patient-disjoint splits, SC, gain augmentation
-│   ├── training/patchmix_cl/    dataset, loop, reports, frozen-softmax export (model/loss from upstream repo)
-│   └── evaluation/              metrics, coverage under shift, conformal layer, export reader
-├── experiments/train/           base recipe + one YAML per arm
-├── scripts/                     run.sh, download_data.sh, prepare_data.py, sweep.py
-├── tests/                       pytest suite
-├── notebooks/                   exploration
-├── docs/                        setup, quickstart, proposal v9, pre-registration, decision logs
-├── report.md                    results log (Phase 0 + current)
-├── data/                        README only (data lives next to the repo)
-└── checkpoints/ outputs/ logs/  gitignored run artefacts
+```bash
+PYTHONPATH=. .venv-train/bin/uvicorn api.main:app --host 127.0.0.1 --port 8000
+cd app/web && npm ci && npm run dev
 ```
 
-Wrapper directory (not versioned): `../data/raw/` (ICBHI, KAUH, HF_Lung_V1), `../repos/` (read-only references: OPERA, patch-mix_contrastive_learning, SG-SCL), `../archive/` (Phase 0 code).
+The API reports model readiness at `GET /v1/health`; inference is unavailable until a valid bundle and its referenced weights load. Do not expose a public API without choosing appropriate authentication, rate limits, and sample-serving settings.
 
-## Documentation map
+The final decision and execution provenance are recorded in [the model decision log](docs/decision_logs/2026-10-23-final-model.md).
 
-| Need | Read |
-| --- | --- |
-| Install, data sources | [docs/SETUP.md](docs/SETUP.md) |
-| Run and compare arms | [docs/QUICKSTART.md](docs/QUICKSTART.md) |
-| Full design, hypotheses | [docs/updates/research-proposal-v9-en.md](docs/updates/research-proposal-v9-en.md) |
-| Registered plan | [docs/updates/prereg-v8.md](docs/updates/prereg-v8.md), [docs/updates/prereg-v9-amendment.md](docs/updates/prereg-v9-amendment.md) |
-| Vietnamese change list | [docs/updates/v9-change-list-vi.md](docs/updates/v9-change-list-vi.md) |
-| Results so far | [report.md](report.md) |
-| Config conventions (for agents) | [CLAUDE.md](CLAUDE.md) |
+## Research and documentation
 
-## Rules that matter
+- [Research proposal v10](docs/updates/research-proposal-v10-en.md) (current), the registered [proposal v9](docs/updates/research-proposal-v9-en.md) and [pre-registration](docs/updates/prereg-v8.md) define the study and amendments.
+- [Handoff](docs/handoff/HANDOFF.md) gives the current state, where results live and the next steps.
+- [Results](report.md) and dated reports in `docs/reports/` contain findings and limitations.
+- [Decision logs](docs/decision_logs/) record protocol changes; [handoffs](docs/handoff/) track active work.
+- [CLAUDE.md](CLAUDE.md) contains repository-specific working conventions.
 
-- Splits are **patient-disjoint**, always. Calibration patients never train, select or evaluate.
-- Tune on grouped CV over training patients, never on test. Test-selected numbers appear only in a labelled literature column.
-- SC uses unlabelled target audio only. Target labels are for evaluation.
-- Trained arms use at least 5 paired seeds; report mean ± SD; bootstrap by patient.
-- Every run logs config, seed, data hash, checkpoint hash and `s_ref` hash. A finished unit is skipped; a different config in an existing unit is refused.
+The registered core experiments used AST with Patch-Mix CL; the selected demo model is a later model decision. See the dated results and handoff documents for the evidence and current experiment status. Do not treat the demo model as a replacement for registered analyses.

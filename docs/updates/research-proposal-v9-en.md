@@ -2,6 +2,7 @@
 
 **Registered title (fixed):** *Nghiên cứu giải pháp cải thiện độ tin cậy của mô hình phân loại âm thanh phổi dưới sự dịch chuyển thiết bị bằng hiệu chỉnh phổ và dự đoán Conformal cho hỗ trợ sàng lọc bệnh đường hô hấp*
 
+> **Superseded by v10** (`research-proposal-v10-en.md`, 23/10/2026) for the model and the evidence; this file stays the registered study.
 > Proposal v9, 07/10/2026 (revised the same day: [46] read, TTA-EQ comparator added; prereg amendment registered, B2/B8 decided). KHKT 2026–2027, THPT chuyên Chu Văn An. Replaces v8 (decision log: Appendix C).
 > Tags: **[Fact]** cited and checked, or measured in our repo · **[Interpretation]** reasoned from facts · **[Hypothesis]** testable, not shown · **[Assumption]** planning choice, to confirm · **[Pending]** blocked on hardware.
 > Repo facts: `auscult-trust` `report.md` (Phase 0, to 05/10/2026). Open items: *[to verify]*.
@@ -392,7 +393,7 @@ Uncertainty:
 | R8 | SC loses to the stochastic arms (P1P3, P4, TTA-EQ) | Med | Reported as a finding. H2 tests SC against the baseline, not against the best arm; the title commits to SC, not to SC winning |
 | R5 | Bandwidth mismatch breaks SC | High until fixed | `sc_mode` (dynamic clip or static common band), both screened by CV; unit tested |
 | R6 | < 3 transducers by 30/11/2026 | High | Low-cost transducers (§5.6). Otherwise H1 and H3 are reported as planned, and C2 rests on LODO |
-| R7 | Stage 1 overruns before 17/10 | Med | P1 fallback for AuscultTrust; gate G seeds 5–9 after the school round |
+| R7 | Stage 1 overruns before 10/10 | Med | P1 fallback for AuscultTrust; gate G seeds 5–9 after the school round |
 
 ---
 
@@ -410,7 +411,7 @@ Uncertainty:
 |---|---|---|---|
 | M0 | 09/10/2026 | Registration | v9 and amendment dated and committed; SC clip and s_ref export with unit test; `stage1_summary` v9 mode |
 | M1 | 14/10/2026 | Stage 1 core | 4 arms screened; refit with seeds 0–4; F1; model frozen and exported; E0; minimal KAUH inference + measurement A (preview) |
-| M2 | 17/10/2026 | School round | 10-min talk + poster: Stage 1 table, KAUH-A control, Stage 2 plan |
+| M2 | 10/10/2026 | School round | 10-min talk + poster: Stage 1 table, KAUH-A control, Stage 2 plan |
 | M3 | 31/10/2026 | Gate and Stage 2 code | Seeds 5–9 for G; LODO split (main and [46]-matched), screening view, KAUH B2, A2 and TTA-EQ at test time, H2 null simulation |
 | M4 | 30/11/2026 | Public-data Stage 2 | LODO 4 folds × 5 seeds × 4 arms; KAUH A/B/C; H2 on ICBHI; F2–F5 |
 | M5 | 31/12/2026 | Phantom | Hardware by 30/11; recordings; H1, H2 co-primary, H3 |

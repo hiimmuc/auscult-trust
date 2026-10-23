@@ -4,11 +4,21 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Status
 
-Main line: **proposal v9** (`docs/updates/research-proposal-v9-en.md`, 07/10/2026). Registered title (fixed): *Nghiên cứu giải pháp cải thiện độ tin cậy của mô hình phân loại âm thanh phổi dưới sự dịch chuyển thiết bị bằng hiệu chỉnh phổ và dự đoán Conformal cho hỗ trợ sàng lọc bệnh đường hô hấp*. v8 and earlier (A+B, H, v4) are superseded; their results stay in `report.md` as Phase 0.
+For current experiment progress and deployment state, use [`report.md`](report.md) and [`app/README.md`](app/README.md).
+The detailed dated handoffs under `docs/handoff/` are snapshots; their machine tables and next steps are historical unless
+they have a newer dated update.
+
+Main line: **proposal v10** (`docs/updates/research-proposal-v10-en.md`, 23/10/2026: final model and v9 evidence; hypotheses and registered criteria unchanged). Registered study: **proposal v9** (`docs/updates/research-proposal-v9-en.md`, 07/10/2026). Registered title (fixed): *Nghiên cứu giải pháp cải thiện độ tin cậy của mô hình phân loại âm thanh phổi dưới sự dịch chuyển thiết bị bằng hiệu chỉnh phổ và dự đoán Conformal cho hỗ trợ sàng lọc bệnh đường hô hấp*. v8 and earlier (A+B, H, v4) are superseded; their results stay in `report.md` as Phase 0.
 Pre-registration: `docs/updates/prereg-v8.md`, amended 07/10/2026 (`docs/updates/prereg-v9-amendment.md`, appended to the end of `prereg-v8.md`; registered, no Stage-1 run preceded it).
 Data in `../data/raw/`: ICBHI (920 wav, 6898 cycles, 126 patients), HF_Lung_V1 (9765 wav, not used in v9 core), KAUH (336 wav = 112 patients x 3 filters). Reference repos in `../repos` (read-only): OPERA, patch-mix_contrastive_learning, SG-SCL.
-Model name: **AuscultTrust** = BEATs + PAFA, fine-tuned (user decision 22/10/2026; SC variant chosen after the dynamic-bound SC runs) + split-conformal layer (cycle 4-class view + recording-level screening view). The registered v9 core below used SC front end + AST (Patch-Mix CL recipe).
-Dates: school round 17/10/2026 (10-min talk + poster, results report required); research cut-off 31/01/2027.
+Final decision (23/10/2026): **baseline** = BEATs + PAFA, fine-tuned, no SC; **AuscultTrust** = the same recipe trained and evaluated with **static SC**, plus the split-conformal layer (cycle 4-class and recording-level screening). Exploratory extensions: equal-weight **E1** (three BEATs members) and **E1+E3** (E1 plus two HTS-AT members), with and without static SC. See `docs/decision_logs/2026-10-23-final-model.md` for fixed epochs, provenance and execution logs. The registered v9 core below used SC front end + AST (Patch-Mix CL recipe).
+Final evaluation completed 23/10/2026: `scripts/final_evaluation.py` and `scripts/final_ensembles.py`;
+results/process log: `docs/reports/final-pafa-static-execution.md`. Primary KAUH A/B2 controls pass;
+recording screening retains a high uncertain rate. The validated seed-0 PAFA/static-SC bundle is active.
+The P0/P1 and gate definitions below describe the historical registered AST study; do not confuse
+that P0 with the current BEATs + PAFA project baseline. Phantom work remains pending hardware.
+
+Dates: school round 10/10/2026 (10-min talk + poster); results report submission 25/10/2026; research cut-off 31/01/2027.
 
 ## Project (v9)
 
