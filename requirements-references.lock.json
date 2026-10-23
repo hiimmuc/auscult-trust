@@ -1,0 +1,46 @@
+{
+  "PAFA": {
+    "url": "https://github.com/wa976/PAFA.git",
+    "commit": "e49e294d0db0d6af10ac46290512b9c85d3f71e1"
+  },
+  "ADD-RSC": {
+    "url": "git@github.com:deegy666/ADD-RSC.git",
+    "commit": "e2b0f8213cb7ca451ef28757cb1329e17469fe72"
+  },
+  "patch-mix_contrastive_learning": {
+    "url": "https://github.com/raymin0223/patch-mix_contrastive_learning.git",
+    "commit": "836b09fea1b70eb29fe0b25afa481286b56f5104"
+  },
+  "QLung": {
+    "url": "git@github.com:RSC-Toolkit/QLung.git",
+    "commit": "a1a01041855dd1e08ed432f39c8b61976f2481fc"
+  },
+  "SG-SCL": {
+    "url": "https://github.com/kaen2891/stethoscope-guided_supervised_contrastive_learning.git",
+    "commit": "2ed1bacc7121653805702f3a1afb5557a56f5a05"
+  },
+  "OPERA": {
+    "url": "https://github.com/evelyn0414/OPERA.git",
+    "commit": "3622310e667afb8aa40169050b4dd45de75946a2"
+  },
+  "hear": {
+    "url": "git@github.com:Google-Health/hear.git",
+    "commit": "36bbb90879545a2f1106668048b1a12a61ff2a0d"
+  },
+  "Lung-SRAD": {
+    "url": "git@github.com:RSC-Toolkit/Lung-SRAD.git",
+    "commit": "6df75ce07646885c097cec8db7ef834a335fe25d"
+  },
+  "DASS": {
+    "url": "https://github.com/Saurabhbhati/DASS",
+    "commit": "246c9f419caed161243d97da933dcbf90159b93c"
+  },
+  "HTS-Audio-Transformer": {
+    "url": "git@github.com:RetroCirce/HTS-Audio-Transformer.git",
+    "commit": "2e29471fce7e770edeaaa64a41908bf234844fc5"
+  },
+  "RespireNet": {
+    "url": "git@github.com:microsoft/RespireNet.git",
+    "commit": "5e3f41aaec93e87eba9e06a67fe93c56b391b5a8"
+  }
+}

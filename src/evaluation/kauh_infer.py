@@ -130,6 +130,12 @@ def main():
     ap.add_argument("--tta_eq", type=int, default=0, help="TTA-EQ views (6 dB SD per-bin gain, seeds 1000 + k)")
     a = ap.parse_args()
     unit = Path(a.unit_dir)
+    from src.artifacts import prediction_inputs, record_prediction, atomic_npz
+    context = dict(unit=unit, checkpoint=runs.twin_dir(unit) / a.ckpt, dataset="kauh", sc=a.sc,
+                   sc_unit=Path(a.sc_state).parent if a.sc_state else unit,
+                   options={"a2": a.a2, "tta_eq": a.tta_eq,
+                            "sc_state": a.sc_state, "sc_args": a.sc_args})
+    inputs = prediction_inputs(**context)
     args = build_parser().parse_args([])
     vars(args).update(json.load(open(unit / "train_args.json")))
     sc_args = argparse.Namespace(**json.load(open(a.sc_args or unit / "train_args.json")))
@@ -162,7 +168,7 @@ def main():
         probs = predict_images(images, model, classifier)
     out = Path(a.out)
     out.parent.mkdir(parents=True, exist_ok=True)
-    np.savez_compressed(
+    atomic_npz(
         out,
         probs=probs,
         label=win["label"].to_numpy(),
@@ -176,6 +182,7 @@ def main():
         **({"view_probs": view_probs.astype(np.float16)} if view_probs is not None else {}),
         ckpt_sha256=np.array(runs.sha256_file(ckpt)),
     )
+    record_prediction(out, inputs, **context)
     print(out, probs.shape, "sc" if a.sc else "no sc", "a2" if a.a2 else "", "tta{}".format(a.tta_eq) if a.tta_eq else "")
 
 

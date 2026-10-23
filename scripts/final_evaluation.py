@@ -15,8 +15,9 @@ from datetime import datetime, timezone
 
 import numpy as np
 from src.runs import sha256_file as sha
+from src.artifacts import prediction_inputs, verify_prediction, immutable_json, environment
 
-RUN = "final-pafa-static"
+RUN = os.environ.get("AT_EVAL_RUN", "final-pafa-static")
 LOG = Path("logs") / RUN
 BASE = Path("outputs/train/grid-v1/beats+ft+pafa")
 SC = Path("outputs/train/lodo-v1/beats+ft+pafa+sc+sc_static")
@@ -38,14 +39,20 @@ def run(args):
     result.check_returncode()
 
 
-def export_ok(path, checkpoint_sha, sc):
+def export_ok(path, checkpoint_sha, sc, *, unit, checkpoint, dataset, sc_unit=None):
     if not path.exists():
         return False
+    options = ({"a2": False, "tta_eq": 0, "sc_state": str(Path(sc_unit) / "sc_state.npz") if sc_unit else None,
+                "sc_args": str(Path(sc_unit) / "train_args.json") if sc_unit else None} if dataset == "kauh" else {})
+    inputs = prediction_inputs(unit, checkpoint, dataset, sc,
+                               sc_unit=sc_unit, options=options)
+    verify_prediction(path, inputs)
     with np.load(path, allow_pickle=True) as z:
-        assert str(z["ckpt_sha256"]) == checkpoint_sha, f"checkpoint mismatch: {path}"
-        assert bool(z["sc"]) == sc, f"SC mismatch: {path}"
-        assert np.isfinite(z["probs"]).all()
-        assert np.allclose(z["probs"].sum(1), 1, atol=1e-5)
+        if str(z["ckpt_sha256"]) != checkpoint_sha or bool(z["sc"]) != sc:
+            raise ValueError(f"Checkpoint or correction mismatch: {path}")
+        p = z["probs"]
+        if p.ndim != 2 or not np.isfinite(p).all() or (p < 0).any() or not np.allclose(p.sum(1), 1, atol=1e-5):
+            raise ValueError(f"Invalid probabilities: {path}")
     event(status="verified", artifact=str(path), sha256=sha(path))
     return True
 
@@ -67,7 +74,8 @@ def main():
     data_files.append(folder / "official_split.txt")
     hashes = {str(p): sha(p) for p in data_files if p.is_file()}
     input_path = LOG / "input_hashes.json"
-    input_path.write_text(json.dumps(hashes, indent=2) + "\n")
+    immutable_json(input_path, hashes)
+    immutable_json(LOG / "environment.json", environment())
     data_sha = sha(input_path)
     for seed in range(5):
         for name, parent, sc in (("baseline", BASE, False), ("auscult", SC, True)):
@@ -86,26 +94,28 @@ def main():
                 with np.load(unit / "sc_state.npz") as z:
                     assert str(z["sc_mode"]) == "static"
                     manifest["s_ref_sha256"] = hashlib.sha256(z["reference"].tobytes()).hexdigest()
-            (frozen / "freeze.json").write_text(json.dumps(manifest, indent=2) + "\n")
+            immutable_json(frozen / "freeze.json", manifest)
             event(status="frozen", condition=name, seed=seed, checkpoint_sha256=checkpoint_sha)
             export = unit / "export"
-            if not (export / "model.sha256").exists():
+            if not (export / "test.npz").exists():
                 run(["-m", "src.training.patchmix_cl.export_probs", unit, "--ckpt", checkpoint.name, "--num_workers", "0"])
+            verify_prediction(export / "test.npz", prediction_inputs(unit, checkpoint, "cycles", sc,
+                              options={"sc_test_profile": None}))
             assert (export / "model.sha256").read_text().split()[0] == checkpoint_sha
             for dataset, module in (("screening", "screening"), ("kauh", "kauh_infer")):
                 out = Path("outputs") / dataset / RUN / name / f"seed{seed}.npz"
-                if not export_ok(out, checkpoint_sha, sc):
+                if not export_ok(out, checkpoint_sha, sc, unit=unit, checkpoint=checkpoint, dataset=dataset):
                     run(["-m", "src.evaluation." + module, *(["infer"] if dataset == "screening" else []),
                          unit, "--ckpt", checkpoint.name, "--out", out, *(["--sc"] if sc else [])])
-                    export_ok(out, checkpoint_sha, sc)
+                    export_ok(out, checkpoint_sha, sc, unit=unit, checkpoint=checkpoint, dataset=dataset)
         # Isolation contrast: baseline weights with static SC from the corresponding SC run.
         unit, sc_unit = BASE / f"seed{seed}", SC / f"seed{seed}"
         checkpoint = Path(str(unit).replace("outputs/", "checkpoints/", 1)) / "report_epoch_100.pth"
         out = Path("outputs/kauh") / RUN / "baseline_ttsc" / f"seed{seed}.npz"
-        if not export_ok(out, sha(checkpoint), True):
+        if not export_ok(out, sha(checkpoint), True, unit=unit, checkpoint=checkpoint, dataset="kauh", sc_unit=sc_unit):
             run(["-m", "src.evaluation.kauh_infer", unit, "--ckpt", checkpoint.name, "--out", out,
                  "--sc", "--sc_state", sc_unit / "sc_state.npz", "--sc_args", sc_unit / "train_args.json"])
-            export_ok(out, sha(checkpoint), True)
+            export_ok(out, sha(checkpoint), True, unit=unit, checkpoint=checkpoint, dataset="kauh", sc_unit=sc_unit)
     run(["-m", "src.evaluation.kauh", "--dir", f"outputs/kauh/{RUN}", "--base", "baseline",
          "--arms", "auscult", "baseline_ttsc", "--boot", "1000", "--null_splits", "200"])
     run(["-m", "src.evaluation.screening", "analyse", "--dir", f"outputs/screening/{RUN}",

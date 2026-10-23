@@ -1,0 +1,23 @@
+name: Validate
+on: [push, pull_request]
+permissions:
+  contents: read
+jobs:
+  research-api-web:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: app/web/package-lock.json
+      - uses: astral-sh/setup-uv@v6
+      - run: uv venv .venv-train --python 3.10
+      - run: uv pip sync --python .venv-train/bin/python --extra-index-url https://download.pytorch.org/whl/cu128 requirements-train.lock
+      - run: .venv-train/bin/python -m src.references --install --only PAFA ADD-RSC patch-mix_contrastive_learning QLung SG-SCL
+      - run: bash scripts/validate.sh

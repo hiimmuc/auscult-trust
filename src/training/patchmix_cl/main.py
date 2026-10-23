@@ -19,6 +19,8 @@ import numpy as np
 import torch
 import torch.backends.cudnn as cudnn
 from src import runs
+from src.artifacts import atomic_json, atomic_path, prediction_inputs
+from src.training.state import capture_rng, restore_rng, completed, publish_completion
 
 from .config import build_parser, parse_args
 from .dataset import build_loaders
@@ -28,12 +30,17 @@ from .optim import adjust_learning_rate
 from .reporting import pick_epochs
 
 warnings.filterwarnings("ignore")
-_VOLATILE = {"num_workers", "print_freq"}
+_VOLATILE = {"num_workers", "print_freq"}  # legacy recipe audit ignores scheduling settings
+
+
+def atomic_save(value, path):
+    with atomic_path(path) as temporary:
+        torch.save(value, temporary)
 
 
 def save_model(model, args, epoch, path, classifier):
     """Weights for inference: classifier always, encoder only when it was trained (a frozen one is the pretrained file)."""
-    torch.save(
+    atomic_save(
         {
             "args": vars(args),
             # ADD-RSC's denoising layer is trained even in front of a frozen encoder
@@ -52,11 +59,12 @@ def check_same_config(path, args):
         old = json.loads(path.read_text())
         defaults = json.loads(json.dumps(vars(build_parser().parse_args([])), default=str))
         # a key added to the parser after the unit started is fine while it keeps its default
-        diff = {k for k in new if k not in _VOLATILE and old.get(k, defaults.get(k)) != new[k]}
-        assert not diff, "{} exists with a different config ({}); use a new RUN_ID".format(
-            path.parent, sorted(diff)
-        )
-    path.write_text(json.dumps(new, indent=2))
+        # Worker count affects stochastic augmentation streams and must match on resume.
+        diff = {k for k in new if k not in (_VOLATILE - {"num_workers"}) and old.get(k, defaults.get(k)) != new[k]}
+        if diff:
+            raise ValueError("{} exists with a different config ({}); use a new RUN_ID".format(path.parent, sorted(diff)))
+        return
+    atomic_json(path, new)
 
 
 def save_sc_state(out_dir, train_dataset, test_dataset, args):
@@ -98,18 +106,23 @@ def main():
     out_dir, ckpt_dir = (
         runs.unit_dir(args.exp, args.cell, args.unit, kind) for kind in ("outputs", "checkpoints")
     )
-    if (out_dir / "report.json").exists():
+    check_same_config(out_dir / "train_args.json", args)
+    if completed(out_dir, ckpt_dir):
         print("done: {}".format(out_dir))
         return
+    inputs = prediction_inputs(out_dir, None, "cycles")
+    input_path = out_dir / "input_manifest.json"
+    if input_path.exists() and json.loads(input_path.read_text()) != inputs:
+        raise ValueError("Training inputs or environment changed; use a new RUN_ID")
+    atomic_json(input_path, inputs)
     runs.write_meta(args.exp, {"config_files": args.config_files})
-    check_same_config(out_dir / "train_args.json", args)
 
     random.seed(args.seed)
     np.random.seed(args.seed)
     torch.manual_seed(args.seed)
     torch.cuda.manual_seed(args.seed)
     cudnn.deterministic = True
-    cudnn.benchmark = True
+    cudnn.benchmark = False
 
     train_loader, val_loader, test_loader, train_dataset, test_dataset, cal_loader, cal_cycles = (
         build_loaders(args)
@@ -125,7 +138,7 @@ def main():
     start_epoch, best_key, best_model, history, test_preds = 1, -1.0, None, [], {}
     cal_preds = {}  # leave-one-device-out: calibration-patient predictions at the report epochs
     last = ckpt_dir / "last.pth"
-    if last.is_file():  # full resume (written every epoch); RNG state is not restored
+    if last.is_file():  # restore RNG after model and dataset construction, before the next iterator
         ck = torch.load(last, map_location="cpu", weights_only=False)
         model.load_state_dict(ck["model"]), classifier.load_state_dict(ck["classifier"])
         projector.load_state_dict(ck["projector"]), optimizer.load_state_dict(ck["optimizer"])
@@ -135,6 +148,7 @@ def main():
         start_epoch, best_model, best_key = ck["epoch"] + 1, ck["best_model"], ck["best_key"]
         history, test_preds = ck["history"], ck["test_preds"]
         cal_preds = ck.get("cal_preds", {})
+        restore_rng(ck.get("rng"))
         print("=> resumed '{}' after epoch {}".format(last, ck["epoch"]))
 
     screening = args.cv_folds > 0  # selection never sees test data while screening
@@ -217,6 +231,7 @@ def main():
                 "test_preds": test_preds,
                 "cal_preds": cal_preds,
                 "epoch": epoch,
+                "rng": capture_rng(),
             },
             str(last) + ".tmp",
         )
@@ -286,7 +301,8 @@ def main():
     ):  # frozen weights of the selected epoch
         model.load_state_dict(best_model[0]), classifier.load_state_dict(best_model[1])
         save_model(model, args, args.epochs, ckpt_dir / "best.pth", classifier)
-    (out_dir / "report.json").write_text(json.dumps(report, indent=1))  # marks the unit as done
+    atomic_json(out_dir / "report.json", report)
+    publish_completion(out_dir, ckpt_dir)
     last.unlink()  # resume state, after the report: a crash in between keeps the unit done, not half-written
 
 

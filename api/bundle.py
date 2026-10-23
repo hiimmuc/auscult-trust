@@ -30,6 +30,8 @@ import numpy as np
 import pandas as pd
 
 from src import runs
+from src.artifacts import atomic_json, prediction_inputs, verify_prediction, atomic_npz
+from src.paths import REPO, REPOS, DATA
 from src.evaluation.conformal import lac_scores, split_threshold
 from src.evaluation.lodo_ttsc import load_args, report_epoch
 from src.evaluation.screening import ALPHA, icbhi_recordings
@@ -66,16 +68,21 @@ def pipeline_entry(name, unit, screen_npz, label, split, out):
     ckpt = runs.twin_dir(unit, "checkpoints") / "report_epoch_{}.pth".format(epoch)
     sha = runs.sha256_file(ckpt)
 
-    z = np.load(unit / "test_preds.npz")
-    probs = z["probs"][list(z["epochs"]).index(epoch)].astype(np.float64)
+    cycle_export = unit / "export/test.npz"
+    verify_prediction(cycle_export, prediction_inputs(unit, ckpt, "cycles", args.spectrum_correction,
+                      options={"sc_test_profile": None}))
+    z = np.load(cycle_export)
+    probs = z["probs"].astype(np.float64)
     cal = np.isin(z["patient"], split["calibration"])
     y4 = z["labels"]
     p2 = np.stack([probs[:, 0], 1 - probs[:, 0]], 1)
     thr4 = float(split_threshold(lac_scores(probs[cal], y4[cal]), ALPHA))
     thr2 = float(split_threshold(lac_scores(p2[cal], (y4[cal] > 0).astype(int)), ALPHA))
 
+    verify_prediction(screen_npz, prediction_inputs(unit, ckpt, "screening", args.spectrum_correction))
     sc = np.load(screen_npz, allow_pickle=True)
-    assert str(sc["ckpt_sha256"]) == sha, "screening export {} is not from {}".format(screen_npz, ckpt)
+    if str(sc["ckpt_sha256"]) != sha:
+        raise ValueError("Screening export does not match the checkpoint")
     rec = icbhi_recordings(dict(sc), "mean")
     rcal = np.isin(rec["patient"], split["calibration"])
     thr_screen = float(split_threshold(lac_scores(rec["p"][rcal], rec["y"][rcal]), ALPHA))
@@ -85,6 +92,7 @@ def pipeline_entry(name, unit, screen_npz, label, split, out):
         "unit": str(unit),
         "checkpoint": str(ckpt.resolve()),
         "checkpoint_sha256": sha,
+        "args_sha256": runs.sha256_file(unit / "train_args.json"),
         "epoch": epoch,
         "encoder": args.encoder,
         "method": args.method,
@@ -94,10 +102,11 @@ def pipeline_entry(name, unit, screen_npz, label, split, out):
     }
     if args.spectrum_correction:
         st = dict(np.load(unit / "sc_state.npz"))
-        np.savez(out / "sc_{}.npz".format(name), **st)
+        atomic_npz(out / "sc_{}.npz".format(name), **st)
         entry["sc"] = {"mode": str(st["sc_mode"]), "reference": args.sc_reference, "limit_freq_low": args.sc_limit_freq_low,
                        "limit_freq_high": args.sc_limit_freq_high, "limit_freq_diff": args.sc_limit_freq_diff,
-                       "s_ref_sha256": sha256_bytes(st["reference"].tobytes()), "state": "sc_{}.npz".format(name)}
+                       "s_ref_sha256": sha256_bytes(st["reference"].tobytes()), "state": "sc_{}.npz".format(name),
+                       "sha256": runs.sha256_file(out / "sc_{}.npz".format(name))}
     return entry, args
 
 
@@ -156,6 +165,15 @@ def main():
         })
 
     manifest = {
+        "schema": 2,
+        "runtime_files": {
+            "repo": {str(p.relative_to(REPO)): runs.sha256_file(p) for p in
+                     [*(REPO / "src").rglob("*.py"), REPO / "api/engine.py"]},
+            "references": {str(p.relative_to(REPOS)): runs.sha256_file(p)
+                           for name in ("PAFA", "ADD-RSC", "patch-mix_contrastive_learning", "QLung", "SG-SCL")
+                           for p in (REPOS / name).rglob("*.py")},
+            "data": {"models/beats/BEATs_iter3_plus_AS2M.pt": runs.sha256_file(DATA / "models/beats/BEATs_iter3_plus_AS2M.pt")},
+        },
         "classes": CLASSES,
         "classes2": ["normal", "abnormal"],
         "devices": DEVICES,
@@ -168,7 +186,7 @@ def main():
         "pipelines": pipelines,
         "samples": samples,
     }
-    (out / "manifest.json").write_text(json.dumps(manifest, indent=1))
+    atomic_json(out / "manifest.json", manifest)
     print(out / "manifest.json", len(samples), "samples")
     print(pd.DataFrame([(s["class"], s["id"], s["device"], s["class_share"]) for s in samples]).to_string())
     for n, p in pipelines.items():

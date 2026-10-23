@@ -15,6 +15,7 @@ from pathlib import Path
 import numpy as np
 import torch
 from src import runs
+from src.artifacts import prediction_inputs, record_prediction, atomic_npz
 
 from .config import build_parser
 from .dataset import build_loaders
@@ -59,6 +60,9 @@ def main():
     args.num_workers = a.num_workers
     if a.sc_test_profile:
         args.sc_test_profile = a.sc_test_profile
+    context = dict(unit=out_unit, checkpoint=ckpt_unit / a.ckpt, dataset="cycles",
+                   sc=args.spectrum_correction, options={"sc_test_profile": a.sc_test_profile})
+    inputs = prediction_inputs(**context)
 
     _, val_loader, test_loader, train_ds, test_ds, _, _ = build_loaders(args)
     model, classifier, _, _, _ = build_model(args)
@@ -83,7 +87,7 @@ def main():
         )
     for name, loader, patients in loaders:
         P, E, Y, D = run(loader, model, classifier)
-        np.savez_compressed(
+        atomic_npz(
             out / (name + ".npz"), probs=P, emb=E, labels=Y, device=D, patient=patients
         )
         print(
@@ -91,6 +95,7 @@ def main():
             P.shape,
             "pooled Score {:.2f}".format(per_device_report(Y, P.argmax(1), D)["all"]["score"]),
         )
+        record_prediction(out / (name + ".npz"), inputs, **context)
     if test_ds.sc is not None:  # coefficients actually applied to the test clips
         np.savez_compressed(out / "test_coefficients.npz", **{"coefficients_{}".format(d): c for d, c in test_ds.sc["coefficients"].items()},
                             **{"train_coefficients_{}".format(d): c for d, c in train_ds.sc["coefficients"].items()})

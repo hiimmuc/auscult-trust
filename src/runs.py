@@ -105,11 +105,16 @@ def write_meta(exp, cfg):
         hw = {
             "torch": torch.__version__,
             "gpu": torch.cuda.get_device_name(0) if torch.cuda.is_available() else None,
+            "cuda": torch.version.cuda,
+            "cudnn": torch.backends.cudnn.version(),
         }
     except Exception:
         hw = {}
-    f.write_text(
-        json.dumps(
+    from src.artifacts import environment, atomic_json
+    snapshot = environment()
+    snapshot["hardware"] = hw
+    atomic_json(f.parent / "environment.json", snapshot)
+    atomic_json(f,
             {
                 "exp": exp,
                 "run_id": run_id(),
@@ -120,9 +125,6 @@ def write_meta(exp, cfg):
                 **hw,
                 "config": cfg,
             },
-            indent=1,
-            default=str,
-        )
     )
 
 

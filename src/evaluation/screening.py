@@ -72,7 +72,11 @@ def icbhi_windows(args):
 
 
 def infer(a):
+    from src.artifacts import prediction_inputs, record_prediction, atomic_npz
+    from src.runs import twin_dir
     unit = Path(a.unit_dir)
+    context = dict(unit=unit, checkpoint=twin_dir(unit) / a.ckpt, dataset="screening", sc=a.sc)
+    inputs = prediction_inputs(**context)
     args = load_args(unit)
     waves, win = icbhi_windows(args)
     if a.sc:
@@ -85,8 +89,9 @@ def infer(a):
     probs = predict(waves, args, ckpt)
     out = Path(a.out)
     out.parent.mkdir(parents=True, exist_ok=True)
-    np.savez_compressed(out, probs=probs, **{k: win[k].to_numpy() for k in win.columns}, sc=np.array(a.sc),
+    atomic_npz(out, probs=probs, **{k: win[k].to_numpy() for k in win.columns}, sc=np.array(a.sc),
                         ckpt_sha256=np.array(runs.sha256_file(ckpt)))
+    record_prediction(out, inputs, **context)
     print(out, probs.shape)
 
 

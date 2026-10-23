@@ -12,5 +12,5 @@ dependencies = { file = ["requirements.txt"] }
 include = ["src*"]
 
 [tool.pytest.ini_options]
-testpaths = ["tests"]
+testpaths = ["tests", "api/test_contract.py"]
 pythonpath = ["."]
