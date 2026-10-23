@@ -2,10 +2,11 @@
 
 | | |
 | --- | --- |
-| Report version | 4.6 (4.5, 4.4, 4.3, 4.2, 4.1, 4.0 and 3.0 in git history; 2.0 is `docs/reports/report_archive_2026-10-07.md`) |
-| Datetime | 2026-10-23 13:30 (+07) |
+| Report version | 5.0 (4.6, 4.5, 4.4, 4.3, 4.2, 4.1, 4.0 and 3.0 in git history; 2.0 is `docs/reports/report_archive_2026-10-07.md`) |
+| Datetime | 2026-10-23 15:00 (+07) |
 | Proposal / prereg | v9 (`docs/updates/research-proposal-v9-en.md`); `docs/updates/prereg-v8.md` with Amendments 1-5 (`docs/updates/prereg-v9-amendment*.md`) |
 | Plans | `docs/updates/stage-plan-v1.md` (grid), `docs/updates/lodo-plan-v1.md` (LODO, ensembles; Amendment 4 wins where they differ) |
+| Results (all on A) | `outputs/train/<run>/<cell>/seed<s>/` in this repo (section 4.3); checkpoints of the BEATs PAFA family on A, the others stay on B, D, E |
 | Detailed sources | `docs/reports/report_2026-10-09.md` (registered core), `docs/reports/grid-v1-results.md` (grid, every cell), `docs/reports/pcmcl-v1-results.md` (PC-MCL), `docs/reports/lodo-v1-results.md` (LODO v1, SC), `docs/reports/ensemble-v1-results.md` (ensembles by encoder group), `docs/handoff/HANDOFF.md` (machines, commands, incidents) |
 
 Tags: [Fact] measured in the repo, [Interpretation] reasoned, [Assumption], [Pending] not run, [Preliminary] computed on
@@ -13,6 +14,15 @@ the units finished so far (may change; no verdict). Score = (Sp + Se) / 2 on ICB
 stated. All numbers are mean ± SD over seeds 0-4 unless a seed count is given.
 
 ## 1. Status and key findings
+
+**Current step (23/10):** stage 10, choice of the final AuscultTrust. All training is done (stages 0-9: 0 runs left, 0
+failed), every result is gathered on machine A in this repository (section 4.3), and the LODO and ensemble tables are
+regenerated. The encoder and method are fixed (BEATs + PAFA, fine-tuned, user decision 22/10); the SC variant and the
+use of an ensemble are open (section 15).
+
+**Next steps:** (1) the user chooses the SC variant and single model vs ensemble; (2) results report for the submission
+of 25/10 from this file; (3) with the frozen final model: KAUH positive controls, screening view, demo app update;
+(4) phantom tests (H1, H3, co-primary H2) once the hardware exists. Details in section 18.
 
 Results and findings are reported per stage of the plan (sections 5-16, numbering as in section 2). Key findings:
 
@@ -31,8 +41,11 @@ Results and findings are reported per stage of the plan (sections 5-16, numberin
    (BEATs) with a label-free rule that calls as many cycles normal as PAFA does on the same unlabelled cycles keep Sp and
    gain 1.4-3.1 Se (+1.1 to +2.1 Score) on the official split and in LODO; learned member weights never beat equal
    weights (stage 9).
+7. [Fact] The dynamic SC bound helps SG-SCL and Patch-Mix CL on the official split (+1.7, +1.8; BEATs SG-SCL + SC
+   dynamic 62.8 ± 1.4 is the best single cell) but lowers the LODO macro for PAFA (-0.9); for BEATs PAFA the static bound
+   is the better SC variant. PAFA + PC-MCL with SC static has the best LODO macro (60.7) and the smallest sets (stage 8).
 
-At 23/10 12:30:
+Runs (all finished; at 23/10 15:00):
 
 | Run | What | Done | Where | Expected end |
 | --- | --- | --- | --- | --- |
@@ -88,15 +101,15 @@ the screening view and the phantom tests close the project.
 
 ## 4. Compute, timeline and incidents
 
-### 4.1 Machines (21/10 17:15)
+### 4.1 Machines (23/10 15:00: all idle, no run left)
 
-| Machine | GPU | Now |
+| Machine | GPU | Role |
 | --- | --- | --- |
-| A (local) | RTX 5000 Ada 32 GB | `lodo-v1-A6`: BEATs SC dynamic + PAFA + PC-MCL SC (14 units) |
-| B | RTX 5090 32 GB | `lodo-v1-B6`: BEATs SC dynamic (44 units) |
-| D | RTX 5090 32 GB | `lodo-v1-D6`: BEATs SC dynamic + PAFA + PC-MCL SC (30 units) |
-| E | RTX 5090 32 GB | `lodo-v1-E6`: BEATs SC dynamic + PAFA + PC-MCL SC (33 units) |
-| C | RTX PRO 6000 96 GB | not used |
+| A (local) | RTX 5000 Ada 32 GB | grid, LODO, SC, analysis; holds all outputs (section 4.3) |
+| B | RTX 5090 32 GB | grid, LODO, SC |
+| D | RTX 5090 32 GB | PC-MCL, SC |
+| E | RTX 5090 32 GB | LODO, SC |
+| C | RTX PRO 6000 96 GB | dropped 20/10 (section 4.2) |
 
 - [Fact] `scripts/lodo_move.py` moved the remaining static-SC units between machines (stop a scheduler by PID while its
   jobs finish, set cut-off units aside to rerun from epoch 0, split by measured throughput, keep schedulers alive, copy
@@ -123,6 +136,24 @@ the screening view and the phantom tests close the project.
   rerun. All 880 arm units are complete.
 - [Fact] A's GPU log (`logs/gpu-A.csv`) has a gap on 21/10 11:40-11:50 (logger stopped by mistake, restarted).
 - [Fact] 0 failed training units and 0 NaN or collapsed runs in every LODO, SC and PC-MCL list.
+- [Fact] Machine E rebooted on 22/10 about 14:40 (cause unknown): one PAFA + PC-MCL unit cut off at epoch 54 was set
+  aside (`lodo-v1-interrupted/...seed2.reboot-2210`) and rerun from epoch 0. Stage 8 was rebalanced twice onto B (lists
+  tag 7 and 8). Machine A was shut down on 23/10 morning after its last list had finished (02:18): no unit lost.
+
+### 4.3 Where the results are (unified 23/10)
+
+- [Fact] All outputs of machines B, D and E were copied to A (`rsync --ignore-existing`, nothing overwritten), so this
+  repository holds every unit's `report.json`, `test_preds.npz`, `cal_preds.npz` (LODO) and `sc_state.npz` (SC):
+  `outputs/train/grid-v1` (350 units), `lodo-v1` (1,400: 220 no SC, 880 inference arms, 175 SC static, 125 stage 8),
+  `pcmcl-v1` (10), `lodo-ast` (260) and `lodo-bench` (95) for the registered AST study, plus the earlier runs
+  (`screen-ast*`, `repro-wave1*`, `grid-v1-rerun|resumed|sgscl-ref`, `lung-srad`) and smoke runs. Phase 0 outputs stay
+  in `outputs/` (ladders, shift study) and `../archive`.
+- [Fact] Checkpoints (about 87 GB of BEATs alone on B, D, E) do not fit A's free disk; A received the BEATs PAFA family
+  (`lodo-v1/beats+ft+pafa*`, 120 units with their `.pth`: LODO no SC, SC static and dynamic, PAFA + PC-MCL with SC;
+  official split and LODO), and A already held `grid-v1/beats+ft+pafa` (official split, no SC). A has 106 GB free. Other
+  checkpoints stay on the machine that trained them (B: grid-v1 B half, lodo-ast, lodo-bench, lodo-v1; D, E: lodo-v1).
+- Regenerate the tables: `bash scripts/lodo_h2_all.sh`, `PYTHONPATH=. .venv-train/bin/python scripts/lodo_tables.py`,
+  `scripts/ensemble.py`, `scripts/ensemble_sesp.py`, `PYTHONPATH=. .venv-train/bin/python scripts/grid.py table last`.
 
 ## 5. Stage 0: Phase 0 (before v9)
 
@@ -584,8 +615,9 @@ split), trained SC dynamic, or test-time SC on the no-SC model. The ensemble and
 
 ## 16. Stage 11: After LODO [Pending]
 
-KAUH positive controls on the final model, screening view (recording level), demo app update, phantom tests (H1, H3)
-once the hardware is ready.
+KAUH positive controls A and B2 on the final model (frozen checkpoint + SHA-256, saved s_ref), screening view
+(recording level, 8 s windows, triage counts), demo app update to the final model, phantom tests (H1, H3, co-primary H2)
+once the hardware is ready. Needs the final SC variant first (section 15).
 
 ## 17. Caveats
 
@@ -605,12 +637,14 @@ once the hardware is ready.
 
 ## 18. Next steps
 
-1. Stage 8 done (section 13; tables regenerated with `bash scripts/lodo_h2_all.sh` and `scripts/lodo_tables.py`).
-2. Final AuscultTrust = BEATs + PAFA, fine-tuned (user decision 22/10); choose its SC variant with the user after stage
-   8 (section 15).
+Current step: stage 10 (final choice). Every training run is done and gathered on A.
+
+1. [User] Choose the SC variant of BEATs PAFA (recommended: trained SC static) and single model vs ensemble
+   (section 15). Then freeze it: checkpoint SHA-256, s_ref, softmax export (`export_probs.py`).
+2. Results report for the submission of 25/10, built from this file (sections 1, 7-15, 17).
 3. Ensembles by encoder group done (section 14): equal weights beat learned weights; with the label-free `k rate` rule,
    E1 or E1+E3 raise Se at PAFA's Sp. Open: whether the final AuscultTrust becomes such an ensemble (decision of the
    user), `k rate` with few target cycles, the registered E1-E4, distillation into one BEATs model.
-4. With the final model: KAUH positive controls, screening view (recording level), update the demo app; phantom tests
+4. With the frozen final model: KAUH positive controls, screening view (recording level), update the demo app; phantom tests
    (H1, H3) once the hardware is ready. A coverage test of SC (H2) now needs the phantom data, earlier-epoch models or
    another dataset, since LODO v1 has no tested fold.
