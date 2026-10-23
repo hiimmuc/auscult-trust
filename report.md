@@ -21,7 +21,7 @@ regenerated. The encoder and method are fixed (BEATs + PAFA, fine-tuned, user de
 use of an ensemble are open (section 15).
 
 **Next steps:** (1) the user chooses the SC variant and single model vs ensemble; (2) results report for the submission
-of 25/10 from this file; (3) with the frozen final model: KAUH positive controls, screening view, demo app update;
+of 25/10 from this file; (3) with the frozen final model: KAUH positive controls, screening view, serving bundle of the deployed demo;
 (4) phantom tests (H1, H3, co-primary H2) once the hardware exists. Details in section 18.
 
 Results and findings are reported per stage of the plan (sections 5-16, numbering as in section 2). Key findings:
@@ -77,7 +77,7 @@ the screening view and the phantom tests close the project.
 | 9 | Ensembles, distillation | Registered E1-E4 (equal weights, 11/5/3/3 cells); user groups by encoder with equal and fitted weights | User groups done 22/10 (section 14); registered E1-E4 and distillation [Pending], optional |
 | 10 | Final AuscultTrust | Choose encoder + method + SC with the user | Decided 22/10: BEATs + PAFA (fine-tuned); SC variant open (section 15) |
 | 11 | After LODO | KAUH positive controls on the final model, screening view (recording level), phantom tests (H1, H3) | [Pending] (section 16); phantom depends on hardware |
-| - | Demo app (`app/`, another session) | FastAPI + web demo comparing SC vs no SC on BEATs Patch-Mix CL units | Built 20/10; public tunnel blocked (port 7844, domain not delegated) |
+| - | Demo app (`app/`) | FastAPI + web demo; currently serves the BEATs + PAFA bundle | Deployed to Cloudflare Pages; GPU API available through Tailscale Funnel at `vmo-namdp15-d.tail09c58b.ts.net` (checked 23/10) |
 
 ## 3. Decisions of the user
 
@@ -616,8 +616,9 @@ split), trained SC dynamic, or test-time SC on the no-SC model. The ensemble and
 ## 16. Stage 11: After LODO [Pending]
 
 KAUH positive controls A and B2 on the final model (frozen checkpoint + SHA-256, saved s_ref), screening view
-(recording level, 8 s windows, triage counts), demo app update to the final model, phantom tests (H1, H3, co-primary H2)
-once the hardware is ready. Needs the final SC variant first (section 15).
+(recording level, 8 s windows, triage counts), phantom tests (H1, H3, co-primary H2) once the hardware is ready. The web
+demo is deployed; its current bundle serves BEATs + PAFA. Needs the final SC variant first (section 15), which the
+serving bundle must then match.
 
 ## 17. Caveats
 
@@ -640,11 +641,12 @@ once the hardware is ready. Needs the final SC variant first (section 15).
 Current step: stage 10 (final choice). Every training run is done and gathered on A.
 
 1. [User] Choose the SC variant of BEATs PAFA (recommended: trained SC static) and single model vs ensemble
-   (section 15). Then freeze it: checkpoint SHA-256, s_ref, softmax export (`export_probs.py`).
+   (section 15). Then freeze it (checkpoint SHA-256, s_ref, softmax export with `export_probs.py`) and make the serving
+   bundle of the demo match it.
 2. Results report for the submission of 25/10, built from this file (sections 1, 7-15, 17).
 3. Ensembles by encoder group done (section 14): equal weights beat learned weights; with the label-free `k rate` rule,
    E1 or E1+E3 raise Se at PAFA's Sp. Open: whether the final AuscultTrust becomes such an ensemble (decision of the
    user), `k rate` with few target cycles, the registered E1-E4, distillation into one BEATs model.
-4. With the frozen final model: KAUH positive controls, screening view (recording level), update the demo app; phantom tests
-   (H1, H3) once the hardware is ready. A coverage test of SC (H2) now needs the phantom data, earlier-epoch models or
+4. With the frozen final model: KAUH positive controls and screening view (recording level); phantom tests (H1, H3)
+   once the hardware is ready. A coverage test of SC (H2) now needs the phantom data, earlier-epoch models or
    another dataset, since LODO v1 has no tested fold.
